@@ -25,6 +25,20 @@ const REGION_FILTER_HINT_AT = 6;
 /** The API returns at most this many matches (best first). */
 const REGION_MAX_RESULTS = 100;
 
+/**
+ * Show which city an obręb belongs to: "Kraków – obręb K-1" (numbered city obręby),
+ * "Wrocław – Biskupin" (city obręby named after districts). Villages keep their name.
+ * Region id kind digit: _1 = city gmina, _8 / _9 = city districts (Warszawa, Kraków, Łódź…).
+ */
+function regionName(r: Region): string {
+  const name = r.region ?? r.regionId;
+  if (!r.commune || name === r.commune) return name;
+  const letters = (name.match(/\p{L}/gu) ?? []).length;
+  if (letters < 3) return `${r.commune} – obręb ${name}`;
+  const kind = r.regionId.charAt(7);
+  return kind === "1" || kind === "8" || kind === "9" ? `${r.commune} – ${name}` : name;
+}
+
 function regionLabel(r: Region): string {
   return [
     r.commune && `gm. ${r.commune}`,
@@ -369,7 +383,7 @@ export default function AnalyzePage() {
                           ? "Żadna z tych miejscowości nie pasuje do dopisanej gminy. Usuń tekst po przecinku."
                           : villageFilter
                             ? `Nie znaleźliśmy „${villageName}” w „${villageFilter}”. Sprawdź nazwę gminy albo usuń tekst po przecinku.`
-                            : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają czasem numery zamiast nazw — wtedy kliknij działkę na mapie.`}
+                            : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają numery zamiast nazw dzielnic — wpisz miasto i numer obrębu z wypisu (np. Warszawa 1-01-01, Kraków K-12) albo kliknij działkę na mapie.`}
                       </p>
                     )}
                     {shownRegions && shownRegions.length > 0 && (
@@ -394,7 +408,7 @@ export default function AnalyzePage() {
                           {shownRegions.map((r) => (
                             <li key={r.regionId}>
                               <button type="button" className="region-option" onClick={() => chooseRegion(r)}>
-                                <strong>{r.region}</strong>
+                                <strong>{regionName(r)}</strong>
                                 <span>{regionLabel(r)}</span>
                               </button>
                             </li>
@@ -408,7 +422,7 @@ export default function AnalyzePage() {
                 <>
                   <div className="region-chosen">
                     <div>
-                      <strong>{region.region}</strong>
+                      <strong>{regionName(region)}</strong>
                       <span className="muted small"> — {regionLabel(region)}</span>
                     </div>
                     <button type="button" className="btn-link small" onClick={clearRegion}>

@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import gzip
 import json
+import re
 import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
@@ -47,7 +48,9 @@ class Entry:
     n_name: str
     n_words: tuple[str, ...]
     n_commune: str
+    n_commune_words: tuple[str, ...]
     n_where: str  # commune + county + voivodeship, for the comma filter
+    numbered: bool  # city obręby are numbers ("4-01-01", "K-1"), not village names
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -66,7 +69,8 @@ def _commune_name(communes: dict[str, str], region_id: str) -> str | None:
     for k in (kind, "3", "2", "1"):
         if f"{base}{k}" in communes:
             return communes[f"{base}{k}"]
-    return None
+    # city districts / delegatury (_8 / _9, e.g. 146502_8 Warsaw, 126102_9 Kraków) → city gmina "<powiat>011"
+    return communes.get(f"{region_id[:4]}011")
 
 
 @lru_cache(maxsize=1)
@@ -86,22 +90,49 @@ def load_index() -> tuple[Entry, ...]:
         out.append(Entry(
             region_id=rid, name=name, commune=commune, county=county, voivodeship=v,
             n_name=n_name, n_words=tuple(n_name.split()), n_commune=norm(commune),
+            n_commune_words=tuple(norm(commune).split()),
+            numbered=sum(ch.isalpha() for ch in name) < 3,
             n_where=norm(" ".join(filter(None, (commune, county, v)))),
         ))
     return tuple(out)
 
 
+def _natural(s: str) -> tuple:
+    """'k 2' < 'k 10' (numbers compared as numbers): city obręby list in order K-1, K-2, … K-10."""
+    return tuple((0, int(p), "") if p.isdigit() else (1, 0, p) for p in re.split(r"(\d+)", s) if p)
+
+
 def _score(e: Entry, q: str, q_words: list[str]) -> int | None:
-    """Lower = better. None = no match."""
+    """Lower = better. None = no match.
+
+    0 exact obręb name · 1 the town / gmina itself ("Kraków" → its obręby, before the
+    263 villages that merely start with "Krak…") · 2 name prefix · 3 word prefix ·
+    4 gmina prefix.
+    """
     if e.n_name == q:
         return 0
-    if e.n_name.startswith(q):
+    # "Warszawa 1-01-01": town name + exact / prefix obręb number
+    if e.n_commune and q.startswith(e.n_commune + " "):
+        rest = q[len(e.n_commune) + 1:]
+        if e.n_name == rest:
+            return 0
+        if e.n_name.startswith(rest):
+            return 2
+    if e.n_commune == q:
         return 1
+    if e.n_name.startswith(q):
+        return 2
     # every query word is a prefix of some name word: "pierwsze zdzil" → "Zdziłowice Pierwsze"
     if all(any(w.startswith(qw) for w in e.n_words) for qw in q_words):
-        return 2
-    if e.n_commune == q:
-        return 3  # whole gmina listed
+        return 3
+    # town + start of obręb number: "warszawa 1-01"
+    words = e.n_words + e.n_commune_words
+    if (
+        len(q_words) > 1
+        and all(any(w.startswith(qw) for w in words) for qw in q_words)
+        and any(any(w.startswith(qw) for w in e.n_words) for qw in q_words)
+    ):
+        return 3
     if e.n_commune.startswith(q) and len(q) >= 4:
         return 4
     return None
@@ -125,5 +156,5 @@ def search(query: str) -> tuple[list[dict[str, Any]], int]:
         if where_words and not all(w in e.n_where for w in where_words):
             continue
         hits.append((s, e))
-    hits.sort(key=lambda h: (h[0], h[1].n_name, h[1].voivodeship or "", h[1].county or "", h[1].region_id))
+    hits.sort(key=lambda h: (h[0], _natural(h[1].n_name), h[1].voivodeship or "", h[1].county or "", h[1].region_id))
     return [e.to_dict() for _, e in hits[:MAX_RESULTS]], len(hits)
