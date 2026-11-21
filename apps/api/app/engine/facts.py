@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from datetime import date
 from typing import Any
 
+from adapters.dates import shift_years
 from adapters.licenses import license_for
 from app.adapters.bundle import AdapterBundle
 from app.crops.catalog import CropEntry, sensitivity_level
@@ -266,7 +267,7 @@ def build_sources(bundle: AdapterBundle, analysis_date: date) -> list[Source]:
                       error=None if hydro_ok else (note("Cieki") or str(hydro.get("missing")))))
 
     mv = bundle.meteo.get("values") or {}
-    start = analysis_date.replace(year=analysis_date.year - 10)
+    start = shift_years(analysis_date, -10)
     out.append(_from_resp(SRC_METEO, "Pogoda (opady, parowanie, temperatura)", bundle.meteo,
                           f"{start.isoformat()} – {mv.get('analysis_date') or analysis_date.isoformat()}"))
     out.append(_from_resp(SRC_SOIL, "Gleba (skład, próchnica, pojemność wodna)", bundle.soil,

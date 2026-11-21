@@ -23,6 +23,7 @@ import httpx
 from PIL import Image
 
 from .base import PartialResult, run_adapter
+from .dates import today_pl
 
 EDO_WMS = "https://drought.emergency.copernicus.eu/api/wms"
 LAYER = "cdiad"
@@ -119,7 +120,7 @@ async def fetch_drought_context(centroid: list[float], analysis_date: date | str
         d = datetime.now(timezone.utc).date()
         bad = f"Niepoprawne dane wejściowe dla EDO: {exc}"
 
-    today = datetime.now(timezone.utc).date()
+    today = today_pl()
     base = {
         "SERVICE": "WMS", "VERSION": "1.1.1", "REQUEST": "GetMap", "LAYERS": LAYER, "STYLES": "",
         "SRS": "EPSG:4326", "FORMAT": "image/png", "TRANSPARENT": "true",
