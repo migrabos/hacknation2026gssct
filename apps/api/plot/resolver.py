@@ -20,8 +20,13 @@ Coordinate conventions (important, easy to get wrong):
 from __future__ import annotations
 
 import asyncio
+import gzip
+import json
 import math
 import re
+import unicodedata
+from functools import lru_cache
+from pathlib import Path
 from typing import Any, Iterable
 
 import time
@@ -554,14 +559,114 @@ def _parse_regions(text: str) -> list[dict[str, Any]]:
     return out[:REGION_LIMIT]
 
 
-async def search_regions(name: str) -> list[dict[str, Any]]:
+# --------------------------------------------------------------------------- village (obręb) search
+
+OBREBY_INDEX_PATH = Path(__file__).parent / "data" / "obreby.json.gz"
+REGION_SEARCH_LIMIT = 50
+_PL_FOLD = str.maketrans("ąćęłńóśźżĄĆĘŁŃÓŚŹŻ", "acelnoszzACELNOSZZ")
+
+
+def fold(text: str) -> str:
+    """Case- and diacritic-insensitive key: 'Żółwin-Kolonia' -> 'zolwin kolonia'."""
+    t = unicodedata.normalize("NFKD", (text or "").translate(_PL_FOLD))
+    t = "".join(c for c in t if not unicodedata.combining(c)).lower()
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", t).split())
+
+
+@lru_cache(maxsize=1)
+def _obreby_index() -> dict[str, Any] | None:
+    """Offline list of all named obręby (PRG, see build_obreby_index.py). None if missing."""
+    try:
+        with gzip.open(OBREBY_INDEX_PATH, "rt", encoding="utf-8") as f:
+            idx = json.load(f)
+    except (OSError, ValueError):
+        return None
+    communes: dict[str, str] = idx["communes"]
+    by6: dict[str, str] = {}
+    for code, name in sorted(communes.items()):
+        by6.setdefault(code[:6], name)
+    rows = []
+    for rid, name in idx["regions"]:
+        commune = communes.get(rid[:6] + rid[7]) or by6.get(rid[:6])
+        county = idx["counties"].get(rid[:4])
+        voiv = idx["voivodeships"].get(rid[:2])
+        rows.append({
+            "regionId": rid,
+            "region": name,
+            "commune": commune,
+            "county": county,
+            "voivodeship": voiv,
+            "_name": fold(name),
+            "_where": fold(" ".join(filter(None, [commune, county, voiv]))),
+        })
+    return {"rows": rows, "fetchedAt": idx.get("fetchedAt"), "source": idx.get("source")}
+
+
+def _public(row: dict[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in row.items() if not k.startswith("_")} | {"bbox": None}
+
+
+async def search_regions(query: str) -> dict[str, Any]:
+    """Village (obręb) search – diacritic-insensitive, prefix-matching.
+
+    `query` may carry a commune/county after a comma: "Zalesie, Ryki".
+    Returns {"regions": [...<=50], "total": n}. bbox is filled later by `region_details`.
+    Falls back to ULDK exact-name search when the offline index is missing.
+    """
+    name_part, _, where_part = (query or "").partition(",")
+    name, where = fold(name_part), fold(where_part)
+    if len(name) < 2 or len(query) > 120:
+        raise InvalidPlotInput("Wpisz co najmniej 2 litery nazwy miejscowości.")
+
+    idx = _obreby_index()
+    if idx is None:
+        found = await _search_regions_uldk(name_part)
+        return {"regions": found[:REGION_SEARCH_LIMIT], "total": len(found)}
+
+    where_words = where.split()
+    hits: list[tuple[int, dict[str, Any]]] = []
+    for row in idx["rows"]:
+        n = row["_name"]
+        if n == name:
+            rank = 0
+        elif n.startswith(name):
+            rank = 1
+        elif len(name) >= 3 and f" {name}" in f" {n}":
+            rank = 2  # a later word, e.g. "wies" -> "Stara Wieś"
+        else:
+            continue
+        if where_words and not all(f" {w}" in f" {row['_where']}" for w in where_words):
+            continue
+        hits.append((rank, row))
+    hits.sort(key=lambda h: (h[0], h[1]["_name"], h[1]["voivodeship"] or "", h[1]["county"] or "", h[1]["commune"] or ""))
+    return {"regions": [_public(r) for _, r in hits[:REGION_SEARCH_LIMIT]], "total": len(hits)}
+
+
+async def region_details(region_id: str) -> dict[str, Any]:
+    """One obręb with its bbox (live from ULDK) – used to zoom the map to the chosen village."""
+    region_id = (region_id or "").strip()
+    if not _REGION_ID_RE.match(region_id):
+        raise InvalidPlotInput("Niepoprawny identyfikator obrębu.")
+    found = await _search_regions_uldk(region_id)
+    if not found:
+        raise PlotNotFound("Nie znaleziono takiej miejscowości (obrębu) w ULDK.")
+    out = found[0]
+    idx = _obreby_index()
+    if idx is not None:  # nicer casing / names from the index when ULDK returns UPPERCASE
+        row = next((r for r in idx["rows"] if r["regionId"] == region_id), None)
+        if row:
+            out = {**out, **{k: v for k, v in _public(row).items() if v and k != "bbox"}}
+    return out
+
+
+async def _search_regions_uldk(name: str) -> list[dict[str, Any]]:
     """Find cadastral precincts (obręby ≈ villages) by exact name, case-insensitive.
 
     ULDK matches the full name only (no prefix search). Returns [] when nothing matches.
     """
     name = " ".join((name or "").split())
     if len(name) < 2 or len(name) > 80:
-        raise InvalidPlotInput("Wpisz pełną nazwę miejscowości (obrębu), np. Krzewina.")
+        raise InvalidPlotInput("Wpisz nazwę miejscowości (obrębu), np. Krzewina.")
     params = {
         "request": "GetRegionByNameOrId",
         "id": name,

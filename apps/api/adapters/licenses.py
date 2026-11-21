@@ -7,6 +7,7 @@ from __future__ import annotations
 
 LICENSES: dict[str, str] = {
     "ULDK GUGiK": "Dane GUGiK (EGiB) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
+    "PRG GUGiK": "Dane GUGiK (Państwowy Rejestr Granic – nazwy obrębów do wyszukiwarki miejscowości) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
     "GUGiK NMT": "Dane GUGiK (NMT) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
     "Open-Meteo Elevation": "Open-Meteo, dane CC BY 4.0 (Copernicus DEM GLO-90); API bezpłatne do użytku niekomercyjnego",
     "Open-Meteo Historical": "Open-Meteo, dane CC BY 4.0 (ERA5/ERA5-Land, Copernicus C3S); API bezpłatne do użytku niekomercyjnego (<10 000 zapytań/dzień)",

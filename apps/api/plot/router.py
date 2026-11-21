@@ -21,6 +21,7 @@ from .resolver import (
     PlotServiceUnavailable,
     resolve_plot,
     resolve_point,
+    region_details,
     resolve_region_parcel,
     search_regions,
 )
@@ -67,17 +68,28 @@ async def plot_by_point(
 
 
 @router.get("/regions")
-async def plot_regions(q: str = Query(..., description="Pełna nazwa miejscowości / obrębu, np. Krzewina")):
-    """Cadastral precincts (obręby) with this name, with commune/county/voivodeship + bbox."""
+async def plot_regions(q: str = Query(..., description="Nazwa miejscowości / obrębu (bez polskich znaków też), opcjonalnie ', gmina'")):
+    """Village search: {regions: [...], total}. Diacritic-insensitive, prefix match."""
+    try:
+        return await search_regions(q)
+    except InvalidPlotInput as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except PlotServiceUnavailable as exc:
+        raise HTTPException(503, detail=str(exc)) from exc
+
+
+@router.get("/regions/{region_id}")
+async def plot_region(region_id: str):
+    """One obręb with bbox (for zooming the map to the chosen village)."""
     if get_settings().adapters == "mock":
         from app.adapters.mocks import mock_plot
 
-        p = mock_plot(None, None, None)
-        rid = ".".join(str(p.get("plotId", "000000_0.0000.0")).split(".")[:2])
-        return [{"regionId": rid, "region": q.strip(), "commune": p.get("commune"), "county": p.get("county"),
-                 "voivodeship": p.get("voivodeship"), "bbox": p.get("bbox")}]
+        p = mock_plot(region_id, None, None)
+        return {"regionId": region_id, "region": None, "bbox": p.get("bbox")}
     try:
-        return await search_regions(q)
+        return await region_details(region_id)
+    except PlotNotFound as exc:
+        raise HTTPException(404, detail=str(exc)) from exc
     except InvalidPlotInput as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     except PlotServiceUnavailable as exc:

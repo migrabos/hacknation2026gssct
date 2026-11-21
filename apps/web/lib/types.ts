@@ -68,6 +68,12 @@ export interface Region {
   bbox?: [number, number, number, number] | null;
 }
 
+/** GET /plot/regions — at most 50 regions; `total` = all matches. */
+export interface RegionSearch {
+  regions: Region[];
+  total: number;
+}
+
 export interface Plot {
   plotId: string;
   geometry: PlotGeometry;
