@@ -1,7 +1,7 @@
 # Person 1 — Frontend + UX (Next.js) + satellite/drought adapters
 
 **You own:** Polish UI, map integration (basemap + parcel overlay), forms, report UX, print/PDF, loading & error states, **Sentinel-2 NDVI adapter**, **IUNG/EDO drought adapter**, rehearsal-plot smoke tests + cache warm-up script, live demo UI walkthrough
-**You do not own:** ULDK / geometry, `adapters/base.py`, meteo/soil/DEM/hydro adapters, engine thresholds, LLM prompts, README/slides package
+**You do not own:** ULDK / geometry, `adapters/base.py`, meteo/soil/DEM/hydro adapters, engine thresholds, README/slides package
 **Pair with:** **3** early on report / Evidence field names; **2** on map GeoJSON + `adapters/base.py` contract
 
 **Stack:** Next.js App Router, TypeScript — `apps/web/` · Python adapters in `apps/api/adapters/`
@@ -109,4 +109,4 @@ Call FastAPI: `POST /analyze`, `GET /crops`, `GET /health`.
 
 ## Pitch role
 
-Drive the live UI in finals (2–3 min). Hand science / AI grounding questions to Person 3; data-source questions to Person 2.
+Drive the live UI in finals (2–3 min). Hand science / engine questions to Person 3; data-source questions to Person 2.

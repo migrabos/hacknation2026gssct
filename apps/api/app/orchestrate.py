@@ -17,7 +17,6 @@ from app.schemas.requests import AnalyzeRequest
 async def analyze(req: AnalyzeRequest) -> Report:
     """Full /analyze orchestration. Raises ValueError (bad input), PlotError, RuntimeError."""
     t0 = time.perf_counter()
-    deadline = t0 + get_settings().analyze_budget_s
     get_crop(req.cropId)  # validate early (clear PL error)
 
     # Every source shares one deadline: a slow one is cut (→ missingData), never the whole report.
@@ -34,7 +33,7 @@ async def analyze(req: AnalyzeRequest) -> Report:
         analysis_date=req.analysisDate,
         duration_ms=int((time.perf_counter() - t0) * 1000),
     )
-    report.narrative = await narrate(report, deadline=deadline)
+    report.narrative = narrate(report)
     if report.meta:
         report.meta.durationMs = int((time.perf_counter() - t0) * 1000)
     return report
