@@ -17,6 +17,20 @@ import Map from "./Map";
 import Notice from "./Notice";
 import RainChart from "./RainChart";
 import { PrintIcon } from "./Icons";
+import { sourcePage, weatherProviders } from "@/lib/source-page";
+
+function SourceLink({ source }: { source: Source }) {
+  if (source.id === "open_meteo") {
+    const providers = weatherProviders(source);
+    if (!providers.length) return <>Brak informacji o dostawcy</>;
+    return <>{providers.map(({ name, page }) => (
+      <div key={name}>{page ? <a href={page} target="_blank" rel="noreferrer">{name}</a> : name}</div>
+    ))}</>;
+  }
+  const page = sourcePage(source);
+  const label = source.provider ?? source.name;
+  return page ? <a href={page} target="_blank" rel="noreferrer">{label}</a> : <>{label}</>;
+}
 
 const MOISTURE_TONE: Record<string, string> = {
   very_dry: "var(--c-m-very-dry)",
@@ -208,7 +222,7 @@ export default function ReportView({ report }: { report: Report }) {
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
         </div>
-        <RainChart months={report.precipMonthly ?? []} analysisDate={report.analysisDate} />
+        <RainChart months={report.precipMonthly ?? []} analysisDate={report.analysisDate} source={sources.get("open_meteo")} />
         <NarrativeNote text={narrative.get("assessment")} />
       </Section>
 
@@ -315,13 +329,7 @@ export default function ReportView({ report }: { report: Report }) {
                         <strong>{s.name}</strong>
                       </td>
                       <td>
-                        {s.url ? (
-                          <a href={s.url} target="_blank" rel="noreferrer">
-                            {s.provider ?? s.url}
-                          </a>
-                        ) : (
-                          s.provider
-                        )}
+                        <SourceLink source={s} />
                         {s.license && <div className="small muted">Licencja: {s.license}</div>}
                       </td>
                       <td>
@@ -355,11 +363,8 @@ export default function ReportView({ report }: { report: Report }) {
 
             {report.narrative && (
               <p className="small muted">
-                Opisy słowne w raporcie{" "}
-                {report.narrative.generatedBy === "llm"
-                  ? "napisała sztuczna inteligencja wyłącznie na podstawie powyższych danych i sprawdziliśmy je automatycznie."
-                  : "powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych."}{" "}
-                Oceny i zalecenia wylicza deterministyczny silnik reguł.
+                Opisy słowne w raporcie powstały automatycznie z szablonu, wyłącznie na podstawie
+                powyższych danych. Oceny i zalecenia wylicza deterministyczny silnik reguł.
               </p>
             )}
             <p className="small muted">Identyfikator raportu: {report.reportId}</p>

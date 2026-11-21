@@ -1,4 +1,5 @@
-import type { PrecipMonth } from "@/lib/types";
+import type { PrecipMonth, Source } from "@/lib/types";
+import { weatherProviders } from "@/lib/source-page";
 import { formatDate, formatNumber } from "@/lib/labels";
 
 const SHORT = ["sty", "lut", "mar", "kwi", "maj", "cze", "lip", "sie", "wrz", "paź", "lis", "gru"];
@@ -13,7 +14,7 @@ function niceMax(v: number): number {
 }
 
 /** Collapsible monthly rain histogram: last 12 months vs the multi-year mean. */
-export default function RainChart({ months, analysisDate }: { months: PrecipMonth[]; analysisDate: string }) {
+export default function RainChart({ months, analysisDate, source }: { months: PrecipMonth[]; analysisDate: string; source?: Source }) {
   const rows = months.filter((m) => /^\d{4}-\d{2}$/.test(m.month));
   if (rows.length === 0 || rows.every((m) => m.precipMm == null)) return null;
 
@@ -23,6 +24,7 @@ export default function RainChart({ months, analysisDate }: { months: PrecipMont
   const norm = rows.reduce((s, m) => s + (m.normalMm ?? 0), 0);
   const years = Math.max(...rows.map((m) => m.normalYears));
   const partialTo = formatDate(analysisDate);
+  const providers = weatherProviders(source).map(({ name }) => name);
 
   const label = (m: PrecipMonth) => {
     const [y, mo] = m.month.split("-").map(Number);
@@ -97,7 +99,8 @@ export default function RainChart({ months, analysisDate }: { months: PrecipMont
 
         <p className="rain-note">
           Kreska to średnia z tych samych dni w {years} poprzednich latach.
-          {rows.some((m) => m.partial) && <> Ostatni miesiąc liczony do {partialTo}.</>} Źródło: Open-Meteo (ERA5).
+          {rows.some((m) => m.partial) && <> Ostatni miesiąc liczony do {partialTo}.</>}{" "}
+          {providers.length ? `Dane: ${providers.join(" + ")}.` : "Brak informacji o dostawcy danych."}
         </p>
       </div>
     </details>

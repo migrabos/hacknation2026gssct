@@ -27,8 +27,8 @@ Build a **browser web app for Polish farmers** that, for *this* cadastral plot (
 | Live computation | No pre-baked answers for a fixed plot set |
 | National coverage | Any Polish działka ewidencyjna |
 | Report order | ocena → przyczyny → retencja/agrotech → nawadnianie (optional) |
-| Evidence first | Deterministic engine owns truth; LLM only narrates |
-| No hallucinations | LLM cannot invent numbers, action IDs, or measures |
+| Evidence first | Deterministic engine owns truth; template narrative only restates it |
+| No hallucinations | Engine / templates cannot invent numbers, action IDs, or measures |
 | Honesty | Sources + uncertainty + `missingData` always visible |
 | Speed | Prefer &lt;30s (warm cache OK for demo plots) |
 | Polish UI | Farmer language, no GIS jargon |
@@ -47,7 +47,7 @@ Build a **browser web app for Polish farmers** that, for *this* cadastral plot (
 | Backend | Python FastAPI — `apps/api/` |
 | Deploy | Web → Vercel · API → Railway / Fly / Render |
 | Infra | Docker Compose locally |
-| AI | LLM **only** for grounded Polish narrative over Evidence JSON |
+| Narrative | Polish template prose over Evidence JSON (no generative LLM) |
 
 **Core API:** `POST /analyze` · `GET /crops` · `GET /health`
 
@@ -63,11 +63,11 @@ Farmer browser
       → Adapters: meteo/soil/DEM/hydro [Person 2]
       → Adapters: NDVI/drought        [Person 1, on Person 2's base.py]
       → Deterministic engine          [Person 3]  → Evidence JSON (truth)
-      → Grounded LLM narrator         [Person 3]  → Polish narrative (optional)
+      → Polish template narrative     [Person 3]  → short section prose
     → Report UI + print/PDF           [Person 1]
 ```
 
-**Grounding pipeline:** Engine computes Evidence → LLM narrates only those facts → UI renders structured fields even if LLM fails (template fallback).
+**Grounding pipeline:** Engine computes Evidence → template fills Polish section prose from those fields → UI always renders structured Evidence.
 
 ---
 
@@ -94,12 +94,12 @@ Farmer browser
 |--------|------|----------|
 | **1** | Frontend + UX + sat/drought adapters | [docs/roles/01-frontend-ux.md](docs/roles/01-frontend-ux.md) |
 | **2** | GIS + core data adapters (plot, meteo, soil, terrain, hydro) | [docs/roles/02-gis-data.md](docs/roles/02-gis-data.md) |
-| **3** | Engine + grounded AI + docs/demo | [docs/roles/03-engine-ai-docs.md](docs/roles/03-engine-ai-docs.md) |
+| **3** | Engine + template narrative + docs/demo | [docs/roles/03-engine-ai-docs.md](docs/roles/03-engine-ai-docs.md) |
 
 **Pairing (soft deps, not blockers):**
 
 - **1 ↔ 3** — lock report / Evidence field names early; film walkthrough  
-- **2 ↔ 3** — adapter → engine contract; schema before LLM prompts  
+- **2 ↔ 3** — adapter → engine contract; Evidence schema before ranking  
 - **1 ↔ 2** — map GeoJSON / plot pick; `adapters/base.py` contract (2 ships it by hour 2, 1 builds NDVI + drought on it)  
 
 Roles run **in parallel** after hour 2. Mock what you depend on; do not wait.
@@ -120,7 +120,7 @@ Roles run **in parallel** after hour 2. Mock what you depend on; do not wait.
 
 ## Evidence / report shape (source of truth)
 
-Owned by **Person 3**. LLM fills narrative only; UI must work without it.
+Owned by **Person 3**. Template fills narrative prose; UI always renders structured Evidence.
 
 ```text
 plot, crop, analysisDate
@@ -135,7 +135,7 @@ missingData[]
 narrative?                  # filled by Person 3
 ```
 
-**Action IDs** come from a **fixed catalog** (never invented by the LLM), e.g. `residues`, `cover_crops`, `reduce_tillage`, `small_pond`, `buffer_strips`, `ditch_retention`, `irrigation_timing`.
+**Action IDs** come from a **fixed catalog**, e.g. `residues`, `cover_crops`, `reduce_tillage`, `small_pond`, `buffer_strips`, `ditch_retention`, `irrigation_timing`.
 
 ---
 
@@ -164,7 +164,7 @@ When implementing in this repo:
 1. Prefer the owner’s folder (`apps/web` vs `apps/api/...`); don’t cross-own without need.  
 2. Keep adapters timeout-bounded (~20s) with disk cache; partial results OK.  
 3. Engine output must be **deterministic** for the same inputs.  
-4. Never let the LLM invent facts — validate against Evidence; ship template fallback.  
+4. Narrative templates may only restate Evidence fields; never invent numbers or action IDs.  
 5. Surface `missingData` / sources in API and UI — hiding gaps is a contest fail.  
 6. Polish copy for farmers; English OK in code/comments.  
 7. Secrets only in env templates — never commit keys.  
@@ -178,7 +178,7 @@ When implementing in this repo:
 - [ ] README: launch, architecture, sources, live vs cached + dates, AI tools, licenses, limits, verification  
 - [ ] ≤10 slide PDF · ≤3 min demo film · ≥2 sample reports from real runs  
 - [ ] Private repo · license table allows KOWR use if IP transfers  
-- [ ] Finals roles: **1** drives UI · **3** science + AI grounding · **2** data/coverage backup  
+- [ ] Finals roles: **1** drives UI · **3** science + engine · **2** data/coverage backup  
 
 ---
 

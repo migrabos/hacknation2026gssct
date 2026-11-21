@@ -45,4 +45,4 @@ def build_template_narrative(report: Report) -> Narrative:
             text="Nawadnianie rozważ dopiero po działaniach retencyjnych – i tylko w najbardziej wrażliwej fazie uprawy.",
             evidenceRefs=_refs(*(r.evidenceRefs for r in recs.irrigation)),
         ))
-    return Narrative(generatedBy="template", sections=sections)
+    return Narrative(sections=sections)

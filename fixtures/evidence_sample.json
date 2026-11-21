@@ -504,7 +504,6 @@
     }
   ],
   "narrative": {
-    "generatedBy": "template",
     "sections": [
       {
         "id": "assessment",
@@ -563,7 +562,6 @@
   "meta": {
     "engineVersion": "0.2.0",
     "adapters": "live",
-    "llmEnabled": false,
     "durationMs": 22
   }
 }

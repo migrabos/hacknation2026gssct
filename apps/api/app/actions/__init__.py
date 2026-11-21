@@ -1,1 +1,1 @@
-"""Fixed action catalog — LLM may never invent IDs outside this set."""
+"""Fixed action catalog — IDs outside this set are not allowed."""

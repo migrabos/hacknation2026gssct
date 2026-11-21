@@ -40,7 +40,7 @@ export type CauseId =
   | "runoff"
   | "crop_sensitivity";
 
-/** Fixed action catalog — IDs are never invented by the LLM. */
+/** Fixed action catalog — IDs come only from this list. */
 export type ActionId =
   | "residues"
   | "cover_crops"
@@ -216,7 +216,6 @@ export type NarrativeSectionId =
   | "irrigation";
 
 export interface Narrative {
-  generatedBy: "llm" | "template";
   sections: {
     id: NarrativeSectionId;
     text: string;
@@ -291,8 +290,6 @@ export interface Report {
 export interface ReportMeta {
   engineVersion: string;
   adapters: "live";
-  llmEnabled: boolean;
-  llmModel?: string;
   durationMs: number;
 }
 
@@ -330,8 +327,6 @@ export interface HealthResponse {
   status: "ok" | "degraded";
   version?: string;
   adapters?: "live";
-  llm?: boolean;
-  model?: string;
 }
 
 export type ApiErrorKind =

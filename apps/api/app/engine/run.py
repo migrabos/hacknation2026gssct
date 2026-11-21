@@ -131,8 +131,6 @@ def run_engine(
         meta=ReportMeta(
             engineVersion=settings.engine_version,
             adapters=bundle.mode,
-            llmEnabled=settings.llm_enabled,
-            llmModel=settings.ollama_model if settings.llm_enabled else None,
             durationMs=duration_ms,
         ),
     )

@@ -20,7 +20,7 @@ from plot.router import router as plot_router
 
 app = FastAPI(
     title="Retencja API",
-    description="KOWR water retention DSS — live data adapters, deterministic Evidence engine, grounded narrator",
+    description="KOWR water retention DSS — live data adapters, deterministic Evidence engine, Polish template narrative",
     version=ENGINE_VERSION,
 )
 
@@ -44,8 +44,6 @@ def health() -> HealthResponse:
         status="ok",
         version=s.engine_version,
         adapters="live",
-        llm=s.llm_enabled,
-        model=s.ollama_model if s.llm_enabled else None,
     )
 
 

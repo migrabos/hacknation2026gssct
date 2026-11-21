@@ -72,7 +72,7 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = DEFA
   throw new ApiError("server", detail);
 }
 
-const realApi = {
+export const api = {
   health: () => request<HealthResponse>("/health", {}, 5_000),
   getCrops: () => request<Crop[]>("/crops"),
   plotById: (id: string) => request<Plot>(`/plot/by-id?id=${encodeURIComponent(id.trim())}`),
@@ -101,5 +101,3 @@ const realApi = {
     return request<CropFitReport>("/crop-fit", { method: "POST", body: JSON.stringify(body) }, ANALYZE_TIMEOUT_MS);
   },
 };
-
-export const api = realApi;

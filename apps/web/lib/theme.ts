@@ -26,5 +26,3 @@ export function resolveInitialTheme(): Theme {
   return readStoredTheme() ?? getSystemTheme();
 }
 
-/** Inline bootstrap — runs before paint to avoid a light flash. */
-export const THEME_BOOTSTRAP = `(function(){try{var k=${JSON.stringify(THEME_STORAGE_KEY)};var s=localStorage.getItem(k);var d=s==="dark"||(s!=="light"&&window.matchMedia("(prefers-color-scheme: dark)").matches);var r=document.documentElement;r.classList.toggle("dark",d);r.style.colorScheme=d?"dark":"light";}catch(e){}})();`;

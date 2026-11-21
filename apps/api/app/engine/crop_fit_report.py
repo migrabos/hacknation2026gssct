@@ -105,6 +105,5 @@ def run_crop_fit_report(*, bundle: AdapterBundle, analysis_date: date, duration_
         sources=sources,
         limitations=limitations,
         missingData=missing,
-        meta=ReportMeta(engineVersion=settings.engine_version, adapters=bundle.mode, llmEnabled=False,
-                        durationMs=duration_ms),
+        meta=ReportMeta(engineVersion=settings.engine_version, adapters=bundle.mode, durationMs=duration_ms),
     )
