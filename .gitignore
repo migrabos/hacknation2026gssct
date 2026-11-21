@@ -1,0 +1,17 @@
+# Adapter disk cache (data files)
+apps/api/cache/*
+!apps/api/cache/.gitkeep
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
