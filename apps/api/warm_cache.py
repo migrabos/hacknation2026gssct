@@ -25,7 +25,7 @@ from adapters.base import utc_now_iso
 from adapters.drought_edo import fetch_drought_context
 from adapters.licenses import license_for
 from adapters.open_meteo import fetch_meteo
-from adapters.sentinel_stac import fetch_sentinel
+from adapters.sentinel_stac import fetch_sentinel, fetch_sentinel_history
 from adapters.soilgrids import fetch_soil
 from plot.resolver import PlotError, add_plot_context, resolve_plot, resolve_point
 
@@ -90,11 +90,12 @@ async def warm(plot_ids: list[str], points: list[tuple[float, float]], dates: li
         for d in dates:
             # Same pattern /analyze should use: terrain+hydro run in parallel with adapters.
             t1 = time.perf_counter()
-            plot, meteo, soil, sat, edo = await asyncio.gather(
+            plot, meteo, soil, sat, hist, edo = await asyncio.gather(
                 add_plot_context(base),
                 fetch_meteo(base["centroid"], d),
                 fetch_soil(base["centroid"]),
                 fetch_sentinel(base["bbox"], d, base["geometry"]),
+                fetch_sentinel_history(base["bbox"], d, base["geometry"]),
                 fetch_drought_context(base["centroid"], d),
             )
             dt = time.perf_counter() - t1
@@ -113,7 +114,8 @@ async def warm(plot_ids: list[str], points: list[tuple[float, float]], dates: li
                 "landUse": _land_use_cell(plot.get("landUse") or {}),
                 "meteo": meteo["coverage"] + ("*" if meteo["fromCache"] else ""),
                 "soil": soil["coverage"] + ("*" if soil["fromCache"] else ""),
-                "sentinel": sat["coverage"] + ("*" if sat["fromCache"] else ""),
+                "sentinel": sat["coverage"] + ("*" if sat["fromCache"] else "")
+                            + f" (hist {(hist['values'] or {}).get('n_years', 0)}y)",
                 "edo": edo["coverage"] + ("*" if edo["fromCache"] else ""),
                 "errors": [e for r in (meteo, soil, sat, edo) for e in r["errors"]] + plot["missingData"],
             })

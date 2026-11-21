@@ -157,6 +157,10 @@ def sample_sat(key: Any, d: date) -> dict[str, Any]:
     return _resp("Sentinel-2 L2A (Copernicus, AWS Earth Search)", {
         "ndvi_mean": round(0.2 + _u(seed, 2) * 0.6, 3),
         "ndmi_mean": round(-0.1 + _u(seed, 3) * 0.4, 3),
+        "ndvi_median": round(0.2 + _u(seed, 2) * 0.6, 3),
+        "bare_soil_pct": round(_u(seed, 4) * 100, 1),
+        "water_pct": round(_u(seed, 5) * 4, 1),
+        "weak_zone_pct": round(_u(seed, 6) * 25, 1),
         "scene_date": d.isoformat(),
     })
 

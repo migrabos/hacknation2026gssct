@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from app.actions.catalog import ACTIONS, get_action
 from app.engine.assess import AWC_LOW, HIGH_SENSITIVITY
-from app.engine.facts import WATER_TYPE_PL, Facts, fmt
+from app.engine.facts import SHOW_WATER_PCT, WATER_TYPE_PL, Facts, fmt
 from app.schemas.evidence import Cause, MoistureAssessment, Recommendation, Recommendations
 
 NO_IRRIGATION_NOTE = (
@@ -31,12 +31,20 @@ def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]
         return ("Na mapach nie widać rowu przy działce, ale rowy bywają niezmapowane. Jeśli jest rów, "
                 "warto zatrzymać w nim wodę.", ["ev_water"])
     if action_id == "small_pond":
+        if _standing_water(f):
+            return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.water_pct, 0)}% działki pokrywa stojąca "
+                    "woda. To naturalne najniższe miejsce – oczko zbierze tam wodę bez dużych prac ziemnych, "
+                    "a reszta pola przestanie być podtapiana.", ["ev_standing_water"])
         ds = f.dry_summers
         if ds and ds[0]:
             return (f"Suche lata powtarzają się tu często ({ds[0]} z {ds[1]}). Oczko zatrzyma wodę na miejscu "
                     "i poprawi wilgotność wokół.", ["ev_dry_summers"])
         return "Oczko zatrzymuje wodę z ulew i roztopów, zamiast pozwolić jej spłynąć z działki.", ["ev_precip_30d"]
     if action_id == "cover_crops":
+        if "bare_soil" in cause_ids:
+            return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.bare_pct, 0)}% działki to goła gleba. "
+                    "Międzyplon okryje ją do wiosny: mniej wody wyparuje, a deszcz nie zmyje gleby.",
+                    ["ev_bare_soil"])
         if f.soc is not None and f.soc < 2.0:
             return (f"Gleba ma mało próchnicy ({fmt(f.soc)}% węgla organicznego). Więcej próchnicy to więcej "
                     "wody zatrzymanej w glebie.", ["ev_soil_soc", "ev_soil_awc"])
@@ -45,6 +53,9 @@ def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]
                     "a korzenie międzyplonu poprawiają strukturę gleby.", ["ev_soil_awc"])
         return "Okrywa roślinna chroni glebę przed wysychaniem i wspiera retencję w profilu glebowym.", []
     if action_id == "residues":
+        if "bare_soil" in cause_ids:
+            return (f"Satelita pokazuje, że ok. {fmt(f.bare_pct, 0)}% działki stoi bez okrywy. Resztki pożniwne "
+                    "na powierzchni działają jak ściółka – gleba wolniej wysycha.", ["ev_bare_soil"])
         if f.sand is not None and f.sand >= 50:
             return (f"Resztki chronią glebę przed słońcem i wiatrem, więc mniej wody wyparowuje. "
                     f"To ważne na glebie z {fmt(f.sand, 0)}% piasku.", ["ev_soil_sand"])
@@ -63,6 +74,10 @@ def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]
     return "", []
 
 
+def _standing_water(f: Facts) -> bool:
+    return f.water_pct is not None and f.water_pct >= SHOW_WATER_PCT
+
+
 def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause], f: Facts) -> Recommendations:
     if assessment is None:
         raise RuntimeError("Nie można rekomendować bez oceny wilgoci.")
@@ -72,7 +87,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     if assessment.current.level == "insufficient_data":
         note = "Za mało danych, aby ocenić potrzebę nawadniania."
     moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level != "low"
-    if not moisture_risk and not cause_ids:
+    if not moisture_risk and not cause_ids and not _standing_water(f):
         return Recommendations(irrigation=None, irrigationNote=note)
 
     selected: dict[str, list[str]] = {"retention": [], "agrotech": []}
@@ -87,6 +102,10 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
         selected["retention"].remove("ditch_retention")
     if f.nearby_water and "ditch_retention" not in selected["retention"]:
         selected["retention"].append("ditch_retention")
+
+    # Standing water seen from space = ready-made spot for a pond, wet or dry year alike.
+    if _standing_water(f) and "small_pond" not in selected["retention"]:
+        selected["retention"].append("small_pond")
 
     # Any moisture risk → always give at least one action in each bucket.
     if moisture_risk:

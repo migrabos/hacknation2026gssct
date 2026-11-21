@@ -35,6 +35,7 @@ export function sourcePage(source: Source): string | undefined {
     case "soilgrids":
       return "https://isric.org/explore/soilgrids";
     case "sentinel2":
+    case "sentinel2_history":
       return "https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-2";
     case "edo":
       return "https://drought.emergency.copernicus.eu/";
