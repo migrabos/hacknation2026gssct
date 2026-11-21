@@ -38,7 +38,8 @@ export type CauseId =
   | "precip_deficit"
   | "low_soil_storage"
   | "runoff"
-  | "crop_sensitivity";
+  | "crop_sensitivity"
+  | "bare_soil";
 
 /** Fixed action catalog — IDs come only from this list. */
 export type ActionId =

@@ -56,14 +56,14 @@ ACTIONS: dict[str, ActionEntry] = {
         "descriptionPl": "Po zbiorach wysiej międzyplon (np. gorczycę, facelię). Okrywa glebę, ogranicza parowanie "
                          "i dodaje próchnicy.",
         "costLevel": "low", "timeframePl": "sierpień–wrzesień",
-        "triggers": ["low_soil_storage", "runoff"], "basePriority": 1,
+        "triggers": ["low_soil_storage", "runoff", "bare_soil"], "basePriority": 1,
     },
     "residues": {
         "id": "residues", "kind": "agrotech",
         "titlePl": "Zostaw resztki pożniwne",
         "descriptionPl": "Pozostaw rozdrobnione resztki roślin na powierzchni pola, zamiast je usuwać lub palić.",
         "costLevel": "low", "timeframePl": "po zbiorach",
-        "triggers": ["precip_deficit", "low_soil_storage"], "basePriority": 2,
+        "triggers": ["precip_deficit", "low_soil_storage", "bare_soil"], "basePriority": 2,
     },
     "reduce_tillage": {
         "id": "reduce_tillage", "kind": "agrotech",

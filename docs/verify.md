@@ -35,10 +35,32 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `low_soil_storage` | AWC (0–100 cm, Saxton & Rawls on SoilGrids) < 110 mm or sand ≥ 55 % |
 | `runoff` | slope ≥ 3.5 % or runoffRisk medium/high (GUGiK NMT) |
 | `crop_sensitivity` | crop sensitivity ≥ 0.65 and (dry now or high multi-year susceptibility) |
+| `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
 Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
 All constants live at the top of `apps/api/app/engine/assess.py`. Raw inputs for recomputation are in the adapter values (e.g. `kbw_30d_prev_years`, `kbw_summer_by_year`, soil `layers`).
+
+### Satellite (Sentinel-2 L2A, `apps/api/adapters/sentinel_stac.py`)
+
+No ML – band arithmetic on the plot's 10 m pixels after SCL cloud/snow masking:
+
+| Value | Formula / rule |
+|-------|----------------|
+| `ndvi_mean`, `ndvi_median` | (B08 − B04) / (B08 + B04) |
+| `ndmi_mean` | (B08 − B11) / (B08 + B11) – water in leaves, not soil moisture |
+| `bare_soil_pct` | % pixels NDVI < 0.2 (excluding water) → evidence `ev_bare_soil` if ≥ 10 % |
+| `water_pct` | % pixels SCL = 6 (ESA "water") → `ev_standing_water` if ≥ 2 %, adds `small_pond` |
+| `weak_zone_pct` | % pixels with NDVI < plot median − 0.15 (only if median ≥ 0.3) → `ev_weak_zone` if ≥ 10 % |
+| history (`fetch_sentinel_history`) | same 21-day window in each of the previous 5 years → median NDVI / NDMI; used only with ≥ 3 clear years |
+
+Effect on the current moisture score (`satellite_moisture_signal` in `assess.py`), bounded to −10 / +6 so weather stays primary:
+
+- only when NDVI ≥ 0.3 (green cover);
+- NDVI ≥ 0.5 and NDMI < 0 → −6; NDMI ≥ 0.4 → +4;
+- NDMI − plot's historical median ≤ −0.10 → −6, ≥ +0.10 → +4 – **only if** the historical NDVI is ≥ 0.3 and within ±0.2 of today's (otherwise it is probably another crop in the rotation and the comparison is skipped and said so in `ev_ndmi`).
+
+A negative satellite signal also raises `precip_deficit` confidence by 0.1 and adds `ev_ndmi` to it.
 
 Inspect `causes[].evidenceRefs` and matching adapter `values` in the response.
 

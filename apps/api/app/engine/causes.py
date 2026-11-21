@@ -7,10 +7,12 @@ from app.engine.assess import (
     DRY_SPELL_DEFICIT,
     HIGH_SENSITIVITY,
     KBW_PCT_LOW,
+    NDMI_ANOM,
     PRECIP_RATIO_WATCH,
     SAND_HIGH,
+    satellite_moisture_signal,
 )
-from app.engine.facts import RUNOFF_PL, Facts, fmt
+from app.engine.facts import RUNOFF_PL, SHOW_WEAK_PCT, Facts, fmt
 from app.schemas.evidence import Cause, MoistureAssessment, confidence_label
 
 CAUSE_TITLES = {
@@ -18,7 +20,24 @@ CAUSE_TITLES = {
     "low_soil_storage": "Gleba słabo trzyma wodę",
     "runoff": "Część deszczu spływa z pola",
     "crop_sensitivity": "Uprawa potrzebuje dużo wody",
+    "bare_soil": "Pole stoi bez okrywy roślinnej",
 }
+
+# Bare soil on the satellite image counts as a cause only outside sowing / emergence,
+# when the field "should" be covered (after harvest, autumn, winter, early spring).
+BARE_CAUSE_PCT = 50.0
+OFF_SEASON_MONTHS = {8, 9, 10, 11, 12, 1, 2, 3}
+WINTER_CROPS = {"zboza_ozime", "rzepak"}  # sown VIII–X: young sowing looks bare in autumn
+WINTER_SOWING_MONTHS = {8, 9, 10, 11}
+
+
+def bare_soil_off_season(f: Facts) -> bool:
+    m = f.scene_month
+    if f.bare_pct is None or f.bare_pct < BARE_CAUSE_PCT or m not in OFF_SEASON_MONTHS:
+        return False
+    if f.crop_id in WINTER_CROPS and m in WINTER_SOWING_MONTHS:
+        return False
+    return f.land_agri is not False
 
 
 def _cause(id_: str, conf: float, refs: list[str], text: str) -> Cause:
@@ -48,7 +67,19 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
             parts.append(f"Z pola wyparowało o {fmt(-f.kbw30, 0)} mm więcej wody, niż spadło.")
         if long_dry:
             parts.append(f"Od {fmt(f.dry_spell, 0)} dni nie było deszczu.")
-        causes.append(_cause("precip_deficit", conf, ["ev_precip_30d", "ev_kbw_30d", "ev_dry_spell"], " ".join(parts)))
+        refs = ["ev_precip_30d", "ev_kbw_30d", "ev_dry_spell"]
+        sat_delta, _ = satellite_moisture_signal(f)
+        if sat_delta < 0:  # independent confirmation from the satellite image
+            conf += 0.1
+            refs.append("ev_ndmi")
+            anom = f.ndmi_anomaly
+            parts.append(
+                f"Zdjęcie satelitarne z {f.ndvi_date} to potwierdza: rośliny mają mniej wody niż zwykle "
+                f"o tej porze roku (NDMI {fmt(f.ndmi, 2)}, zwykle {fmt(f.hist_ndmi, 2)})."
+                if anom is not None and anom <= -NDMI_ANOM else
+                f"Zdjęcie satelitarne z {f.ndvi_date} to potwierdza: rośliny mają mało wody w liściach "
+                f"(NDMI {fmt(f.ndmi, 2)}).")
+        causes.append(_cause("precip_deficit", conf, refs, " ".join(parts)))
 
     # low_soil_storage
     low_awc = f.awc is not None and f.awc < AWC_LOW
@@ -61,7 +92,12 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
         if low_awc:
             text += (" i" if sandy else "") + f" może zatrzymać tylko ok. {fmt(f.awc, 0)} mm wody w 1 m profilu"
         text += ". Deszcz szybko w nią wsiąka i ucieka w głąb, poza zasięg korzeni."
-        causes.append(_cause("low_soil_storage", conf, ["ev_soil_sand", "ev_soil_awc", "ev_soil_soc"], text))
+        refs = ["ev_soil_sand", "ev_soil_awc", "ev_soil_soc"]
+        if f.weak_pct is not None and f.weak_pct >= SHOW_WEAK_PCT:
+            text += (f" Na zdjęciu satelitarnym ok. {fmt(f.weak_pct, 0)}% pola ma wyraźnie słabsze rośliny – "
+                     "zwykle to lżejsze, wyżej położone miejsca, gdzie brak wody widać najpierw.")
+            refs.append("ev_weak_zone")
+        causes.append(_cause("low_soil_storage", conf, refs, text))
 
     # runoff
     if f.slope is not None and (f.slope >= 3.5 or f.runoff in ("medium", "high")):
@@ -78,6 +114,19 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
             "crop_sensitivity", 0.4 + f.crop_sens * 0.3, ["ev_crop_sensitivity"],
             "Ta uprawa jest bardzo wrażliwa na brak wody, więc nawet krótki niedobór obniża plon.",
         ))
+
+    # bare_soil — satellite: most of the plot without green cover when it could be covered
+    if bare_soil_off_season(f):
+        conf = 0.55 + (0.15 if f.bare_pct >= 75 else 0) + (0.1 if (f.sand or 0) >= SAND_HIGH or
+                                                             (f.awc is not None and f.awc < AWC_LOW) else 0)
+        text = (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.bare_pct, 0)}% działki to odkryta gleba "
+                "bez roślin. Słońce i wiatr wysuszają ją szybciej, a deszcz łatwiej ją zmywa – woda nie zostaje "
+                "w polu.")
+        refs = ["ev_bare_soil"]
+        if f.slope is not None and f.slope >= 3.5:
+            text += f" Przy spadku {fmt(f.slope)}% odkryta gleba jest też narażona na spływ i erozję."
+            refs.append("ev_slope")
+        causes.append(_cause("bare_soil", conf, refs, text))
 
     causes.sort(key=lambda c: -(c.confidence0to1 or 0))
     return causes

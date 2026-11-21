@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 Confidence = Literal["low", "medium", "high"]
 RiskLevel = Literal["low", "medium", "high"]
 MoistureLevel = Literal["very_dry", "dry", "normal", "wet", "insufficient_data"]
-CauseId = Literal["precip_deficit", "low_soil_storage", "runoff", "crop_sensitivity"]
+CauseId = Literal["precip_deficit", "low_soil_storage", "runoff", "crop_sensitivity", "bare_soil"]
 ActionId = Literal[
     "residues",
     "cover_crops",

@@ -10,7 +10,7 @@ from app.config import get_settings
 from app.crops.catalog import get_crop, sensitivity_level
 from app.engine.assess import assess_moisture
 from app.engine.causes import detect_causes
-from app.engine.facts import build_evidence, build_missing, build_sources, extract_facts
+from app.engine.facts import NO_SAT_HISTORY_NOTE, build_evidence, build_missing, build_sources, extract_facts
 from app.engine.rank import rank_recommendations
 from app.plot_dto import plot_to_dto
 from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportMeta
@@ -23,6 +23,13 @@ ENGINE_LIMITATIONS = [
     "zastawki może wymagać zgłoszenia wodnoprawnego.",
 ]
 
+
+SAT_LIMITATION = (
+    "Zdjęcie satelitarne (Sentinel-2, piksel 10 m) pokazuje zieleń roślin (NDVI) i wodę w liściach (NDMI), "
+    "a nie wilgotność gleby. Porównanie z poprzednimi latami nie wie, co wtedy rosło na polu (płodozmian), "
+    "dlatego satelita tylko koryguje ocenę z pogody i gleby, a nie ją zastępuje. Woda stojąca to klasyfikacja ESA – "
+    "bardzo mokra, ciemna gleba może być wzięta za wodę."
+)
 
 _GRASS_LAND = {"meadow", "pasture"}
 GRASS_CROP = "uzytki_zielone"
@@ -107,6 +114,10 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
+    if f.ndvi is not None:
+        limitations.append(SAT_LIMITATION)
+        if bundle.sat_history is not None and not f.has_history:
+            limitations.append(NO_SAT_HISTORY_NOTE)
     mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})
     if mismatch:
         limitations.insert(0, mismatch)
