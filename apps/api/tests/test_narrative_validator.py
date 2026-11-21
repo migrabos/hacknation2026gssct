@@ -10,26 +10,26 @@ from app.narrative.prompt import allowed_action_ids
 from app.narrative.validate import parse_llm_json, validate_narrative_payload
 
 
-async def _report(mock_bundle):
-    return run_engine(bundle=mock_bundle, crop_id="zboza", analysis_date=date(2025, 7, 15))
+async def _report(sample_bundle):
+    return run_engine(bundle=sample_bundle, crop_id="zboza", analysis_date=date(2025, 7, 15))
 
 
-async def test_validator_rejects_invented_action(mock_bundle) -> None:
-    report = await _report(mock_bundle)
+async def test_validator_rejects_invented_action(sample_bundle) -> None:
+    report = await _report(sample_bundle)
     not_allowed = sorted(VALID_ACTION_IDS - set(allowed_action_ids(report)))
-    assert not_allowed, "mock report recommends every action — pick another fixture"
+    assert not_allowed, "sample report recommends every action — pick another fixture"
     payload = {"sections": [{"id": "retention", "text": f"Zalecam {not_allowed[0]}."}]}
     assert validate_narrative_payload(payload, report) is None
 
 
-async def test_validator_rejects_invented_number(mock_bundle) -> None:
-    report = await _report(mock_bundle)
+async def test_validator_rejects_invented_number(sample_bundle) -> None:
+    report = await _report(sample_bundle)
     payload = {"sections": [{"id": "assessment", "text": "Spadło dokładnie 4242,5 mm deszczu."}]}
     assert validate_narrative_payload(payload, report) is None
 
 
-async def test_validator_accepts_grounded_numbers(mock_bundle) -> None:
-    report = await _report(mock_bundle)
+async def test_validator_accepts_grounded_numbers(sample_bundle) -> None:
+    report = await _report(sample_bundle)
     p30 = next(e for e in report.evidence if e.id == "ev_precip_30d").value
     text = f"W ostatnich 30 dniach spadło {str(p30).replace('.', ',')} mm deszczu."
     nar = validate_narrative_payload({"sections": [{"id": "assessment", "text": text}]}, report)

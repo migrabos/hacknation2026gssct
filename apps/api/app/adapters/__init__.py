@@ -1,4 +1,4 @@
-"""Data adapters for the engine: live (Person 1+2 adapters) or deterministic mocks."""
+"""Data adapters for the engine — live public sources only."""
 
 from __future__ import annotations
 
@@ -14,17 +14,14 @@ async def fetch_bundle(
     lng: float | None,
     analysis_date: date,
 ) -> AdapterBundle:
-    """Pick live or mock adapters based on ADAPTERS env (default: live)."""
-    from app.config import get_settings
-
-    kwargs = dict(plot_id=plot_id, lat=lat, lng=lng, analysis_date=analysis_date)
-    if get_settings().adapters == "mock":
-        from app.adapters.mocks import fetch_all_mocks
-
-        return await fetch_all_mocks(**kwargs)
     from app.adapters.live import fetch_live
 
-    return await fetch_live(**kwargs)
+    return await fetch_live(
+        plot_id=plot_id,
+        lat=lat,
+        lng=lng,
+        analysis_date=analysis_date,
+    )
 
 
 __all__ = ["AdapterBundle", "fetch_bundle"]

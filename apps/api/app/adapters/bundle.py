@@ -31,4 +31,4 @@ class AdapterBundle:
     soil: dict[str, Any]
     sat: dict[str, Any]
     drought: dict[str, Any]
-    mode: Literal["live", "mock"] = "live"
+    mode: Literal["live"] = "live"

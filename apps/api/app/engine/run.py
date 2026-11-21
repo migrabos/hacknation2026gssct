@@ -72,8 +72,6 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
-    if bundle.mode == "mock":
-        limitations.insert(0, "TRYB DEMO: dane są przykładowe (generowane), nie pochodzą z prawdziwych źródeł.")
 
     settings = get_settings()
     return Report(

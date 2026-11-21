@@ -10,8 +10,8 @@ from app.orchestrate import analyze
 from app.schemas.requests import AnalyzeRequest
 
 
-async def test_fallback_no_llm(mock_bundle) -> None:
-    report = run_engine(bundle=mock_bundle, crop_id="ziemniak", analysis_date=date(2025, 7, 15))
+async def test_fallback_no_llm(sample_bundle) -> None:
+    report = run_engine(bundle=sample_bundle, crop_id="ziemniak", analysis_date=date(2025, 7, 15))
     narrative = await narrate(report)
     assert narrative.generatedBy == "template"
     assert narrative.sections[0].id == "assessment"
