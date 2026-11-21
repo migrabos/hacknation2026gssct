@@ -51,6 +51,13 @@ def _endpoint(url: str) -> str:
     return f"{p.scheme}://{p.netloc}{p.path}"
 
 
+def _land_use_cell(lu: dict[str, Any]) -> str:
+    """EGiB codes, e.g. 'RIIIa,RIVa' / 'Ls!' – '!' = not agricultural, worth swapping the demo plot."""
+    if not lu.get("category"):
+        return "none"
+    return ",".join(lu.get("codes") or []) + ("!" if lu.get("isAgricultural") is False else "")
+
+
 # --------------------------------------------------------------------------- run
 
 
@@ -103,6 +110,7 @@ async def warm(plot_ids: list[str], points: list[tuple[float, float]], dates: li
                 "plotSrc": "full",
                 "terrain": "none" if plot["terrain"].get("slopePct") is None else "full",
                 "hydro": "none" if plot["hydro"].get("missing") else "full",
+                "landUse": _land_use_cell(plot.get("landUse") or {}),
                 "meteo": meteo["coverage"] + ("*" if meteo["fromCache"] else ""),
                 "soil": soil["coverage"] + ("*" if soil["fromCache"] else ""),
                 "sentinel": sat["coverage"] + ("*" if sat["fromCache"] else ""),
@@ -142,7 +150,7 @@ def _write_log(sources: list[dict[str, Any]]) -> None:
 
 def _print_table(rows: list[dict[str, Any]]) -> None:
     cols = ["plot", "voivodeship", "areaHa", "date", "seconds",
-            "terrain", "hydro", "meteo", "soil", "sentinel", "edo"]
+            "terrain", "hydro", "landUse", "meteo", "soil", "sentinel", "edo"]
     ok_rows = [r for r in rows if "error" not in r]
     widths = {c: max(len(c), *(len(str(r.get(c, ""))) for r in ok_rows)) if ok_rows else len(c) for c in cols}
     line = "  ".join(c.ljust(widths[c]) for c in cols)

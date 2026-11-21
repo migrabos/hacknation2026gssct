@@ -57,6 +57,8 @@ export default function ReportView({ report }: { report: Report }) {
   const { plot, moistureAssessment: ma, recommendations: rec } = report;
   const failedSources = report.sources.filter((s) => s.status !== "ok");
   const irrigation = rec.irrigation ?? [];
+  const landUse = plot.landUse;
+  const landUseWarnings = report.limitations.filter((l) => l.startsWith("UWAGA:"));
   const place = [plot.commune, plot.county && `pow. ${plot.county}`, plot.voivodeship && `woj. ${plot.voivodeship}`]
     .filter(Boolean)
     .join(", ");
@@ -134,11 +136,40 @@ export default function ReportView({ report }: { report: Report }) {
         </Notice>
       )}
 
+      {landUseWarnings.length > 0 && (
+        <Notice tone="warn" title="Sprawdź rodzaj użytku" role="status">
+          {landUseWarnings.map((w, i) => (
+            <p key={i}>{w.replace(/^UWAGA:\s*/, "")}</p>
+          ))}
+        </Notice>
+      )}
+
       <dl className="meta-grid">
         <div>
           <dt>Uprawa</dt>
           <dd>{report.crop.name}</dd>
         </div>
+        {landUse && (
+          <div>
+            <dt>Rodzaj użytku</dt>
+            {landUse.labelPl ? (
+              <dd>
+                {landUse.labelPl.charAt(0).toUpperCase() + landUse.labelPl.slice(1)}
+                {landUse.soilClasses && landUse.soilClasses.length > 0 && <>, klasa gleby {landUse.soilClasses.join(", ")}</>}
+                <span className="muted small" style={{ display: "block" }}>
+                  z ewidencji gruntów (EGiB){landUse.codes && landUse.codes.length > 0 && <>: {landUse.codes.join(", ")}</>}
+                </span>
+              </dd>
+            ) : (
+              <dd>
+                Brak danych
+                <span className="muted small" style={{ display: "block" }}>
+                  {landUse.notes?.[0] ?? "ewidencja gruntów nie podaje użytku dla tej działki"}
+                </span>
+              </dd>
+            )}
+          </div>
+        )}
         <div>
           <dt>Ocena na dzień</dt>
           <dd>{formatDate(report.analysisDate)}</dd>

@@ -54,6 +54,23 @@ class Hydro(BaseModel):
     missing: bool | None = None
 
 
+LandUseCategory = Literal[
+    "arable", "meadow", "pasture", "orchard", "farmyard", "forest", "woodland",
+    "built", "transport", "water", "wetland", "bare", "other", "mixed",
+]
+
+
+class LandUse(BaseModel):
+    category: LandUseCategory | None = None
+    labelPl: str | None = None
+    isAgricultural: bool | None = None
+    source: Literal["egib"] | None = None  # official land register only – never inferred
+    uses: list[str] = Field(default_factory=list)  # all official uses on the parcel (EGiB)
+    codes: list[str] = Field(default_factory=list)  # raw EGiB contour codes, e.g. RIIIa, Br/PsIV
+    soilClasses: list[str] = Field(default_factory=list)  # EGiB soil valuation classes, e.g. IIIa
+    notes: list[str] = Field(default_factory=list)
+
+
 class Source(BaseModel):
     id: str
     name: str
@@ -78,6 +95,7 @@ class Plot(BaseModel):
     commune: str | None = None
     terrain: Terrain | None = None
     hydro: Hydro | None = None
+    landUse: LandUse | None = None
     sources: list[Source] | None = None
     fetchedAt: str | None = None
 
