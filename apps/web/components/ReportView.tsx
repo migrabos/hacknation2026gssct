@@ -17,6 +17,13 @@ import {
 import Map from "./Map";
 import Notice from "./Notice";
 import { PrintIcon } from "./Icons";
+import { sourcePage } from "@/lib/source-page";
+
+function SourceLink({ source }: { source: Source }) {
+  const page = sourcePage(source);
+  const label = source.provider ?? source.name;
+  return page ? <a href={page} target="_blank" rel="noreferrer">{label}</a> : <>{label}</>;
+}
 
 const MOISTURE_TONE: Record<string, string> = {
   very_dry: "var(--c-m-very-dry)",
@@ -321,13 +328,7 @@ export default function ReportView({ report }: { report: Report }) {
                     <strong>{s.name}</strong>
                   </td>
                   <td>
-                    {s.url ? (
-                      <a href={s.url} target="_blank" rel="noreferrer">
-                        {s.provider ?? s.url}
-                      </a>
-                    ) : (
-                      s.provider
-                    )}
+                    <SourceLink source={s} />
                     {s.license && <div className="small muted">Licencja: {s.license}</div>}
                   </td>
                   <td>
