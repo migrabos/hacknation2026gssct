@@ -1,4 +1,4 @@
-"""FastAPI entrypoint (single app): /health, /crops, /plot/*, /analyze.
+"""FastAPI entrypoint (single app): /health, /crops, /plot/*, /analyze, /crop-fit.
 
 Run from apps/api:  uvicorn app.main:app --reload   (or: uvicorn main:app --reload)
 """
@@ -11,9 +11,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import ENGINE_VERSION
 from app.config import get_settings
 from app.crops.catalog import list_crops
-from app.orchestrate import analyze
-from app.schemas.evidence import HealthResponse, Report
-from app.schemas.requests import AnalyzeRequest
+from app.orchestrate import analyze, crop_fit
+from app.schemas.evidence import CropFitReport, HealthResponse, Report
+from app.schemas.requests import AnalyzeRequest, CropFitRequest
 from plot.resolver import InvalidPlotInput, PlotError, PlotNotFound, PlotServiceUnavailable
 from plot.region_index import load_index as load_region_index
 from plot.router import router as plot_router
@@ -56,8 +56,19 @@ def crops() -> list[dict]:
 
 @app.post("/analyze", response_model=Report, response_model_exclude_none=True)
 async def analyze_endpoint(req: AnalyzeRequest) -> Report:
+    return await _guarded(analyze(req))
+
+
+@app.post("/crop-fit", response_model=CropFitReport, response_model_exclude_none=True)
+async def crop_fit_endpoint(req: CropFitRequest) -> CropFitReport:
+    """Separate report: which crops cope best with the water and soil of this plot."""
+    return await _guarded(crop_fit(req))
+
+
+async def _guarded(coro):
+    """Same error mapping for both reports (PL messages from the resolver / validators)."""
     try:
-        return await analyze(req)
+        return await coro
     except PlotNotFound as exc:
         raise HTTPException(404, detail=str(exc)) from exc
     except (InvalidPlotInput, ValueError) as exc:

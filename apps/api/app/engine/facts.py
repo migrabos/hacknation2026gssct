@@ -113,7 +113,8 @@ class Facts:
 DRY_SUMMER_KBW = -150.0
 
 
-def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
+def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
+    """`crop=None` for crop-independent analyses (crop fit); crop_sens then stays neutral."""
     m = bundle.meteo.get("values") or {}
     s = bundle.soil.get("values") or {}
     sat = bundle.sat.get("values") or {}
@@ -154,14 +155,14 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
         ndvi_date=sat.get("scene_date"),
         cdi=int(cdi) if isinstance(cdi, (int, float)) else None,
         cdi_label=dr.get("cdi_label"),
-        crop_sens=float(crop["droughtSensitivity"]),
+        crop_sens=float(crop["droughtSensitivity"]) if crop else 0.5,
     )
 
 
 # --------------------------------------------------------------------------- evidence
 
 
-def build_evidence(f: Facts, crop: CropEntry) -> list[Evidence]:
+def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
     ev: list[Evidence] = []
 
     def add(id_: str, label: str, value: float | str | None, src: str, unit: str | None = None,
@@ -222,9 +223,10 @@ def build_evidence(f: Facts, crop: CropEntry) -> list[Evidence]:
         add("ev_cdi", "Wskaźnik suszy w regionie (EDO)", f.cdi_label or str(f.cdi), SRC_EDO,
             comparison=f"klasa {f.cdi} w skali 0–3")
 
-    add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
-        {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
-        SRC_CROPS, comparison=crop["criticalPhasePl"])
+    if crop:
+        add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
+            {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
+            SRC_CROPS, comparison=crop["criticalPhasePl"])
     return ev
 
 
