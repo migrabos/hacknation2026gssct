@@ -8,12 +8,15 @@
  *   GET  /plot/by-point?lat=...&lng=...
  *   GET  /plot/regions?q=...            (obręby / villages by exact name)
  *   GET  /plot/by-region?regionId=...&nr=...
- *   POST /analyze
+ *   POST /analyze                      (water report for one crop)
+ *   POST /crop-fit                     (separate report: which crops suit this plot)
  */
 import type {
   AnalyzeRequest,
   ApiErrorKind,
   Crop,
+  CropFitReport,
+  CropFitRequest,
   HealthResponse,
   Plot,
   Region,
@@ -91,5 +94,10 @@ export const api = {
       ? { plotId: req.plotId, cropId: req.cropId, analysisDate: req.analysisDate }
       : req;
     return request<Report>("/analyze", { method: "POST", body: JSON.stringify(body) }, ANALYZE_TIMEOUT_MS);
+  },
+  /** Separate report: which crops cope best with the water on this plot (no crop needed). */
+  cropFit: (req: CropFitRequest) => {
+    const body: CropFitRequest = req.plotId ? { plotId: req.plotId, analysisDate: req.analysisDate } : req;
+    return request<CropFitReport>("/crop-fit", { method: "POST", body: JSON.stringify(body) }, ANALYZE_TIMEOUT_MS);
   },
 };

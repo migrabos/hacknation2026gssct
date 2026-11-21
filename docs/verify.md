@@ -60,7 +60,39 @@ If `recommendations.irrigation` is non-empty:
 
 Test: `pytest apps/api/tests/test_ranking_order.py`.
 
-## 6. Automated suite
+## 6. Crop fit (which crop copes best with the water on this plot)
+
+A **separate report**, chosen in the form instead of the water report: `POST /crop-fit` (body: `plotId`
+or `lat`+`lng`, `analysisDate`; no crop) → `CropFitReport` with `cropFit.ranking`. It is not part of
+`/analyze` and does not change the moisture assessment or the retention recommendations.
+Only multi-year inputs are used (no satellite / regional drought / last 30 days).
+
+`cropFit.ranking` — 17 crops (finer than the IUNG groups: rye ≠ wheat, lupin ≠ pea,
+strawberries ≠ raspberries), each linked to a catalog group (`groupId`). Profiles:
+`apps/api/app/crops/fit_profiles.py` (root depth from FAO-56 Table 22, sensitivity after FAO-33 Ky,
+soil needs after Polish soil valuation / IUNG suitability complexes). Scoring:
+`apps/api/app/engine/crop_fit.py`, all constants at the top. Score = 100 minus:
+
+| Penalty | Rule |
+|---------|------|
+| water | 55 × sensitivity × (0.6 × dry summers + 0.4 × little water in root zone). Dry summers: mean summer KBW −100 mm → 0, −250 mm → 1, averaged with the share of summers < −150 mm. Root-zone water = AWC × min(root depth, 1 m): ≥ 100 mm → 0, ≤ 20 mm → 1. Roots ≥ 1.2 m and sensitivity ≤ 0.6: +5 |
+| soil | needs good soil on poor −30, on medium −12; needs medium soil on poor −15; undemanding crop on good soil −6. Soil level = median EGiB class (I–IIIa good, IIIb–IVa medium, IVb–VI poor), else SoilGrids (sand ≥ 65 % or AWC < 100 mm poor; AWC ≥ 150 mm and sand < 45 % good) |
+| slope | row crops −20 at ≥ 6 %, −10 at ≥ 3 %; medium-risk crops −6 at ≥ 6 % |
+| wet | clay ≥ 45 %, or clay ≥ 35 % with water ≤ 100 m: waterlogging-intolerant −18, medium −6 |
+| land | EGiB meadow/pasture: every crop except grassland −30 (TUZ ploughing protection) |
+
+`good` ≥ 75 > `medium` ≥ 55 > `poor`. Ties → more drought-tolerant crop first. Confidence is at most
+`medium` (profiles are orientation values). Not considered: prices, rotation, pH, varieties, machinery, subsidies.
+
+Alignment with the KOWR material "Podstawy naukowe oceny sytuacji wodnej…": only multi-year conditions
+are used (current drought ≠ multi-year susceptibility); soil storage includes organic matter
+(Saxton & Rawls AWC); slope/runoff is a factor; every reason cites Evidence; the uncertainty is stated in
+the report (`cropFit.notConsidered`). The material itself has **no crop-level numbers** — profile values
+come from its bibliography (FAO-56, IUNG-PIB SMSR crop groups) plus an explicit expert classification
+(soil needs, waterlogging, erosion) that is not yet checked against IUNG tables.
+Test: `pytest apps/api/tests/test_crop_fit.py`.
+
+## 7. Automated suite
 
 ```bash
 cd apps/api

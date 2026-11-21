@@ -427,7 +427,7 @@ function Scale<T extends string>({
   );
 }
 
-function ConfidenceBadge({ c }: { c: Confidence }) {
+export function ConfidenceBadge({ c }: { c: Confidence }) {
   return <span className={`badge badge-conf-${c}`}>{CONFIDENCE_LABEL[c]}</span>;
 }
 
@@ -468,7 +468,7 @@ function RecList({
   );
 }
 
-function EvidenceDetails({
+export function EvidenceDetails({
   refs,
   evidence,
   sources,
