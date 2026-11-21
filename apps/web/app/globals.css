@@ -53,7 +53,9 @@ html.dark {
   --c-accent-hover: #4db075;
   --c-accent-soft: #1a2e22;
   --c-accent-line: #2f5c42;
-  --c-on-accent: #ffffff;
+  /* white on #3d9b63 is only 3.5:1 (fails WCAG AA); near-black gives 4.9:1. The accent itself must
+     stay light, because it is also the link / badge text colour on the dark background. */
+  --c-on-accent: #0d1f14;
 
   --c-warn-bg: #2a2410;
   --c-warn-line: #c9a12a;
@@ -150,6 +152,26 @@ p {
   clip: rect(0 0 0 0);
   white-space: nowrap;
 }
+/* The start-page field illustration has hard-coded light colours — dim it so it doesn't glare in dark mode. */
+html.dark .hero-figure {
+  filter: brightness(0.78) saturate(0.9);
+}
+
+/* "Przejdź do treści" skip link: invisible until reached with Tab */
+a.visually-hidden:focus {
+  position: fixed;
+  z-index: 2000;
+  top: 8px;
+  left: 8px;
+  width: auto;
+  height: auto;
+  clip: auto;
+  padding: 10px 14px;
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 2px solid var(--c-accent);
+  border-radius: var(--radius);
+}
 
 /* ---------- Header / footer ---------- */
 
@@ -207,17 +229,20 @@ p {
 .theme-toggle-icon > svg {
   grid-area: 1 / 1;
 }
+/* Both icons and both labels share one grid cell; the inactive one is only made invisible
+   (not display:none), so the button keeps the width of the longer label ("Ciemny") and the
+   navigation next to it does not jump when the theme changes. */
 .theme-icon-sun,
 .theme-label-to-light {
-  display: none;
+  visibility: hidden;
 }
 html.dark .theme-icon-moon,
 html.dark .theme-label-to-dark {
-  display: none;
+  visibility: hidden;
 }
 html.dark .theme-icon-sun,
 html.dark .theme-label-to-light {
-  display: inline;
+  visibility: visible;
 }
 .theme-toggle-text {
   display: inline-grid;
