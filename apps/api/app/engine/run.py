@@ -106,6 +106,12 @@ def run_engine(
 
     sources = build_sources(bundle, analysis_date)
     missing = build_missing(sources)
+    if assessment.susceptibility.level == "insufficient_data":
+        missing.append(MissingData(
+            id="missing_summer_history", what="Historia letniego bilansu wodnego",
+            reason=assessment.susceptibility.summary,
+            impact="Brak podstaw do określenia wieloletniej podatności działki na suszę.",
+        ))
     if assessment.current.level == "insufficient_data":
         missing.append(MissingData(
             id="missing_moisture_comparison", what="Dane do oceny bieżącej wilgotności",
@@ -114,6 +120,8 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
+    if f.nearby_water is None or (f.nearby_water and (not f.water_type or f.water_dist is None)):
+        limitations.append("Sprawdź w terenie, czy przy działce jest rów odprowadzający wodę z pola.")
     if f.ndvi is not None:
         limitations.append(SAT_LIMITATION)
         if bundle.sat_history is not None and not f.has_history:

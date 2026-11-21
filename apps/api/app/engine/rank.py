@@ -21,15 +21,8 @@ def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]
                     "Pas zieleni ją spowalnia i pozwala wsiąknąć.", ["ev_slope"])
         return "Pas zieleni zatrzymuje wodę spływającą po ulewach i chroni glebę przed erozją.", []
     if action_id == "ditch_retention":
-        if f.nearby_water and f.water_dist is not None:
-            what = WATER_TYPE_PL.get(f.water_type or "", "ciek")
-            return (f"Ok. {fmt(f.water_dist, 0)} m od działki jest {what}. Zatrzymanie w nim wody wiosną "
-                    "podniesie jej poziom w glebie latem.", ["ev_water"])
-        if f.nearby_water is None:
-            return ("Wiosną woda z roztopów odpływa rowami, a latem jej brakuje. Nie mamy danych o rowach "
-                    "przy tej działce – sprawdź na miejscu.", [])
-        return ("Na mapach nie widać rowu przy działce, ale rowy bywają niezmapowane. Jeśli jest rów, "
-                "warto zatrzymać w nim wodę.", ["ev_water"])
+        return (f"Mapa wskazuje {WATER_TYPE_PL[f.water_type]} w odległości ok. {fmt(f.water_dist, 0)} m "
+                "od działki. Sprawdź w terenie, czy odprowadza wodę z tego pola.", ["ev_water"])
     if action_id == "small_pond":
         if _standing_water(f):
             return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.water_pct, 0)}% działki pokrywa stojąca "
@@ -86,7 +79,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     note: str | None = NO_IRRIGATION_NOTE
     if assessment.current.level == "insufficient_data":
         note = "Za mało danych, aby ocenić potrzebę nawadniania."
-    moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level != "low"
+    moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level in ("medium", "high")
     if not moisture_risk and not cause_ids and not _standing_water(f):
         return Recommendations(irrigation=None, irrigationNote=note)
 
@@ -97,10 +90,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
         if set(meta["triggers"]) & cause_ids:
             selected[meta["kind"]].append(aid)
 
-    # Ditch retention is only worth suggesting when water could be nearby (or unknown).
-    if f.nearby_water is False and "ditch_retention" in selected["retention"] and "runoff" not in cause_ids:
-        selected["retention"].remove("ditch_retention")
-    if f.nearby_water and "ditch_retention" not in selected["retention"]:
+    if f.nearby_water and f.water_type in ("ditch", "drain") and f.water_dist is not None:
         selected["retention"].append("ditch_retention")
 
     # Standing water seen from space = ready-made spot for a pond, wet or dry year alike.
@@ -110,7 +100,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     # Any moisture risk → always give at least one action in each bucket.
     if moisture_risk:
         if not selected["retention"]:
-            selected["retention"] = ["small_pond"] if f.nearby_water is False else ["ditch_retention", "small_pond"]
+            selected["retention"] = ["small_pond"]
         if not selected["agrotech"]:
             selected["agrotech"] = ["cover_crops", "residues"]
 

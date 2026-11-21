@@ -152,7 +152,7 @@ class CurrentBlock(AssessmentBlock):
 
 
 class SusceptibilityBlock(AssessmentBlock):
-    level: RiskLevel
+    level: RiskLevel | Literal["insufficient_data"]
 
 
 class MoistureAssessment(BaseModel):
