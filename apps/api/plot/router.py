@@ -22,8 +22,11 @@ from .resolver import (
     resolve_plot,
     resolve_point,
     resolve_region_parcel,
+    region_extent,
     search_regions,
 )
+from .region_index import load_index, norm
+from .region_index import search as region_index_search
 
 router = APIRouter(prefix="/plot", tags=["plot"])
 
@@ -76,12 +79,30 @@ async def plot_regions(q: str = Query(..., description="Pełna nazwa miejscowoś
         rid = ".".join(str(p.get("plotId", "000000_0.0000.0")).split(".")[:2])
         return [{"regionId": rid, "region": q.strip(), "commune": p.get("commune"), "county": p.get("county"),
                  "voivodeship": p.get("voivodeship"), "bbox": p.get("bbox")}]
+    # Offline PRG index first: prefix / no-diacritics / by-gmina search, ~instant.
+    if load_index():
+        if len(norm(q.partition(",")[0])) < 2:
+            raise HTTPException(422, detail="Wpisz co najmniej 2 litery nazwy miejscowości.")
+        return region_index_search(q)[0]
     try:
-        return await search_regions(q)
+        return await search_regions(q.partition(",")[0])  # ULDK: exact obręb name only
     except InvalidPlotInput as exc:
         raise HTTPException(422, detail=str(exc)) from exc
     except PlotServiceUnavailable as exc:
         raise HTTPException(503, detail=str(exc)) from exc
+
+
+@router.get("/region-extent")
+async def plot_region_extent(regionId: str = Query(..., description="Identyfikator obrębu, np. 060504_2.0013")):
+    """[min_lng, min_lat, max_lng, max_lat] of an obręb (to zoom the map), or null if ULDK can't say."""
+    if get_settings().adapters == "mock":
+        from app.adapters.mocks import mock_plot
+
+        return {"regionId": regionId, "bbox": mock_plot(None, None, None).get("bbox")}
+    try:
+        return {"regionId": regionId, "bbox": await region_extent(regionId)}
+    except InvalidPlotInput as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
 
 
 @router.get("/by-region")

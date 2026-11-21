@@ -20,8 +20,10 @@ function errorKind(err: unknown): ApiErrorKind {
   return err instanceof ApiError ? err.kind : "server";
 }
 
-/** Above this many same-named villages we ask the user to add the commune after a comma. */
+/** Above this many matches we ask the user to add the commune after a comma. */
 const REGION_FILTER_HINT_AT = 6;
+/** The API returns at most this many matches (best first). */
+const REGION_MAX_RESULTS = 100;
 
 function regionLabel(r: Region): string {
   return [
@@ -91,12 +93,17 @@ export default function AnalyzePage() {
   }, [loadCrops]);
 
   const villageName = splitVillageQuery(villageQuery).name;
+  const villageSearch = villageQuery.trim();
 
-  // Debounced search: ULDK matches whole names only, so results appear once the name is complete.
+  // Debounced search over the offline PRG index (prefix, no diacritics needed, by gmina);
+  // the text after a comma narrows results server-side ("Zdziłowice, Godziszów").
   useEffect(() => {
     if (region) return;
     const name = villageName;
-    if (name.length < 3) {
+    const q = villageSearch;
+    if (name.length < 2) {
+      searchSeq.current++; // drop any in-flight search for the text that was just deleted
+      setRegionsBusy(false);
       setRegions(null);
       setRegionsError(null);
       return;
@@ -106,7 +113,7 @@ export default function AnalyzePage() {
       setRegionsBusy(true);
       setRegionsError(null);
       try {
-        const found = await api.searchRegions(name);
+        const found = await api.searchRegions(q);
         if (seq !== searchSeq.current) return;
         setRegions(found);
       } catch (err) {
@@ -116,22 +123,26 @@ export default function AnalyzePage() {
       } finally {
         if (seq === searchSeq.current) setRegionsBusy(false);
       }
-    }, 450);
+    }, 250);
     return () => clearTimeout(t);
-  }, [villageName, region]);
+  }, [villageName, villageSearch, region]);
 
   const villageFilter = splitVillageQuery(villageQuery).filter;
-  const shownRegions =
-    regions?.filter((r) =>
-      !villageFilter
-        ? true
-        : [r.commune, r.county, r.voivodeship].some((v) => v?.toLowerCase().includes(villageFilter)),
-    ) ?? null;
+  const shownRegions = regions;
 
   function chooseRegion(r: Region) {
     setRegion(r);
     setNrError(null);
     setPlotError(null);
+    // The search index has no geometry; fetch the obręb extent to zoom the map (best-effort).
+    if (!r.bbox) {
+      api
+        .regionExtent(r.regionId)
+        .then((bbox) => {
+          if (bbox) setRegion((cur) => (cur?.regionId === r.regionId ? { ...cur, bbox } : cur));
+        })
+        .catch(() => {});
+    }
   }
 
   function clearRegion() {
@@ -140,10 +151,17 @@ export default function AnalyzePage() {
     setNrError(null);
   }
 
-  // A single match needs no extra click.
+  // A single *exact* match needs no extra click (not while the user is still typing a prefix).
   useEffect(() => {
-    if (!region && regions?.length === 1 && !villageFilter) setRegion(regions[0]);
-  }, [regions, region, villageFilter]);
+    if (
+      !region &&
+      regions?.length === 1 &&
+      !villageFilter &&
+      regions[0].region?.toLowerCase() === villageName.toLowerCase()
+    )
+      chooseRegion(regions[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regions, region, villageFilter, villageName]);
 
   async function findByRegion(e?: { preventDefault(): void }) {
     e?.preventDefault();
@@ -327,7 +345,9 @@ export default function AnalyzePage() {
               {!region ? (
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label htmlFor="village">Miejscowość, w której leży działka</label>
-                  <p className="hint">Pełna nazwa wsi, z polskimi literami (np. Krzewina, Żółwin).</p>
+                  <p className="hint">
+                    Zacznij pisać nazwę wsi albo gminy — polskie litery nie są konieczne (np. Zdziłowice, Godziszów).
+                  </p>
                   <div className="input-row">
                     <input
                       id="village"
@@ -347,17 +367,27 @@ export default function AnalyzePage() {
                       <p className="hint">
                         {regions && regions.length > 0
                           ? "Żadna z tych miejscowości nie pasuje do dopisanej gminy. Usuń tekst po przecinku."
-                          : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię (ą, ę, ł, ó, ś, ż…). W miastach obręby mają czasem numery zamiast nazw — wtedy kliknij działkę na mapie.`}
+                          : villageFilter
+                            ? `Nie znaleźliśmy „${villageName}” w „${villageFilter}”. Sprawdź nazwę gminy albo usuń tekst po przecinku.`
+                            : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają czasem numery zamiast nazw — wtedy kliknij działkę na mapie.`}
                       </p>
                     )}
                     {shownRegions && shownRegions.length > 0 && (
                       <>
                         <p className="hint" style={{ marginTop: 6 }}>
-                          {shownRegions.length === 1 ? "Znaleziono:" : `Jest ${shownRegions.length} takich miejscowości — wybierz swoją:`}
+                          {shownRegions.length === 1
+                            ? "Znaleziono:"
+                            : shownRegions.length >= REGION_MAX_RESULTS
+                              ? `Pokazujemy pierwsze ${REGION_MAX_RESULTS} wyników — wybierz swoją albo zawęź wyszukiwanie:`
+                              : `Pasujące miejscowości (${shownRegions.length}) — wybierz swoją:`}
                         </p>
                         {regions && regions.length > REGION_FILTER_HINT_AT && !villageFilter && (
                           <p className="hint">
-                            Dużo wyników? Dopisz po przecinku gminę, np. <em>{villageName}, {regions[0].commune}</em>.
+                            Dużo wyników? Dopisz po przecinku gminę lub powiat, np.{" "}
+                            <em>
+                              {villageName}, {regions[0].commune ?? regions[0].county}
+                            </em>
+                            .
                           </p>
                         )}
                         <ul className="region-list">

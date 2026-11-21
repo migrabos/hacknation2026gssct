@@ -126,6 +126,25 @@ def _url(base: str, params: dict[str, Any]) -> str:
     return str(httpx.URL(base, params=params))
 
 
+# ULDK sometimes answers with a garbage blob announced as several GB instead of a result.
+# Never read more than this; a real reply (one parcel WKT / a list of obręby) is far smaller.
+ULDK_MAX_BYTES = 3_000_000
+
+
+async def _get_text_limited(client: httpx.AsyncClient, url: str, max_bytes: int = ULDK_MAX_BYTES) -> str:
+    async with client.stream("GET", url) as r:
+        r.raise_for_status()
+        declared = int(r.headers.get("content-length") or 0)
+        if declared > max_bytes:
+            raise ValueError(f"ULDK zwróciło nieprawidłową odpowiedź ({declared // 1_000_000} MB) – spróbuj ponownie.")
+        buf = bytearray()
+        async for chunk in r.aiter_bytes():
+            buf.extend(chunk)
+            if len(buf) > max_bytes:
+                raise ValueError("ULDK zwróciło nieprawidłową (zbyt dużą) odpowiedź – spróbuj ponownie.")
+        return buf.decode(r.encoding or "utf-8", errors="replace")
+
+
 # --------------------------------------------------------------------------- ULDK
 
 
@@ -167,10 +186,9 @@ async def _fetch_uldk(
     not_found: list[PlotNotFound] = []
 
     async def fetch() -> dict[str, Any]:
-        r = await client.get(url)
-        r.raise_for_status()
+        text = await _get_text_limited(client, url)
         try:
-            return _parse_uldk(r.text)
+            return _parse_uldk(text)
         except PlotNotFound as exc:
             not_found.append(exc)  # surfaced after run_adapter (which never raises)
             raise
@@ -572,9 +590,7 @@ async def search_regions(name: str) -> list[dict[str, Any]]:
 
     async with _client() as client:
         async def fetch() -> dict[str, Any]:
-            r = await client.get(url)
-            r.raise_for_status()
-            return {"regions": _parse_regions(r.text)}
+            return {"regions": _parse_regions(await _get_text_limited(client, url))}
 
         res = await run_adapter(
             "ULDK GUGiK", url, {"region": name.lower()}, fetch, cache_ttl_sec=ULDK_CACHE_TTL
@@ -585,6 +601,33 @@ async def search_regions(name: str) -> list[dict[str, Any]]:
             + "; ".join(res["errors"])
         )
     return res["values"]["regions"]
+
+
+async def region_extent(region_id: str) -> list[float] | None:
+    """Bounding box [min_lng, min_lat, max_lng, max_lat] of one obręb from ULDK, or None.
+
+    Only used to zoom the map after the farmer picks a village; failing is harmless.
+    """
+    region_id = (region_id or "").strip()
+    if not _REGION_ID_RE.match(region_id):
+        raise InvalidPlotInput("Niepoprawny identyfikator obrębu.")
+    params = {
+        "request": "GetRegionByNameOrId",
+        "id": region_id,
+        "result": "id,commune,county,voivodeship,region,geom_extent",
+        "srid": "4326",
+    }
+    url = _url(ULDK_URL, params)
+    async with _client() as client:
+        async def fetch() -> dict[str, Any]:
+            regions = _parse_regions(await _get_text_limited(client, url))
+            hit = next((r for r in regions if r["regionId"] == region_id and r["bbox"]), None)
+            if hit is None:
+                raise ValueError("ULDK nie podało zasięgu obrębu.")
+            return {"bbox": hit["bbox"]}
+
+        res = await run_adapter("ULDK GUGiK", url, {"region_extent": region_id}, fetch, timeout_sec=10)
+    return res["values"].get("bbox") if res["coverage"] == "full" else None
 
 
 async def resolve_region_parcel(region_id: str, parcel_nr: str, with_context: bool = True) -> dict[str, Any]:

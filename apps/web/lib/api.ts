@@ -133,7 +133,7 @@ const mockApi = {
   },
   async searchRegions(q: string): Promise<Region[]> {
     await sleep(300);
-    const name = q.trim();
+    const name = q.split(",")[0].trim();
     if (name.length < 2) return [];
     const p = mockPlot as Plot;
     return [
@@ -143,6 +143,9 @@ const mockApi = {
   },
   async plotByRegion(regionId: string, nr: string): Promise<Plot> {
     return mockApi.plotById(`${regionId}.${nr.trim()}`);
+  },
+  async regionExtent(regionId: string): Promise<Region["bbox"]> {
+    return regionId === "022503_5.0003" ? [14.935, 51.009, 14.971, 51.034] : ((mockPlot as Plot).bbox ?? null);
   },
   async plotByPoint(lat: number, lng: number): Promise<Plot> {
     await sleep(400);
@@ -173,6 +176,9 @@ const realApi = {
   plotByPoint: (lat: number, lng: number) =>
     request<Plot>(`/plot/by-point?lat=${lat}&lng=${lng}`),
   searchRegions: (q: string) => request<Region[]>(`/plot/regions?q=${encodeURIComponent(q.trim())}`),
+  regionExtent: async (regionId: string): Promise<Region["bbox"]> =>
+    (await request<{ bbox: Region["bbox"] }>(`/plot/region-extent?regionId=${encodeURIComponent(regionId)}`, {}, 12_000))
+      .bbox ?? null,
   plotByRegion: (regionId: string, nr: string) =>
     request<Plot>(
       `/plot/by-region?regionId=${encodeURIComponent(regionId)}&nr=${encodeURIComponent(nr.trim().replace(/\s+/g, ""))}`,
@@ -251,6 +257,7 @@ export const api = {
   getCrops: () => _baseApi.getCrops(),
   searchRegions: (q: string) => _baseApi.searchRegions(q),
   plotByRegion: (regionId: string, nr: string) => _baseApi.plotByRegion(regionId, nr),
+  regionExtent: (regionId: string) => _baseApi.regionExtent(regionId),
   plotById: async (id: string) => {
     const p = await _baseApi.plotById(id);
     // #region agent log

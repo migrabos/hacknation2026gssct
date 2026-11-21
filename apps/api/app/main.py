@@ -15,6 +15,7 @@ from app.orchestrate import analyze
 from app.schemas.evidence import HealthResponse, Report
 from app.schemas.requests import AnalyzeRequest
 from plot.resolver import InvalidPlotInput, PlotError, PlotNotFound, PlotServiceUnavailable
+from plot.region_index import load_index as load_region_index
 from plot.router import router as plot_router
 
 app = FastAPI(
@@ -33,6 +34,7 @@ app.add_middleware(
 )
 
 app.include_router(plot_router)
+load_region_index()  # ~1.5 s once at startup, so the first village search is instant
 
 
 @app.get("/health", response_model=HealthResponse)
