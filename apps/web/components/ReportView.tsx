@@ -34,7 +34,7 @@ const SECTIONS = [
   { id: "przyczyny", title: "Możliwe przyczyny" },
   { id: "retencja", title: "Zatrzymaj wodę na polu" },
   { id: "agrotechnika", title: "Zmiany w uprawie gleby" },
-  { id: "nawadnianie", title: "Nawadnianie (opcjonalnie)" },
+  { id: "nawadnianie", title: "Nawadnianie" },
 ] as const;
 
 export default function ReportView({ report }: { report: Report }) {
@@ -251,7 +251,7 @@ export default function ReportView({ report }: { report: Report }) {
       <Section
         n={5}
         id="nawadnianie"
-        title="Nawadnianie (opcjonalnie)"
+        title="Nawadnianie"
         lead="Nawadnianie to ostateczność — najpierw warto zatrzymać wodę, która już spada na pole."
       >
         {irrigation.length > 0 ? (
