@@ -61,6 +61,34 @@ export default function ReportView({ report }: { report: Report }) {
     .filter(Boolean)
     .join(", ");
 
+  // #region agent log
+  useEffect(() => {
+    const failedOrPartial = report.sources.filter((s) => s.status !== "ok").map((s) => s.id);
+    fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
+      body: JSON.stringify({
+        sessionId: "68e619",
+        runId: "pre-fix",
+        hypothesisId: "H1",
+        location: "ReportView.tsx:mount",
+        message: "report sources + plot for UI",
+        data: {
+          reportStatus: report.status,
+          meta: report.meta ?? null,
+          sources: report.sources.map((s) => ({ id: s.id, status: s.status, mode: s.mode, error: s.error ?? null })),
+          failedOrPartial,
+          plotId: plot.plotId,
+          centroid: plot.centroid,
+          bbox: plot.bbox,
+          geomType: plot.geometry?.type,
+        },
+        timestamp: Date.now(),
+      }),
+    }).catch(() => {});
+  }, [report]);
+  // #endregion
+
   return (
     <article className="report container">
       {/* ---------- Header ---------- */}
