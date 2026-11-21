@@ -13,7 +13,7 @@ from app.engine.causes import detect_causes
 from app.engine.facts import build_evidence, build_missing, build_sources, extract_facts
 from app.engine.rank import rank_recommendations
 from app.plot_dto import plot_to_dto
-from app.schemas.evidence import Crop, Report, ReportMeta
+from app.schemas.evidence import Crop, MissingData, Report, ReportMeta
 
 ENGINE_LIMITATIONS = [
     "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar "
@@ -85,6 +85,12 @@ def run_engine(
 
     sources = build_sources(bundle, analysis_date)
     missing = build_missing(sources)
+    if assessment.current.level == "insufficient_data":
+        missing.append(MissingData(
+            id="missing_moisture_comparison", what="Dane do oceny bieżącej wilgotności",
+            reason="Brakuje porównania opadów lub bilansu wodnego z poprzednimi latami.",
+            impact="Podajemy dostępne wartości bez oceny bieżącej wilgotności.",
+        ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
     mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})

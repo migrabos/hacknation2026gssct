@@ -32,7 +32,7 @@ export type Confidence = "low" | "medium" | "high";
 export type RiskLevel = "low" | "medium" | "high";
 
 /** Current moisture situation (≠ multi-year susceptibility). */
-export type MoistureLevel = "very_dry" | "dry" | "normal" | "wet";
+export type MoistureLevel = "very_dry" | "dry" | "normal" | "wet" | "insufficient_data";
 
 export type CauseId =
   | "precip_deficit"

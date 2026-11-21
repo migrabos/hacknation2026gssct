@@ -82,17 +82,30 @@ def has_meteo(f: Facts) -> bool:
     return f.precip30 is not None or f.kbw30 is not None
 
 
-def assess_moisture(f: Facts) -> MoistureAssessment:
+def _assess_current(f: Facts) -> CurrentBlock:
     if not has_meteo(f):
         raise RuntimeError("Brak danych meteorologicznych — ocena wilgoci niemożliwa.")
 
-    # ---------------- current situation (higher = wetter) ----------------
+    ratio = f.precip_ratio
+    has_kbw_comparison = f.kbw30 is not None and f.kbw_pct is not None
+    long_dry_spell = f.dry_spell is not None and f.dry_spell >= DRY_SPELL_WATCH
+    if ratio is None and not has_kbw_comparison and not long_dry_spell:
+        observations = []
+        refs = []
+        if f.precip30 is not None:
+            observations.append(f"Suma opadów w ostatnich 30 dniach wyniosła {fmt(f.precip30)} mm.")
+            refs.append("ev_precip_30d")
+        if f.kbw30 is not None:
+            observations.append(f"Bilans wodny za ten okres wyniósł {fmt(f.kbw30)} mm.")
+            refs.append("ev_kbw_30d")
+        return CurrentBlock(level="insufficient_data", headline="Za mało danych do oceny wilgotności",
+                            summary=" ".join(observations), confidence="low", evidenceRefs=refs)
+
     score = 55.0
     refs: list[str] = []
     why: list[str] = []
     conf = 0.9
 
-    ratio = f.precip_ratio
     if ratio is not None:
         refs.append("ev_precip_30d")
         if ratio >= PRECIP_RATIO_OK:
@@ -108,7 +121,7 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
     else:
         conf -= 0.15
 
-    if f.kbw_pct is not None:
+    if has_kbw_comparison:
         refs.append("ev_kbw_30d")
         if f.kbw_pct <= KBW_PCT_VERY_LOW:
             score -= 14
@@ -157,7 +170,13 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
     cur_score = int(round(max(0, min(100, score))))
     cur_level = _current_level(cur_score)
     cur_summary = (why[0][0].upper() + why[0][1:] + (", " + ", ".join(why[1:3]) if len(why) > 1 else "") + "."
-                   if why else "Opady i bilans wodny z ostatnich 30 dni są zbliżone do typowych dla tego miejsca.")
+                   if why else f"Bilans wodny z ostatnich 30 dni wyniósł {fmt(f.kbw30)} mm.")
+    return CurrentBlock(level=cur_level, headline=CUR_HEADLINE[cur_level], summary=cur_summary,
+                        confidence=confidence_label(conf), evidenceRefs=refs, score0to100=cur_score)
+
+
+def assess_moisture(f: Facts) -> MoistureAssessment:
+    current = _assess_current(f)
 
     # ---------------- multi-year susceptibility (higher = more chronic risk) ----------------
     sus = 30.0
@@ -215,14 +234,7 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
                    if sus_why else "Klimat i gleba w tym miejscu zwykle nie sprzyjają długotrwałym niedoborom wody.")
 
     return MoistureAssessment(
-        current=CurrentBlock(
-            level=cur_level,
-            headline=CUR_HEADLINE[cur_level],
-            summary=cur_summary,
-            confidence=confidence_label(conf),
-            evidenceRefs=list(dict.fromkeys(refs)),
-            score0to100=cur_score,
-        ),
+        current=current,
         susceptibility=SusceptibilityBlock(
             level=sus_level,
             headline=SUS_HEADLINE[sus_level],
