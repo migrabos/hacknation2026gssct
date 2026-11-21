@@ -22,7 +22,7 @@ async def narrate(report: Report, *, deadline: float | None = None) -> Narrative
     there is still enough time for a full call.
     """
     settings = get_settings()
-    if not settings.llm_enabled:
+    if not settings.llm_enabled or report.moistureAssessment.current.level == "insufficient_data":
         return build_template_narrative(report)
 
     def time_left() -> float:
