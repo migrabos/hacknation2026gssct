@@ -1,7 +1,7 @@
 # Person 2 — GIS + core data adapters
 
 **You own:** ULDK plot resolve, geometry, map GeoJSON, `adapters/base.py` (interface + disk cache + timeouts), Open-Meteo, SoilGrids, DEM/slope, hydro nearby flags, source metadata + license list
-**You do not own:** Sentinel-2 NDVI + IUNG/EDO drought adapters (→ **Person 1**), final UX, cause/action business rules, LLM prompts, pitch slides/film edit
+**You do not own:** Sentinel-2 NDVI + IUNG/EDO drought adapters (→ **Person 1**), final UX, cause/action business rules, pitch slides/film edit
 **Pair with:** **1** on map GeoJSON + `base.py` contract (1 builds NDVI/drought adapters on it); **3** on adapter → engine contract + bbox/centroid helpers
 
 **Stack:** FastAPI — `apps/api/plot/` + `apps/api/adapters/` + local cache dir

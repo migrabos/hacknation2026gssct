@@ -2,7 +2,7 @@
 
 Browser-facing decision support for Polish farmers: for *this* cadastral plot and *this* crop, produce a live, evidence-grounded water report — **ocena → przyczyny → retencja/agrotech → nawadnianie (optional)**.
 
-Integrated stack: Next.js UI (`apps/web`) → one FastAPI app (`apps/api`) → **live public data adapters** (ULDK, GUGiK NMT, OpenStreetMap, Open-Meteo/ERA5, SoilGrids, Sentinel-2, EDO) → deterministic Evidence engine → grounded Ollama narrator (template fallback).
+Integrated stack: Next.js UI (`apps/web`) → one FastAPI app (`apps/api`) → **live public data adapters** (ULDK, GUGiK NMT, OpenStreetMap, Open-Meteo/ERA5, SoilGrids, Sentinel-2, EDO) → deterministic Evidence engine → Polish template narrative.
 
 **Shared contract:** [`apps/web/lib/types.ts`](apps/web/lib/types.ts) ⇄ [`apps/api/app/schemas/evidence.py`](apps/api/app/schemas/evidence.py) (same field names). `apps/api/tests/test_contract_web.py` validates `fixtures/evidence_sample.json` against the API schema, so drift fails the tests.
 
@@ -14,9 +14,6 @@ Integrated stack: Next.js UI (`apps/web`) → one FastAPI app (`apps/api`) → *
 cd apps/api
 python -m pip install -r requirements.txt
 copy .env.example .env   # Windows; or: cp .env.example .env
-
-# Optional LLM (local Ollama)
-ollama pull qwen2.5:3b
 
 uvicorn app.main:app --reload --port 8000   # or: uvicorn main:app
 ```
@@ -57,11 +54,11 @@ Farmer / Next.js
   → POST /analyze
   → Live adapters (plot, meteo, soil, sat, drought, hydro)
   → Deterministic engine → Evidence / Report (truth)
-  → Grounded narrator (Ollama) OR Polish template fallback
-  → JSON report (UI renders structured fields even if LLM fails)
+  → Polish template narrative (restates Evidence fields)
+  → JSON report
 ```
 
-**Grounding rule:** the engine owns numbers and action IDs. The LLM may only restate Evidence; a validator rejects invented facts; demo works with `LLM_ENABLED=false`.
+**Grounding rule:** the engine owns numbers and action IDs. Section prose is a deterministic Polish template over those fields — no generative LLM in the product path.
 
 Sample report from a real live run (plot 040308_5.0004.17220, kukurydza, 2026-07-15): [`fixtures/evidence_sample.json`](fixtures/evidence_sample.json).
 
@@ -73,15 +70,7 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza, 2026-07
 |----------|---------|---------|
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins (`*` = any) |
 | `ADAPTER_CACHE_DIR` | `apps/api/cache` | Disk cache for adapter responses |
-| `LLM_ENABLED` | `true` | Use Ollama; `false` → template narrative |
-| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434` | Local Ollama |
-| `OLLAMA_MODEL` | `qwen2.5:3b` | Fast small model (override OK) |
-| `OLLAMA_TIMEOUT_S` | `12` | Soft-fail to template on timeout |
-| `OLLAMA_MAX_TOKENS` | `700` | Cap |
-| `OLLAMA_TEMPERATURE` | `0.2` | Low creativity |
 | `ENGINE_VERSION` | `0.2.0` | Report meta |
-
-If Ollama is down or validation fails, `/analyze` still returns **200** with `narrative.generatedBy = "template"`.
 
 ---
 
@@ -95,9 +84,8 @@ If Ollama is down or validation fails, `/analyze` still returns **200** with `na
 
 ## AI disclosure
 
-- **Narrator only:** local [Ollama](https://ollama.com/) + model `qwen2.5:3b` (override via `OLLAMA_MODEL`; fallback install already present: `qwen3:8b`).
-- No cloud LLM keys required.
-- Structured Report is authoritative; narrative is optional polish.
+- No generative LLM in the runtime product path.
+- Structured Report is authoritative; Polish narrative sections are template-filled from Evidence.
 
 ---
 

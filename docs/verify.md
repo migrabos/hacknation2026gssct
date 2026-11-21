@@ -1,6 +1,6 @@
 # Verification — how to spot-check Retencja numbers
 
-Jury / teammates can confirm the engine is deterministic and honest without trusting the LLM.
+Jury / teammates can confirm the engine is deterministic and honest from Evidence alone.
 
 ## 1. Same request → identical scores
 
@@ -21,20 +21,9 @@ Compare:
 
 They must match. Automated: `pytest apps/api/tests/test_engine_deterministic.py`.
 
-## 2. Toggle LLM
+## 2. Narrative is template-only
 
-```bash
-# Template path (demo-safe)
-set LLM_ENABLED=false
-uvicorn app.main:app --port 8000
-# narrative.generatedBy == "template"
-
-# Ollama path (soft-fails to template if Ollama down)
-set LLM_ENABLED=true
-set OLLAMA_MODEL=qwen2.5:3b
-```
-
-`/analyze` must stay **200** either way.
+`/analyze` always returns Polish section prose from the Evidence template (`apps/api/app/narrative/templates_pl.py`). There is no generative LLM in the product path.
 
 ## 3. Cause thresholds (engine constants)
 
@@ -46,10 +35,32 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `low_soil_storage` | AWC (0–100 cm, Saxton & Rawls on SoilGrids) < 110 mm or sand ≥ 55 % |
 | `runoff` | slope ≥ 3.5 % or runoffRisk medium/high (GUGiK NMT) |
 | `crop_sensitivity` | crop sensitivity ≥ 0.65 and (dry now or high multi-year susceptibility) |
+| `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
 Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
 All constants live at the top of `apps/api/app/engine/assess.py`. Raw inputs for recomputation are in the adapter values (e.g. `kbw_30d_prev_years`, `kbw_summer_by_year`, soil `layers`).
+
+### Satellite (Sentinel-2 L2A, `apps/api/adapters/sentinel_stac.py`)
+
+No ML – band arithmetic on the plot's 10 m pixels after SCL cloud/snow masking:
+
+| Value | Formula / rule |
+|-------|----------------|
+| `ndvi_mean`, `ndvi_median` | (B08 − B04) / (B08 + B04) |
+| `ndmi_mean` | (B08 − B11) / (B08 + B11) – water in leaves, not soil moisture |
+| `bare_soil_pct` | % pixels NDVI < 0.2 (excluding water) → evidence `ev_bare_soil` if ≥ 10 % |
+| `water_pct` | % pixels SCL = 6 (ESA "water") → `ev_standing_water` if ≥ 2 %, adds `small_pond` |
+| `weak_zone_pct` | % pixels with NDVI < plot median − 0.15 (only if median ≥ 0.3) → `ev_weak_zone` if ≥ 10 % |
+| history (`fetch_sentinel_history`) | same 21-day window in each of the previous 5 years → median NDVI / NDMI; used only with ≥ 3 clear years |
+
+Effect on the current moisture score (`satellite_moisture_signal` in `assess.py`), bounded to −10 / +6 so weather stays primary:
+
+- only when NDVI ≥ 0.3 (green cover);
+- NDVI ≥ 0.5 and NDMI < 0 → −6; NDMI ≥ 0.4 → +4;
+- NDMI − plot's historical median ≤ −0.10 → −6, ≥ +0.10 → +4 – **only if** the historical NDVI is ≥ 0.3 and within ±0.2 of today's (otherwise it is probably another crop in the rotation and the comparison is skipped and said so in `ev_ndmi`).
+
+A negative satellite signal also raises `precip_deficit` confidence by 0.1 and adds `ev_ndmi` to it.
 
 Inspect `causes[].evidenceRefs` and matching adapter `values` in the response.
 
@@ -71,11 +82,43 @@ If `recommendations.irrigation` is non-empty:
 
 Test: `pytest apps/api/tests/test_ranking_order.py`.
 
-## 6. Automated suite
+## 6. Crop fit (which crop copes best with the water on this plot)
+
+A **separate report**, chosen in the form instead of the water report: `POST /crop-fit` (body: `plotId`
+or `lat`+`lng`, `analysisDate`; no crop) → `CropFitReport` with `cropFit.ranking`. It is not part of
+`/analyze` and does not change the moisture assessment or the retention recommendations.
+Only multi-year inputs are used (no satellite / regional drought / last 30 days).
+
+`cropFit.ranking` — 17 crops (finer than the IUNG groups: rye ≠ wheat, lupin ≠ pea,
+strawberries ≠ raspberries), each linked to a catalog group (`groupId`). Profiles:
+`apps/api/app/crops/fit_profiles.py` (root depth from FAO-56 Table 22, sensitivity after FAO-33 Ky,
+soil needs after Polish soil valuation / IUNG suitability complexes). Scoring:
+`apps/api/app/engine/crop_fit.py`, all constants at the top. Score = 100 minus:
+
+| Penalty | Rule |
+|---------|------|
+| water | 55 × sensitivity × (0.6 × dry summers + 0.4 × little water in root zone). Dry summers: mean summer KBW −100 mm → 0, −250 mm → 1, averaged with the share of summers < −150 mm. Root-zone water = AWC × min(root depth, 1 m): ≥ 100 mm → 0, ≤ 20 mm → 1. Roots ≥ 1.2 m and sensitivity ≤ 0.6: +5 |
+| soil | needs good soil on poor −30, on medium −12; needs medium soil on poor −15; undemanding crop on good soil −6. Soil level = median EGiB class (I–IIIa good, IIIb–IVa medium, IVb–VI poor), else SoilGrids (sand ≥ 65 % or AWC < 100 mm poor; AWC ≥ 150 mm and sand < 45 % good) |
+| slope | row crops −20 at ≥ 6 %, −10 at ≥ 3 %; medium-risk crops −6 at ≥ 6 % |
+| wet | clay ≥ 45 %, or clay ≥ 35 % with water ≤ 100 m: waterlogging-intolerant −18, medium −6 |
+| land | EGiB meadow/pasture: every crop except grassland −30 (TUZ ploughing protection) |
+
+`good` ≥ 75 > `medium` ≥ 55 > `poor`. Ties → more drought-tolerant crop first. Confidence is at most
+`medium` (profiles are orientation values). Not considered: prices, rotation, pH, varieties, machinery, subsidies.
+
+Alignment with the KOWR material "Podstawy naukowe oceny sytuacji wodnej…": only multi-year conditions
+are used (current drought ≠ multi-year susceptibility); soil storage includes organic matter
+(Saxton & Rawls AWC); slope/runoff is a factor; every reason cites Evidence; the uncertainty is stated in
+the report (`cropFit.notConsidered`). The material itself has **no crop-level numbers** — profile values
+come from its bibliography (FAO-56, IUNG-PIB SMSR crop groups) plus an explicit expert classification
+(soil needs, waterlogging, erosion) that is not yet checked against IUNG tables.
+Test: `pytest apps/api/tests/test_crop_fit.py`.
+
+## 7. Automated suite
 
 ```bash
 cd apps/api
 pytest -q
 ```
 
-Expected: all green (health/crops/analyze, determinism, ranking, validator invent-reject, LLM-off fallback).
+Expected: all green (health/crops/analyze, determinism, ranking, template narrative).

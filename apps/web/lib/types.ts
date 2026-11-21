@@ -38,9 +38,10 @@ export type CauseId =
   | "precip_deficit"
   | "low_soil_storage"
   | "runoff"
-  | "crop_sensitivity";
+  | "crop_sensitivity"
+  | "bare_soil";
 
-/** Fixed action catalog — IDs are never invented by the LLM. */
+/** Fixed action catalog — IDs come only from this list. */
 export type ActionId =
   | "residues"
   | "cover_crops"
@@ -216,7 +217,6 @@ export type NarrativeSectionId =
   | "irrigation";
 
 export interface Narrative {
-  generatedBy: "llm" | "template";
   sections: {
     id: NarrativeSectionId;
     text: string;
@@ -234,6 +234,29 @@ export interface PrecipMonth {
   normalYears: number;
   /** Analysis month — counted only up to analysisDate. */
   partial: boolean;
+}
+
+/** How well one crop copes with the water and soil of this plot (backend: engine/crop_fit.py). */
+export interface CropFitItem {
+  id: string;
+  name: string;
+  /** Catalog crop id — usable as cropId in /analyze. */
+  groupId: string;
+  score0to100: number;
+  fit: "good" | "medium" | "poor";
+  pros: string[];
+  cons: string[];
+  evidenceRefs: string[];
+}
+
+export interface CropFit {
+  /** Best first. */
+  ranking: CropFitItem[];
+  /** The crop chosen in the form (catalog id). */
+  selectedGroupId?: string | null;
+  confidence: Confidence;
+  basis: string[];
+  notConsidered: string;
 }
 
 export interface Report {
@@ -268,8 +291,6 @@ export interface Report {
 export interface ReportMeta {
   engineVersion: string;
   adapters: "live";
-  llmEnabled: boolean;
-  llmModel?: string;
   durationMs: number;
 }
 
@@ -283,12 +304,30 @@ export interface AnalyzeRequest {
   analysisDate: string;
 }
 
+/** POST /crop-fit — same as AnalyzeRequest, but no crop. */
+export type CropFitRequest = Omit<AnalyzeRequest, "cropId">;
+
+/** POST /crop-fit response — separate report (backend: CropFitReport in schemas/evidence.py). */
+export interface CropFitReport {
+  reportId: string;
+  status: "complete" | "partial";
+  plot: Plot;
+  /** YYYY-MM-DD — end of the 10-year window. */
+  analysisDate: string;
+  generatedAt: string;
+  /** Absent on non-agricultural land (reason in limitations). */
+  cropFit?: CropFit | null;
+  evidence: Evidence[];
+  sources: Source[];
+  limitations: string[];
+  missingData: MissingData[];
+  meta?: ReportMeta;
+}
+
 export interface HealthResponse {
   status: "ok" | "degraded";
   version?: string;
   adapters?: "live";
-  llm?: boolean;
-  model?: string;
 }
 
 export type ApiErrorKind =

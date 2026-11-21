@@ -14,13 +14,16 @@ Value keys the engine reads (all nullable):
              temp_mean_30d, precip_365d, precip_365d_median_prev,
              kbw_summer_mean_10y, kbw_summer_by_year[{year,kbw}]
     soil:    sand_pct, clay_pct, soc_pct, awc_mm, awc_depth_cm, retention_class
-    sat:     ndvi_mean, ndmi_mean, scene_date
+    sat:     ndvi_mean, ndvi_std, ndvi_median, ndmi_mean, scene_date,
+             bare_soil_pct, water_pct, weak_zone_pct, ndmi_dry_pct
+    sat_history (optional): years[{year, scene_date, ndvi_mean, ndmi_mean}], n_years,
+             ndvi_median, ndmi_median  (same 21-day window, previous years)
     drought: cdi_class (0–3), cdi_label, dekad_start
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any, Literal
 
 
@@ -32,3 +35,5 @@ class AdapterBundle:
     sat: dict[str, Any]
     drought: dict[str, Any]
     mode: Literal["live"] = "live"
+    # None = not fetched (tests / old callers) -> no source row, no missingData
+    sat_history: dict[str, Any] | None = field(default=None)

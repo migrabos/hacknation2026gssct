@@ -20,6 +20,7 @@ import asyncio
 import hashlib
 import json
 import math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, datetime, timedelta
 from typing import Any
 
@@ -36,7 +37,7 @@ from rasterio.windows import transform as window_transform
 from shapely.geometry import box, mapping, shape
 
 from .base import PartialResult, run_adapter
-from .dates import today_pl
+from .dates import shift_years, today_pl
 
 STAC_URL = "https://earth-search.aws.element84.com/v1/search"
 COLLECTION = "sentinel-2-l2a"
@@ -49,6 +50,17 @@ RECENT_DAYS = 7
 # Sentinel-2 Scene Classification Layer
 SCL_CLOUD = (0, 3, 8, 9, 10)  # no data, cloud shadow, cloud medium/high, cirrus
 SCL_UNUSABLE = SCL_CLOUD + (1, 11)  # + saturated/defective, snow – unusable for indices
+SCL_WATER = (6,)
+
+# Pixel-share thresholds (plain arithmetic on the plot's pixels, documented in docs/verify.md)
+BARE_NDVI = 0.2        # below: bare soil / stubble without green cover
+VEG_NDVI = 0.3         # above: green vegetation present
+WEAK_ZONE_DELTA = 0.15  # pixel NDVI this far below the plot median = visibly weaker part of the field
+DRY_NDMI = 0.0         # vegetated pixel with NDMI below 0 = canopy holds little water
+
+HISTORY_YEARS = 5
+HISTORY_TIMEOUT_SEC = 20.0  # per year; runs in the background (see app/adapters/live.py)
+_HISTORY_POOL = ThreadPoolExecutor(max_workers=4, thread_name_prefix="s2-history")
 
 GDAL_ENV = {
     "GDAL_DISABLE_READDIR_ON_OPEN": "EMPTY_DIR",
@@ -148,14 +160,20 @@ def _read(href: str, grid: dict[str, Any]) -> np.ndarray:
         )
 
 
-async def _process_scene(item: dict[str, Any], geom_4326, d: date) -> dict[str, Any]:
+async def _process_scene(item: dict[str, Any], geom_4326, d: date,
+                         pool: ThreadPoolExecutor | None = None) -> dict[str, Any]:
     """Returns {'ok': True, values...} or {'ok': False, 'reason': ...}."""
     assets = item["assets"]
-    grid = await asyncio.to_thread(_grid, assets["red"]["href"], geom_4326)
+    loop = asyncio.get_running_loop()
+
+    def run(fn, *args):  # blocking GDAL read in `pool` (None = default executor)
+        return loop.run_in_executor(pool, fn, *args)
+
+    grid = await run(_grid, assets["red"]["href"], geom_4326)
     plot = grid["mask"]
     n_plot = int(plot.sum())
 
-    scl = await asyncio.to_thread(_read, assets["scl"]["href"], grid)
+    scl = await run(_read, assets["scl"]["href"], grid)
     cloud = plot & np.isin(scl, SCL_CLOUD)
     unusable = plot & np.isin(scl, SCL_UNUSABLE)
     cloud_pct = 100.0 * cloud.sum() / n_plot
@@ -166,7 +184,7 @@ async def _process_scene(item: dict[str, Any], geom_4326, d: date) -> dict[str, 
                                        "zakryte chmurami/cieniem/śniegiem lub poza kaflem"}
 
     red_raw, nir_raw, swir_raw = await asyncio.gather(
-        *(asyncio.to_thread(_read, assets[k]["href"], grid) for k in ("red", "nir", "swir16"))
+        *(run(_read, assets[k]["href"], grid) for k in ("red", "nir", "swir16"))
     )
 
     def refl(raw: np.ndarray, key: str) -> np.ndarray:
@@ -192,15 +210,30 @@ async def _process_scene(item: dict[str, Any], geom_4326, d: date) -> dict[str, 
     if _offset_suspected(item, red_raw, valid):
         notes.append("Możliwy nieusunięty offset radiometryczny (baseline ≥ 04.00) – NDVI może być zaniżony.")
 
-    ndvi = (nir[valid] - red[valid]) / (nir[valid] + red[valid])
-    ndmi = (nir[valid] - swir[valid]) / (nir[valid] + swir[valid])
+    ndvi = np.clip((nir[valid] - red[valid]) / (nir[valid] + red[valid]), -1, 1)
+    ndmi = np.clip((nir[valid] - swir[valid]) / (nir[valid] + swir[valid]), -1, 1)
+    water = np.isin(scl[valid], SCL_WATER)
+    ndvi_median = float(np.median(ndvi))
+    vegetated = ndvi >= VEG_NDVI
     sd = date.fromisoformat(scene_date)
+
+    def pct(m: np.ndarray, of: int = n_valid) -> float:
+        return round(100.0 * float(m.sum()) / of, 1) if of else 0.0
+
     return {
         "notes": notes,
         "ok": True,
-        "ndvi_mean": round(float(np.clip(ndvi, -1, 1).mean()), 3),
-        "ndvi_std": round(float(np.clip(ndvi, -1, 1).std()), 3),  # in-field variability
-        "ndmi_mean": round(float(np.clip(ndmi, -1, 1).mean()), 3),
+        "ndvi_mean": round(float(ndvi.mean()), 3),
+        "ndvi_std": round(float(ndvi.std()), 3),  # in-field variability
+        "ndvi_median": round(ndvi_median, 3),
+        "ndvi_p10": round(float(np.percentile(ndvi, 10)), 3),
+        "ndvi_p90": round(float(np.percentile(ndvi, 90)), 3),
+        "ndmi_mean": round(float(ndmi.mean()), 3),
+        # Simple pixel shares (no ML): thresholds documented in docs/verify.md.
+        "bare_soil_pct": pct((ndvi < BARE_NDVI) & ~water),
+        "water_pct": pct(water),
+        "weak_zone_pct": pct(ndvi < ndvi_median - WEAK_ZONE_DELTA) if ndvi_median >= VEG_NDVI else 0.0,
+        "ndmi_dry_pct": pct(vegetated & (ndmi < DRY_NDMI), int(vegetated.sum())) if vegetated.any() else None,
         "scene_date": scene_date,
         "scene_id": item["id"],
         "days_before_analysis": (d - sd).days,
@@ -215,7 +248,8 @@ async def _process_scene(item: dict[str, Any], geom_4326, d: date) -> dict[str, 
 
 
 async def fetch_sentinel(
-    bbox: list[float], analysis_date: date | str, geometry: dict[str, Any] | None = None
+    bbox: list[float], analysis_date: date | str, geometry: dict[str, Any] | None = None,
+    *, timeout_sec: float = 20.0, pool: ThreadPoolExecutor | None = None,
 ) -> dict[str, Any]:
     """NDVI/NDMI from the newest clear Sentinel-2 scene ≤ analysis_date. Never raises."""
     try:
@@ -264,7 +298,7 @@ async def fetch_sentinel(
             if acq(item) in cloudy or (acq(item) in has_full and not covers(item)):
                 continue
             try:
-                res = await _process_scene(item, geom, d)
+                res = await _process_scene(item, geom, d, pool)
             except Exception as exc:  # one broken COG must not kill the rest
                 rejected.append(f"{item['id']}: błąd odczytu ({type(exc).__name__})")
                 continue
@@ -283,11 +317,62 @@ async def fetch_sentinel(
     return await run_adapter(
         "Sentinel-2 L2A (Copernicus, AWS Earth Search)",
         STAC_URL,
-        {"bbox": bb, "analysis_date": d.isoformat(), "geom": geom_digest, "v": 3},
+        {"bbox": bb, "analysis_date": d.isoformat(), "geom": geom_digest, "v": 4},
         fetch,
-        timeout_sec=20.0,
+        timeout_sec=timeout_sec,
         cache_ttl_sec=3600 if recent else None,
     )
+
+
+async def fetch_sentinel_history(
+    bbox: list[float], analysis_date: date | str, geometry: dict[str, Any] | None = None,
+    years: int = HISTORY_YEARS,
+) -> dict[str, Any]:
+    """Same 21-day window in each of the previous `years` years -> per-year NDVI/NDMI + medians.
+
+    Gives the engine a "what is normal for THIS plot at THIS time of year" baseline, so a
+    single NDVI/NDMI value can be read as an anomaly instead of an absolute number.
+    Each year is one `fetch_sentinel` call (cached forever: the archive no longer changes).
+    Never raises; returns the usual adapter response shape.
+    """
+    try:
+        d = _parse_date(analysis_date)
+    except Exception:
+        d = _today()
+    targets = [shift_years(d, -k) for k in range(1, years + 1)]
+    # Own small thread pool + shorter timeout: the history must never starve the current
+    # scene (it shares the default executor with every other adapter). Years that finish
+    # are cached for good, so a cut-short run fills in on the next request.
+    resps = await asyncio.gather(*(fetch_sentinel(bbox, t, geometry, timeout_sec=HISTORY_TIMEOUT_SEC,
+                                                  pool=_HISTORY_POOL) for t in targets))
+
+    per_year: list[dict[str, Any]] = []
+    errors: list[str] = []
+    for t, r in zip(targets, resps):
+        v = r.get("values") or {}
+        if v.get("ndvi_mean") is None:
+            errors.append(f"{t.year}: " + ((r.get("errors") or ["brak czystego zdjęcia"])[0]))
+            continue
+        per_year.append({"year": t.year, "scene_date": v.get("scene_date"),
+                         "ndvi_mean": v.get("ndvi_mean"), "ndmi_mean": v.get("ndmi_mean"),
+                         "bare_soil_pct": v.get("bare_soil_pct")})
+
+    def med(key: str) -> float | None:
+        vals = [y[key] for y in per_year if y.get(key) is not None]
+        return round(float(np.median(vals)), 3) if vals else None
+
+    values: dict[str, Any] = {}
+    if per_year:
+        values = {"years": per_year, "n_years": len(per_year), "years_requested": years,
+                  "ndvi_median": med("ndvi_mean"), "ndmi_median": med("ndmi_mean"),
+                  "window_days": WINDOW_DAYS}
+    if not values:
+        errors = errors or ["Brak zdjęć z poprzednich lat."]
+    srcs = [s for r in resps for s in (r.get("sources") or [])][:1]
+    from_cache = bool(resps) and all(r.get("fromCache") for r in resps)
+    coverage = "none" if not values else ("partial" if errors else "full")
+    return {"values": values, "sources": srcs, "fetchedAt": max((r.get("fetchedAt") or "" for r in resps), default=""),
+            "coverage": coverage, "errors": errors, "fromCache": from_cache}
 
 
 # --------------------------------------------------------------------------- live test

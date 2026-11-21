@@ -363,11 +363,8 @@ export default function ReportView({ report }: { report: Report }) {
 
             {report.narrative && (
               <p className="small muted">
-                Opisy słowne w raporcie{" "}
-                {report.narrative.generatedBy === "llm"
-                  ? "napisała sztuczna inteligencja wyłącznie na podstawie powyższych danych i sprawdziliśmy je automatycznie."
-                  : "powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych."}{" "}
-                Oceny i zalecenia wylicza deterministyczny silnik reguł.
+                Opisy słowne w raporcie powstały automatycznie z szablonu, wyłącznie na podstawie
+                powyższych danych. Oceny i zalecenia wylicza deterministyczny silnik reguł.
               </p>
             )}
             <p className="small muted">Identyfikator raportu: {report.reportId}</p>
@@ -430,7 +427,7 @@ function Scale<T extends string>({
   );
 }
 
-function ConfidenceBadge({ c }: { c: Confidence }) {
+export function ConfidenceBadge({ c }: { c: Confidence }) {
   return <span className={`badge badge-conf-${c}`}>{CONFIDENCE_LABEL[c]}</span>;
 }
 
@@ -471,7 +468,7 @@ function RecList({
   );
 }
 
-function EvidenceDetails({
+export function EvidenceDetails({
   refs,
   evidence,
   sources,

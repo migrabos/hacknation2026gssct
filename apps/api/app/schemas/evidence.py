@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 Confidence = Literal["low", "medium", "high"]
 RiskLevel = Literal["low", "medium", "high"]
 MoistureLevel = Literal["very_dry", "dry", "normal", "wet", "insufficient_data"]
-CauseId = Literal["precip_deficit", "low_soil_storage", "runoff", "crop_sensitivity"]
+CauseId = Literal["precip_deficit", "low_soil_storage", "runoff", "crop_sensitivity", "bare_soil"]
 ActionId = Literal[
     "residues",
     "cover_crops",
@@ -201,15 +201,12 @@ class NarrativeSection(BaseModel):
 
 
 class Narrative(BaseModel):
-    generatedBy: Literal["llm", "template"]
     sections: list[NarrativeSection] = Field(default_factory=list)
 
 
 class ReportMeta(BaseModel):
     engineVersion: str
     adapters: Literal["live"]
-    llmEnabled: bool
-    llmModel: str | None = None
     durationMs: int = 0
 
 
@@ -223,8 +220,34 @@ class PrecipMonth(BaseModel):
     partial: bool = False  # analysis month: counted only up to analysisDate
 
 
+CropFitLevel = Literal["good", "medium", "poor"]
+
+
+class CropFitItem(BaseModel):
+    """How well one crop copes with the water and soil of this plot (engine/crop_fit.py)."""
+
+    id: str
+    name: str
+    groupId: str  # catalog crop id — usable as cropId in /analyze
+    score0to100: int
+    fit: CropFitLevel
+    pros: list[str] = Field(default_factory=list)
+    cons: list[str] = Field(default_factory=list)
+    evidenceRefs: list[str] = Field(default_factory=list)
+
+
+class CropFit(BaseModel):
+    """Crops ranked by fit to this plot's water conditions — best first. Not an economic advice."""
+
+    ranking: list[CropFitItem] = Field(default_factory=list)
+    selectedGroupId: str | None = None  # the crop chosen in the form (catalog id)
+    confidence: Confidence
+    basis: list[str] = Field(default_factory=list)  # what the ranking is based on (farmer language)
+    notConsidered: str = ""
+
+
 class Report(BaseModel):
-    """Full /analyze response — deterministic Evidence + optional narrative."""
+    """Full /analyze response — deterministic Evidence + template narrative."""
 
     reportId: str
     status: Literal["complete", "partial"]
@@ -244,9 +267,26 @@ class Report(BaseModel):
     meta: ReportMeta | None = None
 
 
+class CropFitReport(BaseModel):
+    """POST /crop-fit response — a separate report: which crops cope best with the water on this plot.
+
+    Independent of the water report (POST /analyze) and of any chosen crop.
+    """
+
+    reportId: str
+    status: Literal["complete", "partial"]
+    plot: Plot
+    analysisDate: str  # YYYY-MM-DD — end of the 10-year window
+    generatedAt: str
+    cropFit: CropFit | None = None  # None = non-agricultural land (reason in limitations)
+    evidence: list[Evidence] = Field(default_factory=list)
+    sources: list[Source] = Field(default_factory=list)
+    limitations: list[str] = Field(default_factory=list)
+    missingData: list[MissingData] = Field(default_factory=list)
+    meta: ReportMeta | None = None
+
+
 class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str | None = None
     adapters: str | None = None
-    llm: bool | None = None
-    model: str | None = None

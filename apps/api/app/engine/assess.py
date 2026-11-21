@@ -33,6 +33,15 @@ HIGH_SENSITIVITY = 0.65
 SUMMER_KBW_VERY_DRY = -150.0
 SUMMER_KBW_DRY = -100.0
 SUMMER_KBW_WET = -50.0
+# Satellite (Sentinel-2). NDMI also rises with canopy density, so absolute values are only
+# trusted over dense green cover; the main signal is the anomaly vs this plot's own past years.
+SAT_VEG_NDVI = 0.3           # below: too little green to read canopy water
+SAT_DENSE_NDVI = 0.5
+NDMI_STRESS = 0.0            # dense canopy with NDMI < 0 = plants short of water
+NDMI_WELL = 0.4
+NDMI_ANOM = 0.10             # |NDMI − plot's median for the same window| ≥ 0.10 = clear anomaly
+SAT_MAX_MINUS = 10           # satellite can move the weather-based score by at most −10 / +6
+SAT_MAX_PLUS = 6
 
 
 def storage_score(f: Facts) -> float | None:
@@ -80,6 +89,28 @@ SUS_HEADLINE: dict[RiskLevel, str] = {
 
 def has_meteo(f: Facts) -> bool:
     return f.precip30 is not None or f.kbw30 is not None
+
+
+def satellite_moisture_signal(f: Facts) -> tuple[float, list[str]]:
+    """(score delta, farmer-language reasons) from canopy water seen by Sentinel-2."""
+    if f.ndmi is None or f.ndvi is None or f.ndvi < SAT_VEG_NDVI:
+        return 0.0, []
+    delta = 0.0
+    why: list[str] = []
+    if f.ndvi >= SAT_DENSE_NDVI and f.ndmi < NDMI_STRESS:
+        delta -= 6
+        why.append(f"satelita pokazuje, że rośliny mają mało wody w liściach (NDMI {fmt(f.ndmi, 2)})")
+    elif f.ndmi >= NDMI_WELL:
+        delta += 4
+    anom = f.ndmi_anomaly
+    if anom is not None:
+        if anom <= -NDMI_ANOM:
+            delta -= 6
+            why.append(f"rośliny mają mniej wody niż zwykle o tej porze roku na tej działce "
+                       f"(NDMI {fmt(f.ndmi, 2)}, zwykle {fmt(f.hist_ndmi, 2)})")
+        elif anom >= NDMI_ANOM:
+            delta += 4
+    return max(-SAT_MAX_MINUS, min(SAT_MAX_PLUS, delta)), why
 
 
 def _assess_current(f: Facts) -> CurrentBlock:
@@ -163,7 +194,13 @@ def _assess_current(f: Facts) -> CurrentBlock:
         conf -= 0.04
 
     if f.ndvi is not None:
-        refs.append("ev_ndvi")  # context only: NDVI depends on crop stage, not scored
+        refs.append("ev_ndvi")  # NDVI itself is context only: depends on crop & stage
+        delta, sat_why = satellite_moisture_signal(f)
+        if delta or sat_why:
+            refs.append("ev_ndmi")
+        score += delta
+        # Keep one satellite reason visible in the summary (weather reasons come first).
+        why = why[:2] + sat_why[:1] + why[2:] if sat_why else why
     else:
         conf -= 0.05
 

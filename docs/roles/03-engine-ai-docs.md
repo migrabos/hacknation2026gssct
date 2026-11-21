@@ -1,8 +1,8 @@
-# Person 3 — Engine + grounded AI + docs / demo package
+# Person 3 — Engine + narrative templates + docs / demo package
 
-**You own:** Evidence/Report schema, scores, causes, ranked actions, grounded LLM narrator, README, slides, demo film edit, sample reports, license table, verification notes  
+**You own:** Evidence/Report schema, scores, causes, ranked actions, Polish template narrative, README, slides, demo film edit, sample reports, license table, verification notes  
 **You do not own:** Map basemap polish, adapter HTTP details, frontend layout  
-**Pair with:** **1** on UI field names + film walkthrough; **2** on adapter values / schema lock before prompts
+**Pair with:** **1** on UI field names + film walkthrough; **2** on adapter values / schema lock
 
 **Stack:** FastAPI + Pydantic — `apps/api/engine/` + `apps/api/narrative/`; docs in `README.md` + `docs/pitch/`
 
@@ -10,7 +10,7 @@
 
 ## Goal
 
-Turn raw adapter outputs into a **deterministic**, contest-ordered report (assess → causes → retention/agrotech → irrigation last), narrate it in grounded Polish, and ship a submission package the jury can run and trust. Demo must work even if the LLM is down.
+Turn raw adapter outputs into a **deterministic**, contest-ordered report (assess → causes → retention/agrotech → irrigation last), fill short Polish template prose from Evidence, and ship a submission package the jury can run and trust.
 
 ---
 
@@ -27,11 +27,11 @@ Turn raw adapter outputs into a **deterministic**, contest-ordered report (asses
    - `low_soil_storage`
    - `runoff`
    - `crop_sensitivity`
-4. **Ranked actions** from a **fixed catalog** (IDs never invented by LLM)
+4. **Ranked actions** from a **fixed catalog**
    - Order: retencja krajobrazowa → gleba/agrotechnika → nawadnianie (optional/last)
 5. **Crop table** — kukurydza, ziemniak, warzywa, zboża, etc. + drought sensitivity weights
 6. Confidence + missing-data propagation into the report
-7. Orchestrate `POST /analyze`: Person 2 plot → adapters in parallel (Person 2: meteo/soil/terrain/hydro · Person 1: NDVI/drought) → your engine → narrator (optional)
+7. Orchestrate `POST /analyze`: Person 2 plot → adapters in parallel (Person 2: meteo/soil/terrain/hydro · Person 1: NDVI/drought) → your engine → template narrative
 8. `docs/verify.md` — how jury can spot-check numbers against sources
 
 ### Fixed action catalog examples (IDs stable)
@@ -46,33 +46,22 @@ Turn raw adapter outputs into a **deterministic**, contest-ordered report (asses
 | `ditch_retention` | retention | rowy melioracyjne as retention |
 | `irrigation_timing` | irrigation | only if deficit + crop need |
 
-### Grounded LLM + docs
+### Template narrative + docs
 
-9. **Narrator** — system prompt forbids new facts; sectioned PL text with `[evidence_id]` tags
-10. **Validator** — reject/retry if LLM invents numbers or action IDs not in Evidence
-11. **Template fallback** — Polish sentences built from Evidence without any LLM
-12. **README** with launch, architecture, sources, live vs cached + dates, AI tools, licenses, limits, verification
-13. **≤10 slide PDF** + **≤3 min demo film** + script (Person 1 drives UI)
-14. **2–3 sample report PDFs** from the real prototype
-15. **License table** (OSS + data + AI) — must allow KOWR use if you win IP transfer
+9. **Template narrative** — Polish sentences built only from Evidence fields / action catalog titles
+10. **README** with launch, architecture, sources, live vs cached + dates, AI disclosure, licenses, limits, verification
+11. **≤10 slide PDF** + **≤3 min demo film** + script (Person 1 drives UI)
+12. **2–3 sample report PDFs** from the real prototype
+13. **License table** (OSS + data) — must allow KOWR use if you win IP transfer
 
 ---
 
 ## Grounding rules (non-negotiable)
 
-```text
-System: You are a Polish agricultural advisor. You ONLY restate facts from the Evidence JSON.
-You may explain actions whose IDs appear in recommendations.
-If data is missing, say so. Never invent rainfall mm, NDVI, or measures not listed.
-Cite evidence_id in brackets after each factual sentence.
-```
-
 **Pipeline:**
 1. Engine builds Evidence (truth)
-2. LLM → `narrative.sections[]`
-3. Validator strips/rejects unknown claims
-4. UI shows structured cards first, narrative second
-5. If LLM fails → template fallback (demo still valid)
+2. Template → `narrative.sections[]` from those fields only
+3. UI shows structured cards first, narrative second
 
 ---
 
@@ -95,10 +84,10 @@ Align with KOWR appendix: water balance thinking, not rainfall-only; retention b
 | Hours | What you do |
 |-------|-------------|
 | 0–2 | Draft schema / Pydantic; team locks it; mock Evidence for 1; README outline; license list start |
-| 2–8 | Engine vs **mocked** adapters; real plot+meteo+soil by checkpoint; action catalog PL copy; prompt skeleton |
-| 8–14 | Full cause→action ranking; grounded LLM + validator; first sample reports; NDVI when 2 delivers sat |
+| 2–8 | Engine vs **mocked** adapters; real plot+meteo+soil by checkpoint; action catalog PL copy |
+| 8–14 | Full cause→action ranking; template narrative polish; first sample reports; NDVI when 2 delivers sat |
 | 14–20 | Tune thresholds; verify notes; slides; record film with 1; freeze license table |
-| 20–24 | Freeze rules; package submission; science + AI Q&A support |
+| 20–24 | Freeze rules; package submission; science Q&A support |
 
 ---
 
@@ -114,7 +103,7 @@ recommendations.irrigation?   # optional
 sources[]
 limitations[]
 missingData[]
-narrative?                     # optional, from narrator
+narrative?                     # template prose from Evidence
 ```
 
 ---
@@ -124,10 +113,8 @@ narrative?                     # optional, from narrator
 ```
 apps/api/engine/             # schema, scores, ranking
 apps/api/narrative/
-  prompt.py
-  llm_client.py
-  validate.py
-  templates_pl.py            # fallback
+  templates_pl.py
+  run.py
 README.md
 docs/verify.md
 docs/pitch/
@@ -157,9 +144,9 @@ licenses.md                  # or section inside README
 - [ ] No recommendation without plot conditions recognized
 - [ ] Irrigation never appears as the only/first advice when retention applies
 - [ ] Missing adapter data lowers confidence / fills `missingData` — no fake precision
-- [ ] Person 1 can render report from your JSON with zero LLM
-- [ ] LLM cannot invent action IDs; validator catches a bad reply in a unit test
-- [ ] Fallback narrative works with `LLM_ENABLED=false`
+- [ ] Person 1 can render report from your JSON (structured Evidence is enough)
+- [ ] Action IDs only from the fixed catalog
+- [ ] Template narrative only restates Evidence fields
 - [ ] README lists every data source + live vs cached + dates + AI disclosure
 - [ ] Slides ≤10; film ≤3:00; ≥2 sample reports; license table complete
 
@@ -167,4 +154,4 @@ licenses.md                  # or section inside README
 
 ## Pitch role
 
-Answer science / methodology / “why this recommendation?” and AI grounding (“no hallucinations”); own docs/licenses submission checklist.
+Answer science / methodology / “why this recommendation?” and grounding (“engine owns numbers”); own docs/licenses submission checklist.

@@ -8,8 +8,9 @@ export default function HomePage() {
           <div>
             <h1>Sprawdź, jak zatrzymać wodę na swojej działce</h1>
             <p className="lead">
-              Wskaż działkę na mapie albo wpisz jej numer. W kilkanaście sekund dostaniesz raport: jak sucho jest teraz,
-              dlaczego i co możesz zrobić.
+              {/* &nbsp; after one-letter words: Polish typography never leaves "W" / "i" alone at a line end */}
+              Wskaż działkę na mapie albo wpisz jej numer. W&nbsp;kilkanaście sekund dostaniesz raport: jak sucho jest
+              teraz, dlaczego i&nbsp;co możesz zrobić.
             </p>
             <Link href="/analizuj" className="btn btn-lg">
               Sprawdź działkę

@@ -25,6 +25,7 @@ SRC_LAND = "land_use"
 SRC_METEO = "open_meteo"
 SRC_SOIL = "soilgrids"
 SRC_SAT = "sentinel2"
+SRC_SAT_HIST = "sentinel2_history"
 SRC_EDO = "edo"
 SRC_ENGINE = "engine"
 SRC_CROPS = "crop_table"
@@ -84,10 +85,56 @@ class Facts:
     # satellite / drought
     ndvi: float | None = None
     ndvi_date: str | None = None
+    ndvi_median: float | None = None
+    ndmi: float | None = None
+    bare_pct: float | None = None       # % of clear plot pixels with NDVI < 0.2 (bare soil / stubble)
+    water_pct: float | None = None      # % of clear plot pixels classified as water by ESA (SCL)
+    weak_pct: float | None = None       # % of plot clearly weaker than the plot median (NDVI − 0.15)
+    ndmi_dry_pct: float | None = None   # % of green pixels with NDMI < 0
+    hist_ndvi: float | None = None      # median NDVI, same 21-day window, previous years
+    hist_ndmi: float | None = None
+    hist_n: int = 0
+    hist_years: list[int] = field(default_factory=list)
     cdi: int | None = None
     cdi_label: str | None = None
     # crop
     crop_sens: float = 0.5
+    crop_id: str | None = None
+
+    @property
+    def scene_month(self) -> int | None:
+        try:
+            return int(self.ndvi_date[5:7]) if self.ndvi_date else None
+        except ValueError:
+            return None
+
+    @property
+    def has_history(self) -> bool:
+        return self.hist_n >= MIN_HISTORY_YEARS
+
+    @property
+    def history_comparable(self) -> bool:
+        """Past years are a fair baseline only if the canopy then looked like now.
+
+        A big NDVI jump usually means a different crop (crop rotation) or a different
+        growth stage, not a wetter/drier year -> NDMI anomaly is then not used.
+        """
+        if not self.has_history or self.ndvi is None or self.hist_ndvi is None:
+            return False
+        return self.hist_ndvi >= 0.3 and abs(self.ndvi - self.hist_ndvi) <= MAX_NDVI_GAP
+
+    @property
+    def ndmi_anomaly(self) -> float | None:
+        """Current NDMI minus this plot's median for the same window in previous years."""
+        if self.ndmi is None or self.hist_ndmi is None or not self.history_comparable:
+            return None
+        return self.ndmi - self.hist_ndmi
+
+    @property
+    def ndvi_anomaly(self) -> float | None:
+        if self.ndvi is None or self.hist_ndvi is None or not self.has_history:
+            return None
+        return self.ndvi - self.hist_ndvi
 
     @property
     def precip_ratio(self) -> float | None:
@@ -111,13 +158,28 @@ class Facts:
 
 # Summer (VI–VIII) climatic water balance below this counts as a "dry summer".
 DRY_SUMMER_KBW = -150.0
+# Satellite baseline needs at least this many previous years with a clear scene.
+MIN_HISTORY_YEARS = 3
+MAX_NDVI_GAP = 0.2  # |NDVI now − typical NDVI| above this = likely another crop → no NDMI comparison
+# Pixel shares worth showing as evidence (below = noise / field edges).
+SHOW_BARE_PCT = 10.0
+SHOW_WATER_PCT = 2.0
+SHOW_WEAK_PCT = 10.0
+# Shown in limitations (not missingData) when the multi-year satellite baseline is unavailable:
+# it is an optional refinement, so its absence must not flag the whole report as incomplete.
+NO_SAT_HISTORY_NOTE = (
+    "Nie porównaliśmy zdjęcia satelitarnego z poprzednimi latami (za mało czystych zdjęć z tego okresu "
+    "lub są jeszcze pobierane) – NDVI i NDMI pokazujemy bez oceny, czy są niższe niż zwykle."
+)
 
 
-def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
+def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
+    """`crop=None` for crop-independent analyses (crop fit); crop_sens then stays neutral."""
     m = bundle.meteo.get("values") or {}
     s = bundle.soil.get("values") or {}
     sat = bundle.sat.get("values") or {}
     dr = bundle.drought.get("values") or {}
+    hist = (bundle.sat_history or {}).get("values") or {}
     terrain = bundle.plot.get("terrain") or {}
     hydro = bundle.plot.get("hydro") or {}
     lu = bundle.plot.get("landUse") or {}
@@ -152,16 +214,27 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
         land_agri=lu.get("isAgricultural"),
         ndvi=_num(sat.get("ndvi_mean")),
         ndvi_date=sat.get("scene_date"),
+        ndvi_median=_num(sat.get("ndvi_median")),
+        ndmi=_num(sat.get("ndmi_mean")),
+        bare_pct=_num(sat.get("bare_soil_pct")),
+        water_pct=_num(sat.get("water_pct")),
+        weak_pct=_num(sat.get("weak_zone_pct")),
+        ndmi_dry_pct=_num(sat.get("ndmi_dry_pct")),
+        hist_ndvi=_num(hist.get("ndvi_median")),
+        hist_ndmi=_num(hist.get("ndmi_median")),
+        hist_n=int(hist.get("n_years") or 0),
+        hist_years=[int(y["year"]) for y in hist.get("years") or [] if y.get("year")],
         cdi=int(cdi) if isinstance(cdi, (int, float)) else None,
         cdi_label=dr.get("cdi_label"),
-        crop_sens=float(crop["droughtSensitivity"]),
+        crop_sens=float(crop["droughtSensitivity"]) if crop else 0.5,
+        crop_id=crop["id"] if crop else None,
     )
 
 
 # --------------------------------------------------------------------------- evidence
 
 
-def build_evidence(f: Facts, crop: CropEntry) -> list[Evidence]:
+def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
     ev: list[Evidence] = []
 
     def add(id_: str, label: str, value: float | str | None, src: str, unit: str | None = None,
@@ -216,15 +289,37 @@ def build_evidence(f: Facts, crop: CropEntry) -> list[Evidence]:
             parts.append("nie jest to pole, łąka, pastwisko ani sad")
         add("ev_land_use", "Rodzaj użytku na działce", f.land_label, SRC_LAND, comparison="; ".join(parts))
 
+    def typical(x: float | None, check: bool = False) -> str:
+        if x is None or not f.has_history:
+            return ""
+        out = f"; zwykle o tej porze roku na tej działce: {fmt(x, 2)} (mediana {f.hist_n} lat)"
+        if check and not f.history_comparable:
+            out += " – nie porównujemy, bo wtedy pole wyglądało inaczej (inna uprawa lub faza)"
+        return out
+
+    scene = f"zdjęcie z {f.ndvi_date}" if f.ndvi_date else "zdjęcie satelitarne"
     add("ev_ndvi", "Kondycja roślin z satelity (NDVI)", f.ndvi, SRC_SAT,
-        comparison=f"zdjęcie z {f.ndvi_date}; 0 = goła gleba, >0,6 = gęsta zieleń" if f.ndvi_date else None)
+        comparison=f"{scene}; 0 = goła gleba, >0,6 = gęsta zieleń{typical(f.hist_ndvi)}")
+    add("ev_ndmi", "Woda w roślinach z satelity (NDMI)", f.ndmi, SRC_SAT,
+        comparison=f"{scene}; poniżej 0 = rośliny mają mało wody, powyżej 0,3 = dobrze nawodnione"
+                   f"{typical(f.hist_ndmi, check=True)}")
+    if f.bare_pct is not None and f.bare_pct >= SHOW_BARE_PCT:
+        add("ev_bare_soil", "Goła gleba na działce (z satelity)", round(f.bare_pct), SRC_SAT, "% działki",
+            f"{scene}; piksele 10×10 m bez zielonej okrywy (NDVI < 0,2)")
+    if f.water_pct is not None and f.water_pct >= SHOW_WATER_PCT:
+        add("ev_standing_water", "Woda stojąca na działce (z satelity)", round(f.water_pct), SRC_SAT, "% działki",
+            f"{scene}; piksele sklasyfikowane przez ESA jako woda – zastoisko lub podmokłe miejsce")
+    if f.weak_pct is not None and f.weak_pct >= SHOW_WEAK_PCT:
+        add("ev_weak_zone", "Słabsza część pola (z satelity)", round(f.weak_pct), SRC_SAT, "% działki",
+            f"{scene}; rośliny wyraźnie słabsze niż na reszcie pola (NDVI niższy o ponad 0,15)")
     if f.cdi is not None:
         add("ev_cdi", "Wskaźnik suszy w regionie (EDO)", f.cdi_label or str(f.cdi), SRC_EDO,
             comparison=f"klasa {f.cdi} w skali 0–3")
 
-    add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
-        {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
-        SRC_CROPS, comparison=crop["criticalPhasePl"])
+    if crop:
+        add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
+            {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
+            SRC_CROPS, comparison=crop["criticalPhasePl"])
     return ev
 
 
@@ -308,6 +403,23 @@ def build_sources(bundle: AdapterBundle, analysis_date: date) -> list[Source]:
     sv = bundle.sat.get("values") or {}
     out.append(_from_resp(SRC_SAT, "Zdjęcia satelitarne (kondycja roślin)", bundle.sat,
                           f"zdjęcie z {sv['scene_date']}" if sv.get("scene_date") else "21 dni przed dniem oceny"))
+    if bundle.sat_history is not None:  # None = not fetched (tests) → no row
+        hv = bundle.sat_history.get("values") or {}
+        yrs = sorted(int(y["year"]) for y in hv.get("years") or [] if y.get("year"))
+        src = _from_resp(SRC_SAT_HIST, "Zdjęcia satelitarne z poprzednich lat (ten sam okres)", bundle.sat_history,
+                         f"lata {', '.join(map(str, yrs))} – po 21 dni przed tym samym dniem" if yrs else None)
+        if 0 < len(yrs) < MIN_HISTORY_YEARS:  # too few years to call it "normal" → not used
+            src.status = "partial"
+            src.error = (f"tylko {len(yrs)} lat z czystym zdjęciem (potrzeba {MIN_HISTORY_YEARS})"
+                         + ("; " + src.error if src.error else ""))
+        elif len(yrs) >= MIN_HISTORY_YEARS and src.status == "partial":
+            # Enough years for a baseline: a cloudy year is a note, not missing data.
+            skipped = int(hv.get("years_requested") or len(yrs)) - len(yrs)
+            src.status, src.error = "ok", None
+            if skipped:
+                src.dataPeriod = (f"{src.dataPeriod} (brak czystego zdjęcia z {skipped} "
+                                  f"{'roku' if skipped == 1 else 'lat'})")
+        out.append(src)
     dv = bundle.drought.get("values") or {}
     out.append(_from_resp(SRC_EDO, "Susza w regionie (Europejskie Obserwatorium Suszy)", bundle.drought,
                           f"dekada od {dv['dekad_start']}" if dv.get("dekad_start") else None))
