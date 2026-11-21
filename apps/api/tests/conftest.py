@@ -1,4 +1,4 @@
-"""Shared fixtures — offline sample bundles, LLM off, no network."""
+"""Shared fixtures — offline sample bundles, no network."""
 
 from __future__ import annotations
 
@@ -13,8 +13,7 @@ from tests.fixtures.sample_bundle import make_sample_bundle, sample_plot
 
 
 @pytest.fixture(autouse=True)
-def _test_env(monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("LLM_ENABLED", "false")
+def _clear_settings_cache():
     get_settings.cache_clear()
     yield
     get_settings.cache_clear()

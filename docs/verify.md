@@ -1,6 +1,6 @@
 # Verification — how to spot-check Retencja numbers
 
-Jury / teammates can confirm the engine is deterministic and honest without trusting the LLM.
+Jury / teammates can confirm the engine is deterministic and honest from Evidence alone.
 
 ## 1. Same request → identical scores
 
@@ -21,20 +21,9 @@ Compare:
 
 They must match. Automated: `pytest apps/api/tests/test_engine_deterministic.py`.
 
-## 2. Toggle LLM
+## 2. Narrative is template-only
 
-```bash
-# Template path (demo-safe)
-set LLM_ENABLED=false
-uvicorn app.main:app --port 8000
-# narrative.generatedBy == "template"
-
-# Ollama path (soft-fails to template if Ollama down)
-set LLM_ENABLED=true
-set OLLAMA_MODEL=qwen2.5:3b
-```
-
-`/analyze` must stay **200** either way.
+`/analyze` always returns Polish section prose from the Evidence template (`apps/api/app/narrative/templates_pl.py`). There is no generative LLM in the product path.
 
 ## 3. Cause thresholds (engine constants)
 
@@ -78,4 +67,4 @@ cd apps/api
 pytest -q
 ```
 
-Expected: all green (health/crops/analyze, determinism, ranking, validator invent-reject, LLM-off fallback).
+Expected: all green (health/crops/analyze, determinism, ranking, template narrative).

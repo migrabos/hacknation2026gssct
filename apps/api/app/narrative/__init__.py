@@ -1,4 +1,4 @@
-"""Grounded Polish narrative — Ollama or template fallback."""
+"""Polish template narrative over Evidence."""
 
 from app.narrative.run import narrate
 

@@ -9,19 +9,13 @@ Intent: all listed components allow KOWR use if IP transfers after the contest. 
 | FastAPI | MIT | Web framework |
 | Pydantic / pydantic-settings | MIT | Schemas + config |
 | Uvicorn | BSD-3-Clause | ASGI server |
-| httpx | BSD-3-Clause | Ollama HTTP client |
+| httpx | BSD-3-Clause | Adapter HTTP client |
 | pytest / pytest-asyncio | MIT | Tests |
 | This repository code | TBD by team | Keep private until submit; grant KOWR rights if required |
 
 ## AI / models
 
-| Component | License / terms | Notes |
-|-----------|-----------------|-------|
-| Ollama runtime | MIT (project) | Local inference host |
-| `qwen2.5:3b` (Qwen2.5) | Apache-2.0 (Qwen weights terms) | Default narrator; verify card on Hugging Face / Ollama library |
-| `qwen3:8b` (fallback) | Model card terms | Already installed fallback if 3b pull fails |
-
-Narrator is optional; Evidence JSON does not depend on model weights.
+No generative LLM runtime. Polish narrative sections are deterministic templates over Evidence JSON.
 
 ## Data sources
 
@@ -40,7 +34,7 @@ Update this table when Person 2 lands real fetch dates, cache TTLs, and exact at
 
 ## Disclosure checklist
 
-- [x] AI tools named (Ollama + model id)
+- [x] AI disclosure: no generative LLM in product path
 - [x] Live adapters documented in README
 - [ ] Final license grant language for KOWR (team legal / contest rules)
 - [ ] Person 2 fills live source fetch dates in README

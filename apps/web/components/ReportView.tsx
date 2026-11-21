@@ -363,11 +363,8 @@ export default function ReportView({ report }: { report: Report }) {
 
             {report.narrative && (
               <p className="small muted">
-                Opisy słowne w raporcie{" "}
-                {report.narrative.generatedBy === "llm"
-                  ? "napisała sztuczna inteligencja wyłącznie na podstawie powyższych danych i sprawdziliśmy je automatycznie."
-                  : "powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych."}{" "}
-                Oceny i zalecenia wylicza deterministyczny silnik reguł.
+                Opisy słowne w raporcie powstały automatycznie z szablonu, wyłącznie na podstawie
+                powyższych danych. Oceny i zalecenia wylicza deterministyczny silnik reguł.
               </p>
             )}
             <p className="small muted">Identyfikator raportu: {report.reportId}</p>

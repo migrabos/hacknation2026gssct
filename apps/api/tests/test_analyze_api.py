@@ -32,7 +32,7 @@ def test_analyze_api(client) -> None:
     assert data["crop"] == {"id": "kukurydza", "name": "Kukurydza (na ziarno i kiszonkę)", "droughtSensitivity": "high"}
     assert data["moistureAssessment"]["current"]["level"] in ("very_dry", "dry", "normal", "wet")
     assert data["moistureAssessment"]["susceptibility"]["level"] in ("low", "medium", "high")
-    assert data["narrative"]["generatedBy"] == "template"
+    assert data["narrative"]["sections"][0]["id"] == "assessment"
     assert data["status"] in ("complete", "partial")
     assert data["meta"]["adapters"] == "live"
     ev_ids = {e["id"] for e in data["evidence"]}
