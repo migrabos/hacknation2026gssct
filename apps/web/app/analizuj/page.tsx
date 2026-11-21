@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
 import Map from "@/components/Map";
 import Notice from "@/components/Notice";
 import PipelineLoader from "@/components/PipelineLoader";
-import { API_MODE, ApiError, MOCK_NOT_FOUND_ID, api } from "@/lib/api";
+import { ApiError, api } from "@/lib/api";
 import { ERROR_MESSAGE, formatNumber } from "@/lib/labels";
 import { saveReport } from "@/lib/report-store";
 import type { ApiErrorKind, Crop, Plot, Region } from "@/lib/types";
@@ -103,7 +103,7 @@ export default function AnalyzePage() {
     setDateMax(isoDay(today));
     setDateMin(isoDay(min));
     loadCrops();
-    if (API_MODE === "real") api.health().catch(() => setApiDown(true));
+    api.health().catch(() => setApiDown(true));
   }, [loadCrops]);
 
   const villageName = splitVillageQuery(villageQuery).name;
@@ -495,12 +495,6 @@ export default function AnalyzePage() {
                     Pełny identyfikator jest na <strong>wypisie z rejestru gruntów</strong>, np.{" "}
                     <code>141201_1.0001.123</code>.
                   </p>
-                  {API_MODE === "mock" && (
-                    <p className="small muted" style={{ margin: "8px 0 0" }}>
-                      Tryb demonstracyjny: wpisz <code>{MOCK_NOT_FOUND_ID}</code>, żeby zobaczyć komunikat o
-                      nieznalezionej działce.
-                    </p>
-                  )}
                 </div>
               </details>
             </>

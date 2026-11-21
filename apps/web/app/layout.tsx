@@ -3,7 +3,7 @@ import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import "@/styles/print.css";
 import SiteHeader from "@/components/SiteHeader";
-import DemoStrip from "@/components/DemoStrip";
+import { THEME_BOOTSTRAP } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "Retencja — woda na Twoim polu",
@@ -13,7 +13,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pl">
+    <html lang="pl" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_BOOTSTRAP }} />
+      </head>
       <body>
         <a href="#tresc" className="visually-hidden">
           Przejdź do treści
@@ -22,7 +25,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="container">Prototyp narzędzia doradczego · HackNation 2026</div>
         </div>
         <SiteHeader />
-        <DemoStrip />
         <main id="tresc">{children}</main>
         <footer className="site-footer">
           <div className="container">

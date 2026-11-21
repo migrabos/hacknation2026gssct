@@ -1,8 +1,6 @@
-"""Deterministic mock adapters (ADAPTERS=mock) — tests and offline demos only.
+"""Deterministic AdapterBundle builder for offline unit/API tests.
 
-Emit exactly the same shapes / value keys as the live adapters (see bundle.py),
-seeded from plotId/lat/lng/date so the same input always gives the same output.
-Every source is named "DEMO – …" so mock data can never pass as real.
+Not a runtime adapter mode — tests import this directly or patch fetch_bundle.
 """
 
 from __future__ import annotations
@@ -32,7 +30,7 @@ def _resp(name: str, values: dict[str, Any], errors: list[str] | None = None) ->
     errors = errors or []
     return {
         "values": values,
-        "sources": [{"name": f"DEMO – {name}", "url": "", "fetchedAt": FETCHED_AT}],
+        "sources": [{"name": name, "url": "", "fetchedAt": FETCHED_AT}],
         "fetchedAt": FETCHED_AT,
         "coverage": "none" if not values else ("partial" if errors else "full"),
         "errors": errors if values else (errors or ["Źródło nie zwróciło żadnych danych."]),
@@ -40,7 +38,7 @@ def _resp(name: str, values: dict[str, Any], errors: list[str] | None = None) ->
     }
 
 
-def mock_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict[str, Any]:
+def sample_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict[str, Any]:
     seed = _seed(plot_id, lat, lng)
     lat_v = lat if lat is not None else 50.0 + _u(seed, 1) * 3.5
     lng_v = lng if lng is not None else 15.5 + _u(seed, 2) * 7.5
@@ -57,7 +55,7 @@ def mock_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict
     near = _u(seed, 4) > 0.5
     area = round(2 * dx * 111_320 * math.cos(math.radians(lat_v)) * 2 * dy * 111_320 / 10_000, 2)
     return {
-        "plotId": plot_id or f"DEMO_{lat_v:.4f}_{lng_v:.4f}",
+        "plotId": plot_id or f"TEST_{lat_v:.4f}_{lng_v:.4f}",
         "geometry": {"type": "Polygon", "coordinates": [ring]},
         "centroid": [round(lat_v, 6), round(lng_v, 6)],
         "areaHa": area,
@@ -65,7 +63,7 @@ def mock_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict
         "voivodeship": VOIVODESHIPS[seed % len(VOIVODESHIPS)],
         "county": None,
         "commune": None,
-        "terrain": {"slopePct": slope, "runoffRisk": runoff, "resolutionM": 1, "dem": "DEMO"},
+        "terrain": {"slopePct": slope, "runoffRisk": runoff, "resolutionM": 1, "dem": "test"},
         "hydro": {
             "nearbyWater": near,
             "distanceClass": "near" if near else "none",
@@ -73,10 +71,16 @@ def mock_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict
             "nearestDistanceM": round(40 + _u(seed, 5) * 200, 1) if near else None,
             "nearestType": "ditch" if near else None,
         },
+        "landUse": {
+            "category": "arable", "labelPl": "grunt orny (pole uprawne)", "isAgricultural": True,
+            "source": "egib", "uses": ["grunt orny (pole uprawne)"], "codes": ["RIVa"],
+            "soilClasses": ["IVa"], "egib": {"dataDate": "DEMO"}, "notes": [],
+        },
         "sources": [
-            {"name": "DEMO – ULDK GUGiK", "url": "", "fetchedAt": FETCHED_AT},
-            {"name": "DEMO – GUGiK NMT (numeryczny model terenu)", "url": "", "fetchedAt": FETCHED_AT},
-            {"name": "DEMO – OpenStreetMap (Overpass API)", "url": "", "fetchedAt": FETCHED_AT},
+            {"name": "ULDK GUGiK", "url": "", "fetchedAt": FETCHED_AT},
+            {"name": "GUGiK NMT (numeryczny model terenu)", "url": "", "fetchedAt": FETCHED_AT},
+            {"name": "OpenStreetMap (Overpass API)", "url": "", "fetchedAt": FETCHED_AT},
+            {"name": "KIEG GUGiK – EGiB użytki gruntowe", "url": "", "fetchedAt": FETCHED_AT},
         ],
         "missingData": [],
         "limitations": [],
@@ -84,7 +88,7 @@ def mock_plot(plot_id: str | None, lat: float | None, lng: float | None) -> dict
     }
 
 
-def mock_meteo(key: Any, d: date) -> dict[str, Any]:
+def sample_meteo(key: Any, d: date) -> dict[str, Any]:
     seed = _seed("meteo", key, d.isoformat())
     normal = round(45 + _u(seed, 1) * 35, 1)
     precip = round(normal * (0.3 + _u(seed, 2) * 1.0), 1)
@@ -107,10 +111,32 @@ def mock_meteo(key: Any, d: date) -> dict[str, Any]:
         "precip_365d_median_prev": p365_norm,
         "kbw_summer_by_year": summers,
         "kbw_summer_mean_10y": round(sum(s["kbw"] for s in summers) / len(summers), 1),
+        "precip_monthly": _sample_monthly(seed, d),
     })
 
 
-def mock_soil(key: Any) -> dict[str, Any]:
+# Typical Polish monthly precipitation (mm), Jan..Dec — shapes the sample rain histogram.
+_PL_MONTHLY_MM = [35, 30, 35, 35, 55, 65, 80, 70, 50, 40, 40, 40]
+
+
+def _sample_monthly(seed: int, d: date) -> list[dict[str, Any]]:
+    out = []
+    for back in range(11, -1, -1):
+        m = d.year * 12 + d.month - 1 - back
+        y, mo = m // 12, m % 12 + 1
+        normal = round(_PL_MONTHLY_MM[mo - 1] * (0.85 + _u(seed, 40 + back) * 0.3), 1)
+        frac = d.day / 31 if back == 0 else 1.0
+        out.append({
+            "month": f"{y:04d}-{mo:02d}",
+            "precip": round(normal * frac * (0.3 + _u(seed, 60 + back) * 1.1), 1),
+            "normal": round(normal * frac, 1),
+            "years": 10,
+            "partial": back == 0,
+        })
+    return out
+
+
+def sample_soil(key: Any) -> dict[str, Any]:
     seed = _seed("soil", key)
     sand = round(20 + _u(seed, 1) * 60, 1)
     clay = round(min(5 + _u(seed, 2) * 25, 95 - sand), 1)
@@ -123,11 +149,11 @@ def mock_soil(key: Any) -> dict[str, Any]:
     })
 
 
-def mock_sat(key: Any, d: date) -> dict[str, Any]:
+def sample_sat(key: Any, d: date) -> dict[str, Any]:
     seed = _seed("sat", key, d.isoformat())
     if _u(seed, 1) < 0.3:
         return _resp("Sentinel-2 L2A (Copernicus, AWS Earth Search)", {},
-                     ["Brak czystego zdjęcia działki w ciągu 21 dni (DEMO)."])
+                     ["Brak czystego zdjęcia działki w ciągu 21 dni."])
     return _resp("Sentinel-2 L2A (Copernicus, AWS Earth Search)", {
         "ndvi_mean": round(0.2 + _u(seed, 2) * 0.6, 3),
         "ndmi_mean": round(-0.1 + _u(seed, 3) * 0.4, 3),
@@ -135,7 +161,7 @@ def mock_sat(key: Any, d: date) -> dict[str, Any]:
     })
 
 
-def mock_drought(key: Any, d: date) -> dict[str, Any]:
+def sample_drought(key: Any, d: date) -> dict[str, Any]:
     seed = _seed("drought", key, d.month)
     cls = seed % 4
     labels = ["brak sygnału suszy wg EDO", "Obserwacja (Watch)", "Ostrzeżenie (Warning)", "Alarm (Alert)"]
@@ -144,20 +170,20 @@ def mock_drought(key: Any, d: date) -> dict[str, Any]:
     })
 
 
-async def fetch_all_mocks(
+def make_sample_bundle(
     *,
     plot_id: str | None,
     lat: float | None,
     lng: float | None,
     analysis_date: date,
 ) -> AdapterBundle:
-    plot = mock_plot(plot_id, lat, lng)
+    plot = sample_plot(plot_id, lat, lng)
     key = plot["plotId"]
     return AdapterBundle(
         plot=plot,
-        meteo=mock_meteo(key, analysis_date),
-        soil=mock_soil(key),
-        sat=mock_sat(key, analysis_date),
-        drought=mock_drought(key, analysis_date),
-        mode="mock",
+        meteo=sample_meteo(key, analysis_date),
+        soil=sample_soil(key),
+        sat=sample_sat(key, analysis_date),
+        drought=sample_drought(key, analysis_date),
+        mode="live",
     )

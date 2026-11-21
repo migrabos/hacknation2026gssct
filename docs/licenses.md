@@ -23,9 +23,9 @@ Intent: all listed components allow KOWR use if IP transfers after the contest. 
 
 Narrator is optional; Evidence JSON does not depend on model weights.
 
-## Data sources (Person 2 — placeholders)
+## Data sources
 
-Live adapters not wired yet; mocks cite these intended sources:
+Live adapters fetch these public sources:
 
 | Source | Use | License / access (verify) |
 |--------|-----|---------------------------|
@@ -41,6 +41,6 @@ Update this table when Person 2 lands real fetch dates, cache TTLs, and exact at
 ## Disclosure checklist
 
 - [x] AI tools named (Ollama + model id)
-- [x] Mock vs live adapters documented in README
+- [x] Live adapters documented in README
 - [ ] Final license grant language for KOWR (team legal / contest rules)
 - [ ] Person 2 fills live source fetch dates in README

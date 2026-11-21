@@ -43,7 +43,7 @@ def health() -> HealthResponse:
     return HealthResponse(
         status="ok",
         version=s.engine_version,
-        adapters=s.adapters,
+        adapters="live",
         llm=s.llm_enabled,
         model=s.ollama_model if s.llm_enabled else None,
     )

@@ -3,8 +3,8 @@
  *
  * Mirrors the "Evidence / report shape" in AGENTS.md (owned by Person 3).
  * Backend twin: apps/api/app/schemas/evidence.py (Pydantic, 1:1 field names).
- * Change BOTH files + mocks/*.json together — apps/api/tests/test_contract_web.py
- * validates mocks/*.json against the backend schema and fails on drift.
+ * Change BOTH files together — apps/api/tests/test_contract_web.py validates a
+ * sample report fixture against the backend schema and fails on drift.
  */
 
 // ---------- Geometry (WGS84, GeoJSON order: [lng, lat]) ----------
@@ -74,6 +74,20 @@ export interface RegionSearch {
   total: number;
 }
 
+export interface RetentionSpot {
+  lat?: number | null;
+  lng?: number | null;
+  elevationM?: number | null;
+  /** highest − lowest sampled point, m */
+  elevationDropM?: number | null;
+  pointsSampled?: number | null;
+  /** distance between sample points ≈ accuracy of the location, m */
+  gridSpacingM?: number | null;
+  nearEdge?: boolean | null;
+  confidence: Confidence;
+  reason: string;
+}
+
 export interface Plot {
   plotId: string;
   geometry: PlotGeometry;
@@ -87,10 +101,26 @@ export interface Plot {
     slopePct?: number;
     runoffRisk?: RiskLevel;
   };
+  /** Lowest sampled NMT point = suggested pond / micro-retention spot. lat/lng null = none suggested. */
+  retentionSpot?: RetentionSpot;
   hydro?: {
     nearbyWater?: boolean;
     distanceClass?: string;
     missing?: boolean;
+  };
+  /** Field / meadow / pasture / forest… — ONLY from the EGiB land register; no data = category/labelPl absent. */
+  landUse?: {
+    category?:
+      | "arable" | "meadow" | "pasture" | "orchard" | "farmyard" | "forest"
+      | "woodland" | "built" | "transport" | "water" | "wetland" | "bare" | "other" | "mixed";
+    labelPl?: string;
+    isAgricultural?: boolean;
+    source?: "egib";
+    uses?: string[];
+    /** Raw EGiB contour codes, e.g. ["RIIIa", "Br/PsIV"] */
+    codes?: string[];
+    soilClasses?: string[];
+    notes?: string[];
   };
   sources?: Source[];
   fetchedAt?: string;
@@ -194,6 +224,18 @@ export interface Narrative {
   }[];
 }
 
+/** One histogram bar: rain in a calendar month vs the multi-year mean (Open-Meteo). */
+export interface PrecipMonth {
+  /** YYYY-MM */
+  month: string;
+  precipMm?: number | null;
+  /** Mean of the same day-range in previous years (up to 10). */
+  normalMm?: number | null;
+  normalYears: number;
+  /** Analysis month — counted only up to analysisDate. */
+  partial: boolean;
+}
+
 export interface Report {
   reportId: string;
   status: "complete" | "partial";
@@ -214,17 +256,18 @@ export interface Report {
     irrigationNote?: string;
   };
   evidence: Evidence[];
+  /** Last 12 months, oldest first. Empty when meteo is unavailable. */
+  precipMonthly?: PrecipMonth[];
   sources: Source[];
   limitations: string[];
   missingData: MissingData[];
   narrative?: Narrative;
-  /** Backend run info — `adapters: "mock"` means DEMO data. */
   meta?: ReportMeta;
 }
 
 export interface ReportMeta {
   engineVersion: string;
-  adapters: "live" | "mock";
+  adapters: "live";
   llmEnabled: boolean;
   llmModel?: string;
   durationMs: number;
@@ -243,8 +286,7 @@ export interface AnalyzeRequest {
 export interface HealthResponse {
   status: "ok" | "degraded";
   version?: string;
-  /** "mock" = backend serves DEMO data */
-  adapters?: "live" | "mock";
+  adapters?: "live";
   llm?: boolean;
   model?: string;
 }
