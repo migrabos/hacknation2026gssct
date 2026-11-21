@@ -67,6 +67,12 @@ HYDRO_TIMEOUT_SEC = 15.0  # whole hydro step (mirrors raced in parallel)
 OVERPASS_COOLDOWN_SEC = 60.0  # after a failure, deprioritise the endpoint for a while
 WATERWAY_TYPES = ("river", "stream", "ditch", "drain", "canal")
 
+# Per-step limits so one slow service can't eat the whole /analyze budget (30 s):
+# ULDK runs before everything else; NMT and its Open-Meteo fallback run one after another.
+ULDK_TIMEOUT_SEC = 12.0
+NMT_TIMEOUT_SEC = 8.0
+OM_ELEVATION_TIMEOUT_SEC = 8.0
+
 DAY = 86_400
 ULDK_CACHE_TTL = 30 * DAY  # cadastre changes rarely
 HYDRO_CACHE_TTL = 7 * DAY
@@ -208,7 +214,9 @@ async def _fetch_uldk(
             not_found.append(exc)  # surfaced after run_adapter (which never raises)
             raise
 
-    res = await run_adapter("ULDK GUGiK", url, cache_key, fetch, cache_ttl_sec=ULDK_CACHE_TTL)
+    res = await run_adapter(
+        "ULDK GUGiK", url, cache_key, fetch, timeout_sec=ULDK_TIMEOUT_SEC, cache_ttl_sec=ULDK_CACHE_TTL
+    )
     if not_found:
         raise not_found[0]
     if res["coverage"] != "full":
@@ -304,7 +312,9 @@ async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeome
             raise ValueError("NMT zwrócił inną liczbę punktów niż zapytano.")
         return {**_slope_from_heights(pts, heights), "resolutionM": 1, "dem": "GUGiK NMT"}
 
-    res = await run_adapter("GUGiK NMT (numeryczny model terenu)", nmt_url, key, fetch_nmt)
+    res = await run_adapter(
+        "GUGiK NMT (numeryczny model terenu)", nmt_url, key, fetch_nmt, timeout_sec=NMT_TIMEOUT_SEC
+    )
     errors = list(res["errors"])
     if res["coverage"] == "full":
         return {"values": res["values"], "sources": res["sources"], "errors": errors}
@@ -323,7 +333,9 @@ async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeome
         heights = [float(h) if h is not None else math.nan for h in r.json()["elevation"]]
         return {**_slope_from_heights(pts, heights), "resolutionM": 90, "dem": "Copernicus GLO-90"}
 
-    res = await run_adapter("Open-Meteo Elevation API", om_url, key, fetch_om)
+    res = await run_adapter(
+        "Open-Meteo Elevation API", om_url, key, fetch_om, timeout_sec=OM_ELEVATION_TIMEOUT_SEC
+    )
     errors += res["errors"]
     if res["coverage"] == "full":
         return {"values": res["values"], "sources": res["sources"], "errors": errors}

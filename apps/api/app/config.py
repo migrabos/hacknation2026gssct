@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     # Whole /analyze target. The LLM only gets whatever time is left after the
     # data + engine steps; when too little is left, the template narrative is used.
     analyze_budget_s: float = 30.0
+    data_budget_s: float = 25.0      # all data adapters together (plot + terrain + meteo + …)
     llm_min_time_s: float = 4.0      # less than this left → skip LLM, use template
     llm_retry_min_time_s: float = 10.0  # stricter retry only if at least this much is left
 
