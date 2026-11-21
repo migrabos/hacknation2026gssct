@@ -1,7 +1,7 @@
 """Fixed action IDs + Polish copy + eligibility metadata.
 
 Order in report: retention → agrotech → irrigation (last, optional).
-IDs must match `ActionId` in apps/web/lib/types.ts. The LLM never adds new ones.
+IDs must match `ActionId` in apps/web/lib/types.ts. Do not invent new ones outside this catalog.
 """
 
 from __future__ import annotations

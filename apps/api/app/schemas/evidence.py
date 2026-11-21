@@ -201,15 +201,12 @@ class NarrativeSection(BaseModel):
 
 
 class Narrative(BaseModel):
-    generatedBy: Literal["llm", "template"]
     sections: list[NarrativeSection] = Field(default_factory=list)
 
 
 class ReportMeta(BaseModel):
     engineVersion: str
     adapters: Literal["live"]
-    llmEnabled: bool
-    llmModel: str | None = None
     durationMs: int = 0
 
 
@@ -224,7 +221,7 @@ class PrecipMonth(BaseModel):
 
 
 class Report(BaseModel):
-    """Full /analyze response — deterministic Evidence + optional narrative."""
+    """Full /analyze response — deterministic Evidence + template narrative."""
 
     reportId: str
     status: Literal["complete", "partial"]
@@ -248,5 +245,3 @@ class HealthResponse(BaseModel):
     status: Literal["ok", "degraded"]
     version: str | None = None
     adapters: str | None = None
-    llm: bool | None = None
-    model: str | None = None
