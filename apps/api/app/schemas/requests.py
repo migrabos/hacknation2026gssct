@@ -9,8 +9,8 @@ from pydantic import BaseModel, Field, model_validator
 from adapters.dates import shift_years, today_pl
 
 
-class AnalyzeRequest(BaseModel):
-    """POST /analyze body.
+class PlotDateRequest(BaseModel):
+    """Plot + date part shared by POST /analyze and POST /crop-fit.
 
     Give plotId (preferred) or lat+lng. If both are sent, plotId wins.
     analysisDate must be within the last 10 years.
@@ -19,13 +19,10 @@ class AnalyzeRequest(BaseModel):
     plotId: str | None = None
     lat: float | None = Field(default=None, ge=-90, le=90)
     lng: float | None = Field(default=None, ge=-180, le=180)
-    cropId: str = Field(
-        description="Crop id from GET /crops",
-    )
     analysisDate: date
 
     @model_validator(mode="after")
-    def validate_location_and_date(self) -> AnalyzeRequest:
+    def validate_location_and_date(self) -> PlotDateRequest:
         has_plot = bool(self.plotId and self.plotId.strip())
         has_coords = self.lat is not None and self.lng is not None
         if not has_plot and not has_coords:
@@ -41,3 +38,13 @@ class AnalyzeRequest(BaseModel):
         if self.analysisDate < earliest:
             raise ValueError("analysisDate musi mieścić się w ostatnich 10 latach.")
         return self
+
+
+class AnalyzeRequest(PlotDateRequest):
+    """POST /analyze body — the water report for one crop."""
+
+    cropId: str = Field(description="Crop id from GET /crops")
+
+
+class CropFitRequest(PlotDateRequest):
+    """POST /crop-fit body — which crops cope best with the water on this plot (no crop needed)."""

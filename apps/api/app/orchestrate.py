@@ -8,10 +8,11 @@ from adapters.base import adapter_deadline
 from app.adapters import fetch_bundle
 from app.config import get_settings
 from app.crops.catalog import get_crop
+from app.engine.crop_fit_report import run_crop_fit_report
 from app.engine.run import run_engine
 from app.narrative.run import narrate
-from app.schemas.evidence import Report
-from app.schemas.requests import AnalyzeRequest
+from app.schemas.evidence import CropFitReport, Report
+from app.schemas.requests import AnalyzeRequest, CropFitRequest
 
 
 async def analyze(req: AnalyzeRequest) -> Report:
@@ -37,3 +38,20 @@ async def analyze(req: AnalyzeRequest) -> Report:
     if report.meta:
         report.meta.durationMs = int((time.perf_counter() - t0) * 1000)
     return report
+
+
+async def crop_fit(req: CropFitRequest) -> CropFitReport:
+    """POST /crop-fit: same data fetch + time budget as /analyze, no crop needed."""
+    t0 = time.perf_counter()
+    with adapter_deadline(get_settings().data_budget_s):
+        bundle = await fetch_bundle(
+            plot_id=req.plotId,
+            lat=req.lat,
+            lng=req.lng,
+            analysis_date=req.analysisDate,
+        )
+    return run_crop_fit_report(
+        bundle=bundle,
+        analysis_date=req.analysisDate,
+        duration_ms=int((time.perf_counter() - t0) * 1000),
+    )
