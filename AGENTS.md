@@ -60,7 +60,8 @@ Farmer browser
   → Next.js (PL UI)
     → FastAPI
       → Plot resolver (ULDK)          [Person 2]
-      → Adapters (meteo/soil/sat/…)   [Person 2]
+      → Adapters: meteo/soil/DEM/hydro [Person 2]
+      → Adapters: NDVI/drought        [Person 1, on Person 2's base.py]
       → Deterministic engine          [Person 3]  → Evidence JSON (truth)
       → Grounded LLM narrator         [Person 3]  → Polish narrative (optional)
     → Report UI + print/PDF           [Person 1]
@@ -76,7 +77,7 @@ Farmer browser
 /
   AGENTS.md                 # this file — AI big picture
   apps/web/                 # Person 1 — Next.js
-  apps/api/                 # Person 2 + 3 — FastAPI
+  apps/api/                 # Person 2 + 3 (+ 1 for sat/drought adapters) — FastAPI
   docker-compose.yml
   README.md                 # Person 3 owns
   docs/
@@ -91,15 +92,15 @@ Farmer browser
 
 | Person | Role | Playbook |
 |--------|------|----------|
-| **1** | Frontend + UX | [docs/roles/01-frontend-ux.md](docs/roles/01-frontend-ux.md) |
-| **2** | GIS + Data adapters | [docs/roles/02-gis-data.md](docs/roles/02-gis-data.md) |
+| **1** | Frontend + UX + sat/drought adapters | [docs/roles/01-frontend-ux.md](docs/roles/01-frontend-ux.md) |
+| **2** | GIS + core data adapters (plot, meteo, soil, terrain, hydro) | [docs/roles/02-gis-data.md](docs/roles/02-gis-data.md) |
 | **3** | Engine + grounded AI + docs/demo | [docs/roles/03-engine-ai-docs.md](docs/roles/03-engine-ai-docs.md) |
 
 **Pairing (soft deps, not blockers):**
 
 - **1 ↔ 3** — lock report / Evidence field names early; film walkthrough  
 - **2 ↔ 3** — adapter → engine contract; schema before LLM prompts  
-- **1 ↔ 2** — map GeoJSON / plot pick  
+- **1 ↔ 2** — map GeoJSON / plot pick; `adapters/base.py` contract (2 ships it by hour 2, 1 builds NDVI + drought on it)  
 
 Roles run **in parallel** after hour 2. Mock what you depend on; do not wait.
 
@@ -147,10 +148,12 @@ narrative?                  # filled by Person 3
 | Hydro nearby | ISOK / Wody Polskie (best-effort) | 2 |
 | Meteo (~10y) | Open-Meteo | 2 |
 | Soil | SoilGrids | 2 |
-| Satellite NDVI | Sentinel-2 via Earth Search STAC | 2 |
-| Drought context | IUNG / EDO (best-effort) | 2 |
+| Satellite NDVI | Sentinel-2 via Earth Search STAC | 1 |
+| Drought context | IUNG / EDO (best-effort) | 1 |
 
-Priority if time runs out (Person 2): **Plot resolve → Meteo → Soil → Satellite → Drought → Hydro**. Fail soft; never fake precision.
+Priority if time runs out — Person 2: **Plot resolve → Meteo → Soil → Slope → Hydro**; Person 1: **UI → Satellite → Drought**. Fail soft; never fake precision.
+
+No forecasting / ML anywhere in the data layer: adapters fetch data and compute simple stats (sums, averages, dry spells, slope). Interpretation belongs to the engine (Person 3).
 
 ---
 

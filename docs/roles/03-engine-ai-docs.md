@@ -31,7 +31,7 @@ Turn raw adapter outputs into a **deterministic**, contest-ordered report (asses
    - Order: retencja krajobrazowa → gleba/agrotechnika → nawadnianie (optional/last)
 5. **Crop table** — kukurydza, ziemniak, warzywa, zboża, etc. + drought sensitivity weights
 6. Confidence + missing-data propagation into the report
-7. Orchestrate `POST /analyze`: Person 2 plot → Person 2 adapters (parallel) → your engine → narrator (optional)
+7. Orchestrate `POST /analyze`: Person 2 plot → adapters in parallel (Person 2: meteo/soil/terrain/hydro · Person 1: NDVI/drought) → your engine → narrator (optional)
 8. `docs/verify.md` — how jury can spot-check numbers against sources
 
 ### Fixed action catalog examples (IDs stable)
