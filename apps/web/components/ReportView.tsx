@@ -34,7 +34,7 @@ const SECTIONS = [
   { id: "przyczyny", title: "Możliwe przyczyny" },
   { id: "retencja", title: "Zatrzymaj wodę na polu" },
   { id: "agrotechnika", title: "Zmiany w uprawie gleby" },
-  { id: "nawadnianie", title: "Nawadnianie (opcjonalnie)" },
+  { id: "nawadnianie", title: "Nawadnianie" },
 ] as const;
 
 export default function ReportView({ report }: { report: Report }) {
@@ -56,37 +56,11 @@ export default function ReportView({ report }: { report: Report }) {
   const { plot, moistureAssessment: ma, recommendations: rec } = report;
   const failedSources = report.sources.filter((s) => s.status !== "ok");
   const irrigation = rec.irrigation ?? [];
+  const landUse = plot.landUse;
+  const landUseWarnings = report.limitations.filter((l) => l.startsWith("UWAGA:"));
   const place = [plot.commune, plot.county && `pow. ${plot.county}`, plot.voivodeship && `woj. ${plot.voivodeship}`]
     .filter(Boolean)
     .join(", ");
-
-  // #region agent log
-  useEffect(() => {
-    const failedOrPartial = report.sources.filter((s) => s.status !== "ok").map((s) => s.id);
-    fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-      body: JSON.stringify({
-        sessionId: "68e619",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "ReportView.tsx:mount",
-        message: "report sources + plot for UI",
-        data: {
-          reportStatus: report.status,
-          meta: report.meta ?? null,
-          sources: report.sources.map((s) => ({ id: s.id, status: s.status, mode: s.mode, error: s.error ?? null })),
-          failedOrPartial,
-          plotId: plot.plotId,
-          centroid: plot.centroid,
-          bbox: plot.bbox,
-          geomType: plot.geometry?.type,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [report]);
-  // #endregion
 
   return (
     <article className="report container">
@@ -127,11 +101,40 @@ export default function ReportView({ report }: { report: Report }) {
         </Notice>
       )}
 
+      {landUseWarnings.length > 0 && (
+        <Notice tone="warn" title="Sprawdź rodzaj użytku" role="status">
+          {landUseWarnings.map((w, i) => (
+            <p key={i}>{w.replace(/^UWAGA:\s*/, "")}</p>
+          ))}
+        </Notice>
+      )}
+
       <dl className="meta-grid">
         <div>
           <dt>Uprawa</dt>
           <dd>{report.crop.name}</dd>
         </div>
+        {landUse && (
+          <div>
+            <dt>Rodzaj użytku</dt>
+            {landUse.labelPl ? (
+              <dd>
+                {landUse.labelPl.charAt(0).toUpperCase() + landUse.labelPl.slice(1)}
+                {landUse.soilClasses && landUse.soilClasses.length > 0 && <>, klasa gleby {landUse.soilClasses.join(", ")}</>}
+                <span className="muted small" style={{ display: "block" }}>
+                  z ewidencji gruntów (EGiB){landUse.codes && landUse.codes.length > 0 && <>: {landUse.codes.join(", ")}</>}
+                </span>
+              </dd>
+            ) : (
+              <dd>
+                Brak danych
+                <span className="muted small" style={{ display: "block" }}>
+                  {landUse.notes?.[0] ?? "ewidencja gruntów nie podaje użytku dla tej działki"}
+                </span>
+              </dd>
+            )}
+          </div>
+        )}
         <div>
           <dt>Ocena na dzień</dt>
           <dd>{formatDate(report.analysisDate)}</dd>
@@ -245,7 +248,7 @@ export default function ReportView({ report }: { report: Report }) {
       <Section
         n={5}
         id="nawadnianie"
-        title="Nawadnianie (opcjonalnie)"
+        title="Nawadnianie"
         lead="Nawadnianie to ostateczność — najpierw warto zatrzymać wodę, która już spada na pole."
       >
         {irrigation.length > 0 ? (

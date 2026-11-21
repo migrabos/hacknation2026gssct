@@ -24,6 +24,27 @@ ENGINE_LIMITATIONS = [
 ]
 
 
+_GRASS_LAND = {"meadow", "pasture"}
+GRASS_CROP = "uzytki_zielone"
+
+
+def _crop_land_use_mismatch(crop_id: str, crop_name: str, land_use: dict) -> str | None:
+    """Warn when the chosen crop does not fit the plot's land use (only for agricultural land;
+    non-agricultural plots already get a stronger warning from the plot resolver)."""
+    cat, label = land_use.get("category"), land_use.get("labelPl")
+    if not cat or not land_use.get("isAgricultural") or cat == "mixed":
+        return None
+    src = "w ewidencji gruntów (EGiB)"
+    if crop_id == GRASS_CROP and cat in ("arable", "orchard"):
+        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Sprawdź, czy wybór uprawy jest "
+                "właściwy – zalecenia zależą od uprawy.")
+    if crop_id != GRASS_CROP and cat in _GRASS_LAND:
+        return (f"UWAGA: wybrano uprawę „{crop_name}”, a działka {src} to {label}. Jeśli to trwały użytek "
+                "zielony, wybierz „Łąka / pastwisko” – zaorywanie trwałych użytków zielonych może być "
+                "ograniczone przepisami (ochrona TUZ w ramach WPR).")
+    return None
+
+
 def _report_id(plot_id: str, crop_id: str, analysis_date: date) -> str:
     raw = f"{plot_id}|{crop_id}|{analysis_date.isoformat()}"
     return f"r-{analysis_date.isoformat()}-{hashlib.sha256(raw.encode()).hexdigest()[:10]}"
@@ -72,6 +93,9 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
+    mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})
+    if mismatch:
+        limitations.insert(0, mismatch)
 
     settings = get_settings()
     return Report(

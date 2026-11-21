@@ -92,6 +92,20 @@ export interface Plot {
     distanceClass?: string;
     missing?: boolean;
   };
+  /** Field / meadow / pasture / forest… — ONLY from the EGiB land register; no data = category/labelPl absent. */
+  landUse?: {
+    category?:
+      | "arable" | "meadow" | "pasture" | "orchard" | "farmyard" | "forest"
+      | "woodland" | "built" | "transport" | "water" | "wetland" | "bare" | "other" | "mixed";
+    labelPl?: string;
+    isAgricultural?: boolean;
+    source?: "egib";
+    uses?: string[];
+    /** Raw EGiB contour codes, e.g. ["RIIIa", "Br/PsIV"] */
+    codes?: string[];
+    soilClasses?: string[];
+    notes?: string[];
+  };
   sources?: Source[];
   fetchedAt?: string;
 }

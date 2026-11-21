@@ -40,6 +40,7 @@ from shapely.geometry import LineString, Point, Polygon, mapping, shape
 from shapely.geometry.base import BaseGeometry
 
 from adapters.base import PartialResult, run_adapter, utc_now_iso
+from adapters.land_use import classify_land_use
 
 # --------------------------------------------------------------------------- config
 
@@ -66,6 +67,12 @@ HYDRO_RADIUS_M = 500.0
 HYDRO_TIMEOUT_SEC = 15.0  # whole hydro step (mirrors raced in parallel)
 OVERPASS_COOLDOWN_SEC = 60.0  # after a failure, deprioritise the endpoint for a while
 WATERWAY_TYPES = ("river", "stream", "ditch", "drain", "canal")
+
+# Per-step limits so one slow service can't eat the whole /analyze budget (30 s):
+# ULDK runs before everything else; NMT and its Open-Meteo fallback run one after another.
+ULDK_TIMEOUT_SEC = 12.0
+NMT_TIMEOUT_SEC = 8.0
+OM_ELEVATION_TIMEOUT_SEC = 8.0
 
 DAY = 86_400
 ULDK_CACHE_TTL = 30 * DAY  # cadastre changes rarely
@@ -208,7 +215,9 @@ async def _fetch_uldk(
             not_found.append(exc)  # surfaced after run_adapter (which never raises)
             raise
 
-    res = await run_adapter("ULDK GUGiK", url, cache_key, fetch, cache_ttl_sec=ULDK_CACHE_TTL)
+    res = await run_adapter(
+        "ULDK GUGiK", url, cache_key, fetch, timeout_sec=ULDK_TIMEOUT_SEC, cache_ttl_sec=ULDK_CACHE_TTL
+    )
     if not_found:
         raise not_found[0]
     if res["coverage"] != "full":
@@ -304,7 +313,9 @@ async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeome
             raise ValueError("NMT zwrócił inną liczbę punktów niż zapytano.")
         return {**_slope_from_heights(pts, heights), "resolutionM": 1, "dem": "GUGiK NMT"}
 
-    res = await run_adapter("GUGiK NMT (numeryczny model terenu)", nmt_url, key, fetch_nmt)
+    res = await run_adapter(
+        "GUGiK NMT (numeryczny model terenu)", nmt_url, key, fetch_nmt, timeout_sec=NMT_TIMEOUT_SEC
+    )
     errors = list(res["errors"])
     if res["coverage"] == "full":
         return {"values": res["values"], "sources": res["sources"], "errors": errors}
@@ -323,7 +334,9 @@ async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeome
         heights = [float(h) if h is not None else math.nan for h in r.json()["elevation"]]
         return {**_slope_from_heights(pts, heights), "resolutionM": 90, "dem": "Copernicus GLO-90"}
 
-    res = await run_adapter("Open-Meteo Elevation API", om_url, key, fetch_om)
+    res = await run_adapter(
+        "Open-Meteo Elevation API", om_url, key, fetch_om, timeout_sec=OM_ELEVATION_TIMEOUT_SEC
+    )
     errors += res["errors"]
     if res["coverage"] == "full":
         return {"values": res["values"], "sources": res["sources"], "errors": errors}
@@ -577,6 +590,8 @@ LIMITATIONS = [
     "Granice działki pochodzą z ULDK GUGiK (EGiB) – stan na dzień pobrania, bez weryfikacji w terenie.",
     "Spadek terenu to różnica wysokości między najwyższym i najniższym z kilkunastu punktów "
     "próbkowanych w obrębie działki – wskaźnik orientacyjny, nie pełna analiza spływu.",
+    "Rodzaj użytku (pole, łąka, pastwisko, las…) pochodzi wyłącznie z ewidencji gruntów EGiB (usługa KIEG "
+    "GUGiK). Gdy starostwo nie publikuje użytków, raport podaje „brak danych” – niczego nie zgadujemy.",
     "Cieki, rowy i zbiorniki pochodzą z OpenStreetMap – rowy melioracyjne mogą być niekompletnie "
     "zmapowane, więc „brak wody w pobliżu” nie wyklucza istnienia rowu.",
 ]
@@ -598,6 +613,7 @@ def _base_plot(uldk_values: dict[str, Any], uldk_res: dict[str, Any]) -> dict[st
         "parcelNumber": uldk_values.get("parcelNumber"),
         "terrain": None,
         "hydro": None,
+        "landUse": None,
         "sources": list(uldk_res["sources"]),
         "missingData": [],
         "limitations": LIMITATIONS,
@@ -606,7 +622,8 @@ def _base_plot(uldk_values: dict[str, Any], uldk_res: dict[str, Any]) -> dict[st
 
 
 async def add_plot_context(plot: dict[str, Any], client: httpx.AsyncClient | None = None) -> dict[str, Any]:
-    """Fill `terrain` (GUGiK NMT slope) and `hydro` (OSM water distance). Never raises.
+    """Fill `terrain` (GUGiK NMT slope), `hydro` (OSM water distance) and `landUse`
+    (EGiB register only, see adapters/land_use.py). Never raises.
 
     Run this *concurrently* with the meteo/soil/satellite adapters in /analyze:
         plot = await resolve_plot(pid, with_context=False)
@@ -617,9 +634,10 @@ async def add_plot_context(plot: dict[str, Any], client: httpx.AsyncClient | Non
     client = client or _client()
     try:
         poly_2180 = to_2180(shape(plot["geometry"]))
-        terrain_r, hydro_r = await asyncio.gather(
+        terrain_r, hydro_r, (land_use, lu_sources, lu_errors) = await asyncio.gather(
             _terrain(client, plot["plotId"], poly_2180),
             _hydro(client, plot["plotId"], poly_2180),
+            classify_land_use(plot["plotId"], poly_2180, client),
         )
     finally:
         if own:
@@ -641,12 +659,22 @@ async def add_plot_context(plot: dict[str, Any], client: httpx.AsyncClient | Non
     if hydro.get("missing"):
         missing.append("Cieki i rowy w pobliżu: brak danych hydro – " + "; ".join(hydro_r["errors"]))
 
+    limitations = list(plot.get("limitations") or [])
+    if land_use.get("category") is None:
+        missing.append("Użytkowanie terenu: " + "; ".join(land_use["notes"] or lu_errors))
+    elif land_use.get("isAgricultural") is False:
+        limitations.insert(0, f"UWAGA: w ewidencji gruntów (EGiB) działka to: {land_use['labelPl']} – nie pole "
+                              "uprawne, łąka, pastwisko ani sad. Zalecenia rolnicze w tym raporcie mogą nie mieć "
+                              "zastosowania.")
+
     return {
         **plot,
         "terrain": terrain,
         "hydro": hydro,
-        "sources": plot["sources"] + terrain_r["sources"] + hydro_r["sources"],
+        "landUse": land_use,
+        "sources": plot["sources"] + terrain_r["sources"] + hydro_r["sources"] + lu_sources,
         "missingData": plot.get("missingData", []) + missing,
+        "limitations": limitations,
         "fetchedAt": utc_now_iso(),
     }
 

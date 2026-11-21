@@ -71,6 +71,11 @@ def sample_plot(plot_id: str | None, lat: float | None, lng: float | None) -> di
             "nearestDistanceM": round(40 + _u(seed, 5) * 200, 1) if near else None,
             "nearestType": "ditch" if near else None,
         },
+        "landUse": {
+            "category": "arable", "labelPl": "grunt orny (pole uprawne)", "isAgricultural": True,
+            "source": "egib", "uses": ["grunt orny (pole uprawne)"], "codes": ["RIVa"],
+            "soilClasses": ["IVa"], "egib": {"dataDate": "DEMO"}, "notes": [],
+        },
         "sources": [
             {"name": "ULDK GUGiK", "url": "", "fetchedAt": FETCHED_AT},
             {"name": "GUGiK NMT (numeryczny model terenu)", "url": "", "fetchedAt": FETCHED_AT},
