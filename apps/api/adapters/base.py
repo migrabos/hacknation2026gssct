@@ -24,6 +24,9 @@ import hashlib
 import json
 import os
 import tempfile
+import time
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
@@ -38,6 +41,29 @@ CACHE_DIR = Path(
     os.environ.get("ADAPTER_CACHE_DIR", Path(__file__).resolve().parent.parent / "cache")
 )
 DEFAULT_TIMEOUT_SEC = 20.0
+
+# Shared deadline (time.monotonic()) for every adapter started inside `adapter_deadline()`.
+# A ContextVar, so tasks created by asyncio.gather inherit it.
+_deadline: ContextVar[float | None] = ContextVar("adapter_deadline", default=None)
+
+
+@contextmanager
+def adapter_deadline(seconds: float):
+    """All `run_adapter` calls in this block finish within `seconds` (cache hits always pass)."""
+    token = _deadline.set(time.monotonic() + seconds)
+    try:
+        yield
+    finally:
+        _deadline.reset(token)
+
+
+def _effective_timeout(timeout_sec: float) -> tuple[float, bool]:
+    """(timeout to use, True if it was cut by the shared deadline)."""
+    dl = _deadline.get()
+    if dl is None:
+        return timeout_sec, False
+    left = dl - time.monotonic()
+    return (left, True) if left < timeout_sec else (timeout_sec, False)
 
 
 # --------------------------------------------------------------------------- models
@@ -167,20 +193,28 @@ async def run_adapter(
     now = utc_now_iso()
     source = SourceRef(name=source_name, url=source_url, fetchedAt=now)
 
+    timeout, cut_by_deadline = _effective_timeout(timeout_sec)
+    budget_msg = "Zabrakło czasu w budżecie analizy (cel < 30 s) – źródło pominięte lub przerwane."
+    if timeout <= 0.2:
+        return AdapterResponse(
+            values={}, sources=[source], fetchedAt=now, coverage="none", errors=[budget_msg]
+        ).model_dump()
+
     try:
-        result = await asyncio.wait_for(fetch_fn(), timeout=timeout_sec)
+        result = await asyncio.wait_for(fetch_fn(), timeout=timeout)
     except BaseException as exc:  # noqa: BLE001 – fail-soft by contract
         if isinstance(exc, (KeyboardInterrupt, SystemExit)):
             raise
         if isinstance(exc, asyncio.CancelledError) and not isinstance(exc, asyncio.TimeoutError):
             # Outer task cancelled (e.g. client disconnect) – still answer, never crash.
             pass
+        timed_out = isinstance(exc, (asyncio.TimeoutError, TimeoutError))
         return AdapterResponse(
             values={},
             sources=[source],
             fetchedAt=now,
             coverage="none",
-            errors=[_describe_error(exc, timeout_sec)],
+            errors=[budget_msg if timed_out and cut_by_deadline else _describe_error(exc, timeout)],
         ).model_dump()
 
     try:

@@ -123,25 +123,6 @@ export default function MapPicker({
           maxZoom={19}
           opacity={basemap === "orto" ? 0.95 : 0.8}
           attribution="działki: GUGiK KIEG"
-          eventHandlers={{
-            // #region agent log
-            tileerror: (e) => {
-              fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-                body: JSON.stringify({
-                  sessionId: "68e619",
-                  runId: "pre-fix",
-                  hypothesisId: "H4",
-                  location: "MapPicker.tsx:KIEG",
-                  message: "KIEG WMS tileerror",
-                  data: { coords: (e as { coords?: unknown }).coords ?? null },
-                  timestamp: Date.now(),
-                }),
-              }).catch(() => {});
-            },
-            // #endregion
-          }}
         />
 
         {plot && <PlotShape plot={plot} onOrto={basemap === "orto"} />}
@@ -195,44 +176,7 @@ function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
 
   useEffect(() => {
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17, animate: true });
-    // #region agent log
-    const ring =
-      plot.geometry?.type === "Polygon"
-        ? plot.geometry.coordinates?.[0]
-        : plot.geometry?.type === "MultiPolygon"
-          ? plot.geometry.coordinates?.[0]?.[0]
-          : undefined;
-    const first = ring?.[0];
-    const mapCenter = map.getCenter();
-    const mapZoom = map.getZoom();
-    fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-      body: JSON.stringify({
-        sessionId: "68e619",
-        runId: "pre-fix",
-        hypothesisId: "H5",
-        location: "MapPicker.tsx:PlotShape",
-        message: "fitBounds + geometry for overlay",
-        data: {
-          plotId: plot.plotId,
-          bbox: plot.bbox,
-          fitBoundsSWNE: [
-            [plot.bbox[1], plot.bbox[0]],
-            [plot.bbox[3], plot.bbox[2]],
-          ],
-          firstCoord: first,
-          geomType: plot.geometry?.type,
-          ringLen: ring?.length,
-          mapCenter: { lat: mapCenter.lat, lng: mapCenter.lng },
-          mapZoom,
-          onOrto,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [map, bounds, plot, onOrto]);
+  }, [map, bounds]);
 
   const stroke = onOrto ? "#3fe07f" : "#0f6b3a";
   return (

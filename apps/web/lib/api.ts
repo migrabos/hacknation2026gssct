@@ -196,115 +196,13 @@ const realApi = {
 
 const _baseApi = API_MODE === "real" ? realApi : mockApi;
 
-// #region agent log
-function _dbgPlot(p: Plot | null | undefined) {
-  if (!p) return null;
-  const ring =
-    p.geometry?.type === "Polygon"
-      ? p.geometry.coordinates?.[0]
-      : p.geometry?.type === "MultiPolygon"
-        ? p.geometry.coordinates?.[0]?.[0]
-        : undefined;
-  const first = ring?.[0];
-  const last = ring && ring.length > 0 ? ring[ring.length - 1] : undefined;
-  return {
-    plotId: p.plotId,
-    geomType: p.geometry?.type,
-    ringLen: ring?.length,
-    first,
-    last,
-    closed: first && last ? first[0] === last[0] && first[1] === last[1] : null,
-    centroid: p.centroid,
-    bbox: p.bbox,
-    firstLooksLikeLngLat:
-      Array.isArray(first) && first[0] >= 14 && first[0] <= 25 && first[1] >= 48 && first[1] <= 56,
-    bboxLooksLikeLngLat:
-      Array.isArray(p.bbox) && p.bbox[0] >= 14 && p.bbox[0] <= 25 && p.bbox[1] >= 48 && p.bbox[1] <= 56,
-  };
-}
-function _agentLog(location: string, message: string, data: Record<string, unknown>, hypothesisId: string) {
-  fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-    body: JSON.stringify({
-      sessionId: "68e619",
-      runId: "pre-fix",
-      hypothesisId,
-      location,
-      message,
-      data: { apiMode: API_MODE, apiUrl: API_URL, ...data },
-      timestamp: Date.now(),
-    }),
-  }).catch(() => {});
-}
-// #endregion
-
 export const api = {
-  health: async () => {
-    try {
-      const h = await _baseApi.health();
-      // #region agent log
-      _agentLog("api.ts:health", "health ok", { health: h }, "H1");
-      // #endregion
-      return h;
-    } catch (e) {
-      // #region agent log
-      _agentLog("api.ts:health", "health failed", { err: String(e) }, "H1");
-      // #endregion
-      throw e;
-    }
-  },
+  health: () => _baseApi.health(),
   getCrops: () => _baseApi.getCrops(),
   searchRegions: (q: string) => _baseApi.searchRegions(q),
   plotByRegion: (regionId: string, nr: string) => _baseApi.plotByRegion(regionId, nr),
   regionExtent: (regionId: string) => _baseApi.regionExtent(regionId),
-  plotById: async (id: string) => {
-    const p = await _baseApi.plotById(id);
-    // #region agent log
-    _agentLog("api.ts:plotById", "plot resolved by id", { inputId: id.trim(), plot: _dbgPlot(p) }, "H2");
-    // #endregion
-    return p;
-  },
-  plotByPoint: async (lat: number, lng: number) => {
-    const p = await _baseApi.plotByPoint(lat, lng);
-    // #region agent log
-    _agentLog(
-      "api.ts:plotByPoint",
-      "plot resolved by point",
-      {
-        click: { lat, lng },
-        plot: _dbgPlot(p),
-        clickInsideBbox: p.bbox
-          ? lng >= p.bbox[0] && lng <= p.bbox[2] && lat >= p.bbox[1] && lat <= p.bbox[3]
-          : null,
-      },
-      "H3",
-    );
-    // #endregion
-    return p;
-  },
-  analyze: async (req: AnalyzeRequest, plot?: Plot) => {
-    const report = await _baseApi.analyze(req, plot);
-    // #region agent log
-    const statuses = Object.fromEntries(
-      (report.sources ?? []).map((s) => [s.id, { status: s.status, mode: s.mode, error: s.error ?? null }]),
-    );
-    const failed = (report.sources ?? []).filter((s) => s.status !== "ok").map((s) => s.id);
-    _agentLog(
-      "api.ts:analyze",
-      "analyze finished",
-      {
-        req,
-        inputPlot: _dbgPlot(plot),
-        reportPlot: _dbgPlot(report.plot),
-        reportMeta: report.meta ?? null,
-        sourceStatuses: statuses,
-        failedOrPartial: failed,
-        missingDataIds: (report.missingData ?? []).map((m) => m.id),
-      },
-      "H1",
-    );
-    // #endregion
-    return report;
-  },
+  plotById: (id: string) => _baseApi.plotById(id),
+  plotByPoint: (lat: number, lng: number) => _baseApi.plotByPoint(lat, lng),
+  analyze: (req: AnalyzeRequest, plot?: Plot) => _baseApi.analyze(req, plot),
 };
