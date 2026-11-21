@@ -16,7 +16,7 @@ plot, and the latest dekad is published with a ~2–3 week delay.
 from __future__ import annotations
 
 import io
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -117,7 +117,7 @@ async def fetch_drought_context(centroid: list[float], analysis_date: date | str
         bad = None
     except Exception as exc:
         lat = lng = 0.0
-        d = datetime.now(timezone.utc).date()
+        d = today_pl()
         bad = f"Niepoprawne dane wejściowe dla EDO: {exc}"
 
     today = today_pl()
