@@ -2,14 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Map from "@/components/Map";
 import Notice from "@/components/Notice";
 import PipelineLoader from "@/components/PipelineLoader";
 import { API_MODE, ApiError, MOCK_NOT_FOUND_ID, api } from "@/lib/api";
 import { ERROR_MESSAGE, formatNumber } from "@/lib/labels";
 import { saveReport } from "@/lib/report-store";
-import type { ApiErrorKind, Crop, Plot } from "@/lib/types";
+import type { ApiErrorKind, Crop, Plot, Region } from "@/lib/types";
 
 function isoDay(d: Date): string {
   const tz = d.getTimezoneOffset() * 60_000;
@@ -20,6 +20,25 @@ function errorKind(err: unknown): ApiErrorKind {
   return err instanceof ApiError ? err.kind : "server";
 }
 
+/** Above this many same-named villages we ask the user to add the commune after a comma. */
+const REGION_FILTER_HINT_AT = 6;
+
+function regionLabel(r: Region): string {
+  return [
+    r.commune && `gm. ${r.commune}`,
+    r.county && (r.county.startsWith("powiat") ? r.county.replace(/^powiat\s+/, "pow. ") : `pow. ${r.county}`),
+    r.voivodeship && `woj. ${r.voivodeship}`,
+  ]
+    .filter(Boolean)
+    .join(", ");
+}
+
+/** "Zalesie, Halinów" -> name "Zalesie", filter "halinów" (matched against commune/county/voivodeship). */
+function splitVillageQuery(q: string): { name: string; filter: string } {
+  const [name, ...rest] = q.split(",");
+  return { name: name.trim(), filter: rest.join(" ").trim().toLowerCase() };
+}
+
 export default function AnalyzePage() {
   const router = useRouter();
 
@@ -27,6 +46,17 @@ export default function AnalyzePage() {
   const [plot, setPlot] = useState<Plot | null>(null);
   const [plotBusy, setPlotBusy] = useState<"id" | "map" | null>(null);
   const [plotError, setPlotError] = useState<ApiErrorKind | null>(null);
+
+  // Village (obręb) + parcel number lookup — the simple path for most farmers.
+  const [villageQuery, setVillageQuery] = useState("");
+  const [regions, setRegions] = useState<Region[] | null>(null);
+  const [regionsBusy, setRegionsBusy] = useState(false);
+  const [regionsError, setRegionsError] = useState<ApiErrorKind | null>(null);
+  const [region, setRegion] = useState<Region | null>(null);
+  const [parcelNr, setParcelNr] = useState("");
+  const [nrBusy, setNrBusy] = useState(false);
+  const [nrError, setNrError] = useState<string | null>(null);
+  const searchSeq = useRef(0);
 
   const [crops, setCrops] = useState<Crop[] | null>(null);
   const [cropsError, setCropsError] = useState(false);
@@ -59,6 +89,86 @@ export default function AnalyzePage() {
     loadCrops();
     if (API_MODE === "real") api.health().catch(() => setApiDown(true));
   }, [loadCrops]);
+
+  const villageName = splitVillageQuery(villageQuery).name;
+
+  // Debounced search: ULDK matches whole names only, so results appear once the name is complete.
+  useEffect(() => {
+    if (region) return;
+    const name = villageName;
+    if (name.length < 3) {
+      setRegions(null);
+      setRegionsError(null);
+      return;
+    }
+    const seq = ++searchSeq.current;
+    const t = setTimeout(async () => {
+      setRegionsBusy(true);
+      setRegionsError(null);
+      try {
+        const found = await api.searchRegions(name);
+        if (seq !== searchSeq.current) return;
+        setRegions(found);
+      } catch (err) {
+        if (seq !== searchSeq.current) return;
+        setRegions(null);
+        setRegionsError(errorKind(err));
+      } finally {
+        if (seq === searchSeq.current) setRegionsBusy(false);
+      }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [villageName, region]);
+
+  const villageFilter = splitVillageQuery(villageQuery).filter;
+  const shownRegions =
+    regions?.filter((r) =>
+      !villageFilter
+        ? true
+        : [r.commune, r.county, r.voivodeship].some((v) => v?.toLowerCase().includes(villageFilter)),
+    ) ?? null;
+
+  function chooseRegion(r: Region) {
+    setRegion(r);
+    setNrError(null);
+    setPlotError(null);
+  }
+
+  function clearRegion() {
+    setRegion(null);
+    setParcelNr("");
+    setNrError(null);
+  }
+
+  // A single match needs no extra click.
+  useEffect(() => {
+    if (!region && regions?.length === 1 && !villageFilter) setRegion(regions[0]);
+  }, [regions, region, villageFilter]);
+
+  async function findByRegion(e?: { preventDefault(): void }) {
+    e?.preventDefault();
+    if (!region) return;
+    if (!parcelNr.trim()) {
+      setNrError("Wpisz numer działki, np. 134 albo 134/2.");
+      return;
+    }
+    setNrBusy(true);
+    setNrError(null);
+    try {
+      setPlot(await api.plotByRegion(region.regionId, parcelNr));
+    } catch (err) {
+      const kind = errorKind(err);
+      setNrError(
+        kind === "not_found" || kind === "bad_request"
+          ? (err as ApiError).message && (err as ApiError).message !== kind
+            ? (err as ApiError).message
+            : `Nie znaleziono działki nr ${parcelNr.trim()} w tej miejscowości.`
+          : ERROR_MESSAGE[kind].text,
+      );
+    } finally {
+      setNrBusy(false);
+    }
+  }
 
   async function findById(e?: { preventDefault(): void }) {
     e?.preventDefault();
@@ -128,7 +238,7 @@ export default function AnalyzePage() {
 
   const plotErrMsg =
     plotError === "bad_request"
-      ? { title: "Wpisz numer działki", text: "Na przykład 141201_1.0001.123 — znajdziesz go na wypisie z rejestru gruntów." }
+      ? { title: "Wpisz identyfikator działki", text: "Na przykład 141201_1.0001.123 — znajdziesz go na wypisie z rejestru gruntów." }
       : plotError
         ? ERROR_MESSAGE[plotError]
         : null;
@@ -141,7 +251,8 @@ export default function AnalyzePage() {
         </nav>
         <h1>Sprawdź działkę</h1>
         <p className="muted" style={{ maxWidth: "60ch" }}>
-          Wskaż działkę na mapie albo wpisz jej numer, wybierz uprawę i kliknij „Przygotuj raport”.
+          Wpisz swoją miejscowość i numer działki (albo kliknij ją na mapie), wybierz uprawę i kliknij „Przygotuj
+          raport”.
         </p>
       </div>
 
@@ -164,7 +275,13 @@ export default function AnalyzePage() {
           <h2 id="map-h" className="visually-hidden">
             Mapa
           </h2>
-          <Map plot={plot} onPick={pickOnMap} busy={plotBusy === "map"} height="min(70vh, 600px)" />
+          <Map
+            plot={plot}
+            onPick={pickOnMap}
+            busy={plotBusy === "map"}
+            height="min(70vh, 600px)"
+            focusBbox={region?.bbox ?? null}
+          />
           <p className="muted small" style={{ marginTop: 8 }}>
             Granice działek pojawiają się po przybliżeniu mapy. Źródło: GUGiK (Geoportal).
           </p>
@@ -203,44 +320,137 @@ export default function AnalyzePage() {
                 )}
               </dl>
             </div>
-          ) : (
-            <p className="muted small" style={{ marginTop: 0 }}>
-              Kliknij działkę na mapie
-            </p>
-          )}
+          ) : null}
 
           {!plot && (
             <>
-              <div className="or-sep">albo</div>
-              <div className="field" style={{ marginBottom: 8 }}>
-                <label htmlFor="plotId">Numer działki</label>
-                <div className="input-row">
-                  <input
-                    id="plotId"
-                    className="input"
-                    value={plotQuery}
-                    onChange={(e) => setPlotQuery(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") findById(e);
-                    }}
-                    placeholder="np. 141201_1.0001.123"
-                    autoComplete="off"
-                    spellCheck={false}
-                    aria-describedby="plotId-help"
-                  />
-                  <button type="button" className="btn btn-secondary" onClick={() => findById()} disabled={plotBusy === "id"}>
-                    {plotBusy === "id" ? <span className="spinner" /> : "Znajdź"}
-                  </button>
+              {!region ? (
+                <div className="field" style={{ marginBottom: 12 }}>
+                  <label htmlFor="village">Miejscowość, w której leży działka</label>
+                  <p className="hint">Pełna nazwa wsi, z polskimi literami (np. Krzewina, Żółwin).</p>
+                  <div className="input-row">
+                    <input
+                      id="village"
+                      className="input"
+                      value={villageQuery}
+                      onChange={(e) => setVillageQuery(e.target.value)}
+                      placeholder="np. Krzewina"
+                      autoComplete="off"
+                      aria-describedby="village-results"
+                    />
+                    {regionsBusy && <span className="spinner" style={{ alignSelf: "center" }} aria-label="Szukam" />}
+                  </div>
+
+                  <div id="village-results" aria-live="polite">
+                    {regionsError && <p className="field-error">{ERROR_MESSAGE[regionsError].text}</p>}
+                    {shownRegions && shownRegions.length === 0 && !regionsBusy && (
+                      <p className="hint">
+                        {regions && regions.length > 0
+                          ? "Żadna z tych miejscowości nie pasuje do dopisanej gminy. Usuń tekst po przecinku."
+                          : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię (ą, ę, ł, ó, ś, ż…). W miastach obręby mają czasem numery zamiast nazw — wtedy kliknij działkę na mapie.`}
+                      </p>
+                    )}
+                    {shownRegions && shownRegions.length > 0 && (
+                      <>
+                        <p className="hint" style={{ marginTop: 6 }}>
+                          {shownRegions.length === 1 ? "Znaleziono:" : `Jest ${shownRegions.length} takich miejscowości — wybierz swoją:`}
+                        </p>
+                        {regions && regions.length > REGION_FILTER_HINT_AT && !villageFilter && (
+                          <p className="hint">
+                            Dużo wyników? Dopisz po przecinku gminę, np. <em>{villageName}, {regions[0].commune}</em>.
+                          </p>
+                        )}
+                        <ul className="region-list">
+                          {shownRegions.map((r) => (
+                            <li key={r.regionId}>
+                              <button type="button" className="region-option" onClick={() => chooseRegion(r)}>
+                                <strong>{r.region}</strong>
+                                <span>{regionLabel(r)}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <details className="help" id="plotId-help">
-                <summary>Gdzie znajdę numer działki?</summary>
-                <div>
-                  <p>
-                    Pełny numer (identyfikator) działki jest na <strong>wypisie z rejestru gruntów</strong> oraz w
-                    decyzji podatkowej. Wygląda np. tak: <code>141201_1.0001.123</code>.
+              ) : (
+                <>
+                  <div className="region-chosen">
+                    <div>
+                      <strong>{region.region}</strong>
+                      <span className="muted small"> — {regionLabel(region)}</span>
+                    </div>
+                    <button type="button" className="btn-link small" onClick={clearRegion}>
+                      Zmień
+                    </button>
+                  </div>
+                  <div className="field" style={{ marginBottom: 8 }}>
+                    <label htmlFor="parcelNr">Numer działki</label>
+                    <p className="hint">Tak jak na wypisie z rejestru gruntów, np. 134 albo 134/2.</p>
+                    <div className="input-row">
+                      <input
+                        id="parcelNr"
+                        className="input"
+                        value={parcelNr}
+                        onChange={(e) => setParcelNr(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") findByRegion(e);
+                        }}
+                        placeholder="np. 134"
+                        inputMode="text"
+                        autoComplete="off"
+                        spellCheck={false}
+                        autoFocus
+                      />
+                      <button type="button" className="btn btn-secondary" onClick={() => findByRegion()} disabled={nrBusy}>
+                        {nrBusy ? <span className="spinner" /> : "Znajdź"}
+                      </button>
+                    </div>
+                    {nrError && (
+                      <p className="field-error" role="alert">
+                        {nrError}
+                      </p>
+                    )}
+                  </div>
+                  <p className="muted small" style={{ marginTop: 0 }}>
+                    Nie znasz numeru? Mapa pokazuje już Twoją miejscowość — przybliż i kliknij swoje pole.
                   </p>
-                  <p style={{ marginBottom: 0 }}>Nie masz go pod ręką? Po prostu kliknij działkę na mapie.</p>
+                </>
+              )}
+
+              <div className="or-sep">albo</div>
+              <p className="muted small" style={{ marginTop: 0 }}>
+                Kliknij działkę na mapie
+              </p>
+
+              <details className="help" id="plotId-help">
+                <summary>Mam pełny identyfikator działki</summary>
+                <div>
+                  <div className="field" style={{ marginBottom: 8 }}>
+                    <label htmlFor="plotId">Identyfikator działki</label>
+                    <div className="input-row">
+                      <input
+                        id="plotId"
+                        className="input"
+                        value={plotQuery}
+                        onChange={(e) => setPlotQuery(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") findById(e);
+                        }}
+                        placeholder="np. 141201_1.0001.123"
+                        autoComplete="off"
+                        spellCheck={false}
+                      />
+                      <button type="button" className="btn btn-secondary" onClick={() => findById()} disabled={plotBusy === "id"}>
+                        {plotBusy === "id" ? <span className="spinner" /> : "Znajdź"}
+                      </button>
+                    </div>
+                  </div>
+                  <p style={{ marginBottom: 0 }} className="small">
+                    Pełny identyfikator jest na <strong>wypisie z rejestru gruntów</strong>, np.{" "}
+                    <code>141201_1.0001.123</code>.
+                  </p>
                   {API_MODE === "mock" && (
                     <p className="small muted" style={{ margin: "8px 0 0" }}>
                       Tryb demonstracyjny: wpisz <code>{MOCK_NOT_FOUND_ID}</code>, żeby zobaczyć komunikat o

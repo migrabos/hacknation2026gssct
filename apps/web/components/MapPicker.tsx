@@ -55,6 +55,8 @@ export interface MapPickerProps {
   busy?: boolean;
   height?: number | string;
   defaultBasemap?: Basemap;
+  /** [min_lng, min_lat, max_lng, max_lat] to zoom to (e.g. a chosen village). Ignored while a plot is shown. */
+  focusBbox?: [number, number, number, number] | null;
 }
 
 export default function MapPicker({
@@ -63,6 +65,7 @@ export default function MapPicker({
   busy = false,
   height = 520,
   defaultBasemap = "orto",
+  focusBbox = null,
 }: MapPickerProps) {
   const [basemap, setBasemap] = useState<Basemap>(defaultBasemap);
   const [zoom, setZoom] = useState(POLAND_ZOOM);
@@ -143,6 +146,7 @@ export default function MapPicker({
         />
 
         {plot && <PlotShape plot={plot} onOrto={basemap === "orto"} />}
+        {!plot && focusBbox && <FocusBounds bbox={focusBbox} />}
 
         <ScaleControl position="bottomleft" imperial={false} />
         <ZoomWatcher onZoom={setZoom} />
@@ -164,6 +168,21 @@ export default function MapPicker({
 }
 
 // ---------------------------------------------------------------------------
+
+function FocusBounds({ bbox }: { bbox: [number, number, number, number] }) {
+  const map = useMap();
+  const [w, s, e, n] = bbox;
+  useEffect(() => {
+    map.fitBounds(
+      [
+        [s, w],
+        [n, e],
+      ],
+      { padding: [24, 24], maxZoom: 15, animate: true },
+    );
+  }, [map, w, s, e, n]);
+  return null;
+}
 
 function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
   const map = useMap();

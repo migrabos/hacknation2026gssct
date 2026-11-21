@@ -9,6 +9,8 @@
  *   GET  /crops
  *   GET  /plot/by-id?id=...
  *   GET  /plot/by-point?lat=...&lng=...
+ *   GET  /plot/regions?q=...            (obręby / villages by exact name)
+ *   GET  /plot/by-region?regionId=...&nr=...
  *   POST /analyze
  */
 import type {
@@ -18,6 +20,7 @@ import type {
   HealthResponse,
   Plot,
   Position,
+  Region,
   Report,
 } from "./types";
 import mockCrops from "@/mocks/crops.json";
@@ -128,6 +131,19 @@ const mockApi = {
     if (id.trim() === MOCK_NOT_FOUND_ID) throw new ApiError("not_found");
     return { ...(mockPlot as Plot), plotId: id.trim() };
   },
+  async searchRegions(q: string): Promise<Region[]> {
+    await sleep(300);
+    const name = q.trim();
+    if (name.length < 2) return [];
+    const p = mockPlot as Plot;
+    return [
+      { regionId: "141201_1.0001", region: name, commune: p.commune ?? "Gmina demo", county: p.county, voivodeship: p.voivodeship, bbox: p.bbox },
+      { regionId: "022503_5.0003", region: name, commune: "Bogatynia", county: "powiat zgorzelecki", voivodeship: "dolnośląskie", bbox: [14.935, 51.009, 14.971, 51.034] },
+    ];
+  },
+  async plotByRegion(regionId: string, nr: string): Promise<Plot> {
+    return mockApi.plotById(`${regionId}.${nr.trim()}`);
+  },
   async plotByPoint(lat: number, lng: number): Promise<Plot> {
     await sleep(400);
     return mockPlotAround(lat, lng);
@@ -156,6 +172,11 @@ const realApi = {
   plotById: (id: string) => request<Plot>(`/plot/by-id?id=${encodeURIComponent(id.trim())}`),
   plotByPoint: (lat: number, lng: number) =>
     request<Plot>(`/plot/by-point?lat=${lat}&lng=${lng}`),
+  searchRegions: (q: string) => request<Region[]>(`/plot/regions?q=${encodeURIComponent(q.trim())}`),
+  plotByRegion: (regionId: string, nr: string) =>
+    request<Plot>(
+      `/plot/by-region?regionId=${encodeURIComponent(regionId)}&nr=${encodeURIComponent(nr.trim().replace(/\s+/g, ""))}`,
+    ),
   // The backend re-resolves the plot itself (ULDK is cached), so `_plot` is unused here.
   // plotId wins over lat/lng; coords are only sent when there is no plotId.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -228,6 +249,8 @@ export const api = {
     }
   },
   getCrops: () => _baseApi.getCrops(),
+  searchRegions: (q: string) => _baseApi.searchRegions(q),
+  plotByRegion: (regionId: string, nr: string) => _baseApi.plotByRegion(regionId, nr),
   plotById: async (id: string) => {
     const p = await _baseApi.plotById(id);
     // #region agent log

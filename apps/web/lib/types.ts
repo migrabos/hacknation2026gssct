@@ -56,6 +56,18 @@ export type SourceMode = "live" | "cached" | "static";
 
 // ---------- Plot (Person 2) ----------
 
+/** Cadastral precinct (obręb) — usually one village. From GET /plot/regions. */
+export interface Region {
+  /** e.g. "022503_5.0003" */
+  regionId: string;
+  region?: string | null;
+  commune?: string | null;
+  county?: string | null;
+  voivodeship?: string | null;
+  /** [min_lng, min_lat, max_lng, max_lat] */
+  bbox?: [number, number, number, number] | null;
+}
+
 export interface Plot {
   plotId: string;
   geometry: PlotGeometry;

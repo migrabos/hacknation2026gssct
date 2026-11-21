@@ -519,6 +519,91 @@ async def resolve_plot(plot_id: str, with_context: bool = True) -> dict[str, Any
         return await add_plot_context(plot, client) if with_context else plot
 
 
+_REGION_ID_RE = re.compile(r"^\d{6}_\d\.\d{4}$")
+_PARCEL_NR_RE = re.compile(r"^[0-9A-Za-z_.\-/]{1,40}$")
+REGION_LIMIT = 200
+
+
+def _parse_regions(text: str) -> list[dict[str, Any]]:
+    """ULDK GetRegionByNameOrId reply -> list of obręby. '-1 brak wyników' -> []."""
+    lines = [ln.strip() for ln in text.strip().splitlines() if ln.strip()]
+    if not lines or lines[0].split()[0] != "0":
+        return []
+    out: list[dict[str, Any]] = []
+    for ln in lines[1:]:
+        parts = [p.strip() for p in ln.split("|")]
+        if len(parts) < 6:
+            continue
+        rid, commune, county, voiv, region, extent = parts[:6]
+        bbox = None
+        try:
+            nums = [float(v) for v in extent.split(",")]
+            if len(nums) == 4:
+                bbox = [round(v, 6) for v in nums]  # [min_lng, min_lat, max_lng, max_lat]
+        except ValueError:
+            pass
+        out.append({
+            "regionId": rid,
+            "region": region or None,
+            "commune": commune or None,
+            "county": county or None,
+            "voivodeship": voiv or None,
+            "bbox": bbox,
+        })
+    out.sort(key=lambda r: (r["voivodeship"] or "", r["county"] or "", r["commune"] or ""))
+    return out[:REGION_LIMIT]
+
+
+async def search_regions(name: str) -> list[dict[str, Any]]:
+    """Find cadastral precincts (obręby ≈ villages) by exact name, case-insensitive.
+
+    ULDK matches the full name only (no prefix search). Returns [] when nothing matches.
+    """
+    name = " ".join((name or "").split())
+    if len(name) < 2 or len(name) > 80:
+        raise InvalidPlotInput("Wpisz pełną nazwę miejscowości (obrębu), np. Krzewina.")
+    params = {
+        "request": "GetRegionByNameOrId",
+        "id": name,
+        "result": "id,commune,county,voivodeship,region,geom_extent",
+        "srid": "4326",
+    }
+    url = _url(ULDK_URL, params)
+
+    async with _client() as client:
+        async def fetch() -> dict[str, Any]:
+            r = await client.get(url)
+            r.raise_for_status()
+            return {"regions": _parse_regions(r.text)}
+
+        res = await run_adapter(
+            "ULDK GUGiK", url, {"region": name.lower()}, fetch, cache_ttl_sec=ULDK_CACHE_TTL
+        )
+    if res["coverage"] != "full":
+        raise PlotServiceUnavailable(
+            "Usługa ULDK GUGiK (wyszukiwanie miejscowości) jest chwilowo niedostępna: "
+            + "; ".join(res["errors"])
+        )
+    return res["values"]["regions"]
+
+
+async def resolve_region_parcel(region_id: str, parcel_nr: str, with_context: bool = True) -> dict[str, Any]:
+    """Resolve 'obręb + numer działki' (e.g. 022503_5.0003 + 134) to a plot."""
+    region_id = (region_id or "").strip()
+    parcel_nr = (parcel_nr or "").strip().replace(" ", "")
+    if not _REGION_ID_RE.match(region_id):
+        raise InvalidPlotInput("Niepoprawny identyfikator obrębu. Wybierz miejscowość z listy.")
+    if not _PARCEL_NR_RE.match(parcel_nr):
+        raise InvalidPlotInput("Niepoprawny numer działki. Wpisz np. 134 albo 134/2.")
+    try:
+        return await resolve_plot(f"{region_id}.{parcel_nr}", with_context=with_context)
+    except PlotNotFound as exc:
+        raise PlotNotFound(
+            f"W tej miejscowości nie znaleziono działki nr {parcel_nr}. Sprawdź numer na wypisie "
+            "z rejestru gruntów albo kliknij działkę na mapie."
+        ) from exc
+
+
 async def resolve_point(lat: float, lng: float, with_context: bool = True) -> dict[str, Any]:
     """Resolve the plot containing a map click (WGS84). See `resolve_plot` for with_context."""
     if not (48.9 <= lat <= 55.0 and 14.0 <= lng <= 24.2):
