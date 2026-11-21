@@ -1091,6 +1091,22 @@ li[data-state="active"] .pipe-icon {
 .why strong {
   color: var(--c-accent);
 }
+
+details.sources-more {
+  font-size: 0.93rem;
+  color: var(--c-text-muted);
+}
+details.sources-more summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+details.sources-more[open] summary {
+  margin-bottom: 12px;
+}
+.sources-body h4 {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
 .irrigation-note {
   border: 1px dashed var(--c-border-strong);
   border-radius: var(--radius);
