@@ -20,8 +20,24 @@ function errorKind(err: unknown): ApiErrorKind {
   return err instanceof ApiError ? err.kind : "server";
 }
 
-/** Above this many same-named villages we ask the user to add the commune after a comma. */
+/** Above this many matches we ask the user to add the commune after a comma. */
 const REGION_FILTER_HINT_AT = 6;
+/** The API returns at most this many matches (best first). */
+const REGION_MAX_RESULTS = 100;
+
+/**
+ * Show which city an obręb belongs to: "Kraków – obręb K-1" (numbered city obręby),
+ * "Wrocław – Biskupin" (city obręby named after districts). Villages keep their name.
+ * Region id kind digit: _1 = city gmina, _8 / _9 = city districts (Warszawa, Kraków, Łódź…).
+ */
+function regionName(r: Region): string {
+  const name = r.region ?? r.regionId;
+  if (!r.commune || name === r.commune) return name;
+  const letters = (name.match(/\p{L}/gu) ?? []).length;
+  if (letters < 3) return `${r.commune} – obręb ${name}`;
+  const kind = r.regionId.charAt(7);
+  return kind === "1" || kind === "8" || kind === "9" ? `${r.commune} – ${name}` : name;
+}
 
 function regionLabel(r: Region): string {
   return [
@@ -33,10 +49,10 @@ function regionLabel(r: Region): string {
     .join(", ");
 }
 
-/** "Zalesie, Halinów" -> name "Zalesie", filter "Halinów" (backend matches it against commune/county/voivodeship). */
+/** "Zalesie, Halinów" -> name "Zalesie", filter "halinów" (matched against commune/county/voivodeship). */
 function splitVillageQuery(q: string): { name: string; filter: string } {
   const [name, ...rest] = q.split(",");
-  return { name: name.trim(), filter: rest.join(" ").trim() };
+  return { name: name.trim(), filter: rest.join(" ").trim().toLowerCase() };
 }
 
 export default function AnalyzePage() {
@@ -50,7 +66,6 @@ export default function AnalyzePage() {
   // Village (obręb) + parcel number lookup — the simple path for most farmers.
   const [villageQuery, setVillageQuery] = useState("");
   const [regions, setRegions] = useState<Region[] | null>(null);
-  const [regionsTotal, setRegionsTotal] = useState(0);
   const [regionsBusy, setRegionsBusy] = useState(false);
   const [regionsError, setRegionsError] = useState<ApiErrorKind | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
@@ -91,17 +106,20 @@ export default function AnalyzePage() {
     if (API_MODE === "real") api.health().catch(() => setApiDown(true));
   }, [loadCrops]);
 
-  const { name: villageName, filter: villageFilter } = splitVillageQuery(villageQuery);
-  const searchQuery = villageFilter ? `${villageName}, ${villageFilter}` : villageName;
+  const villageName = splitVillageQuery(villageQuery).name;
+  const villageSearch = villageQuery.trim();
 
-  // Debounced search-as-you-type (backend: offline PRG index, diacritic-insensitive prefix match).
-  // Independent of the chosen village, so "Zmień" just shows the same list again.
+  // Debounced search over the offline PRG index (prefix, no diacritics needed, by gmina);
+  // the text after a comma narrows results server-side ("Zdziłowice, Godziszów").
   useEffect(() => {
-    if (villageName.length < 2) {
-      ++searchSeq.current;
+    if (region) return;
+    const name = villageName;
+    const q = villageSearch;
+    if (name.length < 2) {
+      searchSeq.current++; // drop any in-flight search for the text that was just deleted
+      setRegionsBusy(false);
       setRegions(null);
       setRegionsError(null);
-      setRegionsBusy(false);
       return;
     }
     const seq = ++searchSeq.current;
@@ -109,10 +127,9 @@ export default function AnalyzePage() {
       setRegionsBusy(true);
       setRegionsError(null);
       try {
-        const found = await api.searchRegions(searchQuery);
+        const found = await api.searchRegions(q);
         if (seq !== searchSeq.current) return;
-        setRegions(found.regions);
-        setRegionsTotal(found.total);
+        setRegions(found);
       } catch (err) {
         if (seq !== searchSeq.current) return;
         setRegions(null);
@@ -122,22 +139,23 @@ export default function AnalyzePage() {
       }
     }, 250);
     return () => clearTimeout(t);
-  }, [villageName, searchQuery]);
+  }, [villageName, villageSearch, region]);
 
+  const villageFilter = splitVillageQuery(villageQuery).filter;
   const shownRegions = regions;
 
   function chooseRegion(r: Region) {
     setRegion(r);
     setNrError(null);
     setPlotError(null);
-    // The search index has no geometry; fetch the village extent so the map can zoom there.
+    // The search index has no geometry; fetch the obręb extent to zoom the map (best-effort).
     if (!r.bbox) {
       api
-        .regionDetails(r.regionId)
-        .then((d) => setRegion((cur) => (cur?.regionId === r.regionId ? { ...cur, bbox: d.bbox } : cur)))
-        .catch(() => {
-          /* map just stays where it is */
-        });
+        .regionExtent(r.regionId)
+        .then((bbox) => {
+          if (bbox) setRegion((cur) => (cur?.regionId === r.regionId ? { ...cur, bbox } : cur));
+        })
+        .catch(() => {});
     }
   }
 
@@ -146,6 +164,18 @@ export default function AnalyzePage() {
     setParcelNr("");
     setNrError(null);
   }
+
+  // A single *exact* match needs no extra click (not while the user is still typing a prefix).
+  useEffect(() => {
+    if (
+      !region &&
+      regions?.length === 1 &&
+      !villageFilter &&
+      regions[0].region?.toLowerCase() === villageName.toLowerCase()
+    )
+      chooseRegion(regions[0]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [regions, region, villageFilter, villageName]);
 
   async function findByRegion(e?: { preventDefault(): void }) {
     e?.preventDefault();
@@ -329,7 +359,9 @@ export default function AnalyzePage() {
               {!region ? (
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label htmlFor="village">Miejscowość, w której leży działka</label>
-                  <p className="hint">Zacznij pisać nazwę wsi i wybierz ją z listy. Polskie litery nie są konieczne.</p>
+                  <p className="hint">
+                    Zacznij pisać nazwę wsi albo gminy — polskie litery nie są konieczne (np. Zdziłowice, Godziszów).
+                  </p>
                   <div className="input-row">
                     <input
                       id="village"
@@ -347,25 +379,27 @@ export default function AnalyzePage() {
                     {regionsError && <p className="field-error">{ERROR_MESSAGE[regionsError].text}</p>}
                     {shownRegions && shownRegions.length === 0 && !regionsBusy && (
                       <p className="hint">
-                        {villageFilter
-                          ? `Nie ma miejscowości „${villageName}” w gminie/powiecie „${villageFilter}”. Usuń tekst po przecinku.`
-                          : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię. W miastach części ewidencyjne mają czasem numery zamiast nazw — wtedy kliknij działkę na mapie.`}
+                        {regions && regions.length > 0
+                          ? "Żadna z tych miejscowości nie pasuje do dopisanej gminy. Usuń tekst po przecinku."
+                          : villageFilter
+                            ? `Nie znaleźliśmy „${villageName}” w „${villageFilter}”. Sprawdź nazwę gminy albo usuń tekst po przecinku.`
+                            : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają numery zamiast nazw dzielnic — wpisz miasto i numer obrębu z wypisu (np. Warszawa 1-01-01, Kraków K-12) albo kliknij działkę na mapie.`}
                       </p>
                     )}
                     {shownRegions && shownRegions.length > 0 && (
                       <>
                         <p className="hint" style={{ marginTop: 6 }}>
-                          {regionsTotal === 1
-                            ? "Znaleziono — kliknij, żeby wybrać:"
-                            : regionsTotal > shownRegions.length
-                              ? `Pasuje ${regionsTotal} miejscowości, pokazujemy pierwsze ${shownRegions.length} — wybierz swoją:`
-                              : `Pasuje ${regionsTotal} miejscowości — wybierz swoją:`}
+                          {shownRegions.length === 1
+                            ? "Znaleziono:"
+                            : shownRegions.length >= REGION_MAX_RESULTS
+                              ? `Pokazujemy pierwsze ${REGION_MAX_RESULTS} wyników — wybierz swoją albo zawęź wyszukiwanie:`
+                              : `Pasujące miejscowości (${shownRegions.length}) — wybierz swoją:`}
                         </p>
-                        {regionsTotal > REGION_FILTER_HINT_AT && !villageFilter && (
+                        {regions && regions.length > REGION_FILTER_HINT_AT && !villageFilter && (
                           <p className="hint">
-                            Dużo wyników? Dopisz po przecinku gminę, np.{" "}
+                            Dużo wyników? Dopisz po przecinku gminę lub powiat, np.{" "}
                             <em>
-                              {shownRegions[0].region}, {shownRegions[0].commune}
+                              {villageName}, {regions[0].commune ?? regions[0].county}
                             </em>
                             .
                           </p>
@@ -374,7 +408,7 @@ export default function AnalyzePage() {
                           {shownRegions.map((r) => (
                             <li key={r.regionId}>
                               <button type="button" className="region-option" onClick={() => chooseRegion(r)}>
-                                <strong>{r.region}</strong>
+                                <strong>{regionName(r)}</strong>
                                 <span>{regionLabel(r)}</span>
                               </button>
                             </li>
@@ -388,7 +422,7 @@ export default function AnalyzePage() {
                 <>
                   <div className="region-chosen">
                     <div>
-                      <strong>{region.region}</strong>
+                      <strong>{regionName(region)}</strong>
                       <span className="muted small"> — {regionLabel(region)}</span>
                     </div>
                     <button type="button" className="btn-link small" onClick={clearRegion}>

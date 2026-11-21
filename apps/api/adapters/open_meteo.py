@@ -26,6 +26,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from .base import PartialResult, run_adapter
+from .dates import shift_years, today_pl  # noqa: F401 — re-exported for callers of this module
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -56,24 +57,12 @@ Day = list  # [p, et0, t]
 # --------------------------------------------------------------------------- dates
 
 
-def today_pl() -> date:
-    return datetime.now(TZ).date()
-
-
 def parse_date(value: date | str) -> date:
     if isinstance(value, datetime):
         return value.date()
     if isinstance(value, date):
         return value
     return date.fromisoformat(str(value).strip()[:10])
-
-
-def shift_years(d: date, years: int) -> date:
-    """Same calendar day `years` later/earlier; 29 Feb -> 28 Feb in non-leap years."""
-    try:
-        return d.replace(year=d.year + years)
-    except ValueError:
-        return d.replace(year=d.year + years, day=28)
 
 
 # --------------------------------------------------------------------------- FAO-56 ET0

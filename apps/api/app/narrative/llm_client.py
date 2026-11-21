@@ -17,8 +17,13 @@ async def ollama_chat(
     settings: Settings,
     system: str,
     user: str,
+    timeout_s: float | None = None,
 ) -> str | None:
-    """Call Ollama chat API. Returns content string or None on failure."""
+    """Call Ollama chat API. Returns content string or None on failure.
+
+    `timeout_s` caps this call (e.g. time left in the /analyze budget); default from settings.
+    """
+    timeout = settings.ollama_timeout_s if timeout_s is None else timeout_s
     url = f"{settings.ollama_base_url.rstrip('/')}/api/chat"
     payload: dict[str, Any] = {
         "model": settings.ollama_model,
@@ -34,7 +39,7 @@ async def ollama_chat(
         ],
     }
     try:
-        async with httpx.AsyncClient(timeout=settings.ollama_timeout_s) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             resp = await client.post(url, json=payload)
             resp.raise_for_status()
             data = resp.json()

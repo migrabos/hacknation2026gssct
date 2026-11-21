@@ -9,8 +9,7 @@
  *   GET  /crops
  *   GET  /plot/by-id?id=...
  *   GET  /plot/by-point?lat=...&lng=...
- *   GET  /plot/regions?q=...            (village search, diacritic-insensitive prefix)
- *   GET  /plot/regions/{regionId}       (one village + bbox)
+ *   GET  /plot/regions?q=...            (obręby / villages by exact name)
  *   GET  /plot/by-region?regionId=...&nr=...
  *   POST /analyze
  */
@@ -22,7 +21,6 @@ import type {
   Plot,
   Position,
   Region,
-  RegionSearch,
   Report,
 } from "./types";
 import mockCrops from "@/mocks/crops.json";
@@ -133,23 +131,21 @@ const mockApi = {
     if (id.trim() === MOCK_NOT_FOUND_ID) throw new ApiError("not_found");
     return { ...(mockPlot as Plot), plotId: id.trim() };
   },
-  async searchRegions(q: string): Promise<RegionSearch> {
+  async searchRegions(q: string): Promise<Region[]> {
     await sleep(300);
     const name = q.split(",")[0].trim();
-    if (name.length < 2) return { regions: [], total: 0 };
+    if (name.length < 2) return [];
     const p = mockPlot as Plot;
-    const regions: Region[] = [
+    return [
       { regionId: "141201_1.0001", region: name, commune: p.commune ?? "Gmina demo", county: p.county, voivodeship: p.voivodeship, bbox: p.bbox },
       { regionId: "022503_5.0003", region: name, commune: "Bogatynia", county: "powiat zgorzelecki", voivodeship: "dolnośląskie", bbox: [14.935, 51.009, 14.971, 51.034] },
     ];
-    return { regions, total: regions.length };
-  },
-  async regionDetails(regionId: string): Promise<Region> {
-    await sleep(200);
-    return { regionId, bbox: (mockPlot as Plot).bbox };
   },
   async plotByRegion(regionId: string, nr: string): Promise<Plot> {
     return mockApi.plotById(`${regionId}.${nr.trim()}`);
+  },
+  async regionExtent(regionId: string): Promise<Region["bbox"]> {
+    return regionId === "022503_5.0003" ? [14.935, 51.009, 14.971, 51.034] : ((mockPlot as Plot).bbox ?? null);
   },
   async plotByPoint(lat: number, lng: number): Promise<Plot> {
     await sleep(400);
@@ -179,8 +175,10 @@ const realApi = {
   plotById: (id: string) => request<Plot>(`/plot/by-id?id=${encodeURIComponent(id.trim())}`),
   plotByPoint: (lat: number, lng: number) =>
     request<Plot>(`/plot/by-point?lat=${lat}&lng=${lng}`),
-  searchRegions: (q: string) => request<RegionSearch>(`/plot/regions?q=${encodeURIComponent(q.trim())}`),
-  regionDetails: (regionId: string) => request<Region>(`/plot/regions/${encodeURIComponent(regionId)}`),
+  searchRegions: (q: string) => request<Region[]>(`/plot/regions?q=${encodeURIComponent(q.trim())}`),
+  regionExtent: async (regionId: string): Promise<Region["bbox"]> =>
+    (await request<{ bbox: Region["bbox"] }>(`/plot/region-extent?regionId=${encodeURIComponent(regionId)}`, {}, 12_000))
+      .bbox ?? null,
   plotByRegion: (regionId: string, nr: string) =>
     request<Plot>(
       `/plot/by-region?regionId=${encodeURIComponent(regionId)}&nr=${encodeURIComponent(nr.trim().replace(/\s+/g, ""))}`,
@@ -258,8 +256,8 @@ export const api = {
   },
   getCrops: () => _baseApi.getCrops(),
   searchRegions: (q: string) => _baseApi.searchRegions(q),
-  regionDetails: (regionId: string) => _baseApi.regionDetails(regionId),
   plotByRegion: (regionId: string, nr: string) => _baseApi.plotByRegion(regionId, nr),
+  regionExtent: (regionId: string) => _baseApi.regionExtent(regionId),
   plotById: async (id: string) => {
     const p = await _baseApi.plotById(id);
     // #region agent log

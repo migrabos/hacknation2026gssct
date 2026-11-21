@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 
 from app.config import get_settings
 from app.narrative.llm_client import ollama_chat
@@ -14,20 +15,37 @@ from app.schemas.evidence import Narrative, Report
 logger = logging.getLogger(__name__)
 
 
-async def narrate(report: Report) -> Narrative:
+async def narrate(report: Report, *, deadline: float | None = None) -> Narrative:
+    """`deadline` is a time.perf_counter() value; the LLM never runs past it.
+
+    Too little time left → template right away; the stricter retry only runs when
+    there is still enough time for a full call.
+    """
     settings = get_settings()
     if not settings.llm_enabled:
         return build_template_narrative(report)
 
+    def time_left() -> float:
+        return float("inf") if deadline is None else deadline - time.perf_counter()
+
+    def call_timeout() -> float:
+        return min(settings.ollama_timeout_s, time_left())
+
+    if time_left() < settings.llm_min_time_s:
+        logger.info("Analyze budget nearly used (%.1fs left) — template narrative", time_left())
+        return build_template_narrative(report)
+
     user = build_user_prompt(report, stricter=False)
-    raw = await ollama_chat(settings=settings, system=SYSTEM_PROMPT, user=user)
+    raw = await ollama_chat(settings=settings, system=SYSTEM_PROMPT, user=user, timeout_s=call_timeout())
     narrative = _try_validate(raw, report)
 
     if narrative is None and raw is not None:
-        # One stricter retry
-        user2 = build_user_prompt(report, stricter=True)
-        raw2 = await ollama_chat(settings=settings, system=SYSTEM_PROMPT, user=user2)
-        narrative = _try_validate(raw2, report)
+        if time_left() >= settings.llm_retry_min_time_s:
+            user2 = build_user_prompt(report, stricter=True)
+            raw2 = await ollama_chat(settings=settings, system=SYSTEM_PROMPT, user=user2, timeout_s=call_timeout())
+            narrative = _try_validate(raw2, report)
+        else:
+            logger.info("Skipping stricter LLM retry (%.1fs left)", time_left())
 
     if narrative is None:
         logger.info("Falling back to template narrative")

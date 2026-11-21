@@ -31,6 +31,12 @@ class Settings(BaseSettings):
 
     adapter_timeout_s: float = 20.0
 
+    # Whole /analyze target. The LLM only gets whatever time is left after the
+    # data + engine steps; when too little is left, the template narrative is used.
+    analyze_budget_s: float = 30.0
+    llm_min_time_s: float = 4.0      # less than this left → skip LLM, use template
+    llm_retry_min_time_s: float = 10.0  # stricter retry only if at least this much is left
+
 
 @lru_cache
 def get_settings() -> Settings:

@@ -20,7 +20,7 @@ import asyncio
 import hashlib
 import json
 import math
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import Any
 
 import httpx
@@ -36,6 +36,7 @@ from rasterio.windows import transform as window_transform
 from shapely.geometry import box, mapping, shape
 
 from .base import PartialResult, run_adapter
+from .dates import today_pl
 
 STAC_URL = "https://earth-search.aws.element84.com/v1/search"
 COLLECTION = "sentinel-2-l2a"
@@ -65,7 +66,7 @@ GDAL_ENV = {
 
 
 def _today() -> date:
-    return datetime.now(timezone.utc).date()
+    return today_pl()
 
 
 def _parse_date(value: date | str) -> date:

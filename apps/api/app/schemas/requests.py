@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 from pydantic import BaseModel, Field, model_validator
+
+from adapters.dates import shift_years, today_pl
 
 
 class AnalyzeRequest(BaseModel):
@@ -32,8 +34,8 @@ class AnalyzeRequest(BaseModel):
             self.plotId = self.plotId.strip()  # type: ignore[union-attr]
             self.lat = self.lng = None
 
-        today = date.today()
-        earliest = today - timedelta(days=365 * 10)
+        today = today_pl()  # Polish time, same as the date picker in the browser
+        earliest = shift_years(today, -10)  # calendar years, same as the web form's min date
         if self.analysisDate > today:
             raise ValueError("analysisDate nie może być w przyszłości.")
         if self.analysisDate < earliest:
