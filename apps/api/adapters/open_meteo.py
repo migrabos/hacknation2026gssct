@@ -266,6 +266,7 @@ def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], l
 
     values = {
         "analysis_date": d.isoformat(),
+        "precip_monthly": monthly_precip(series, d),
         "precip_30d": None if p30 is None else round(p30, 1),
         "et0_30d": None if e30 is None else round(e30, 1),
         "kbw_30d": kbw30,
@@ -282,6 +283,35 @@ def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], l
         "temp_mean_30d": t30,
     }
     return values, errors
+
+
+def _month_start(d: date, back: int) -> date:
+    m = d.year * 12 + d.month - 1 - back
+    return date(m // 12, m % 12 + 1, 1)
+
+
+def monthly_precip(series: dict[date, Day], d: date, months: int = 12) -> list[dict[str, Any]]:
+    """Precipitation per calendar month for the last `months` months ending at `d`
+    (the analysis month is partial: 1st..d), each next to the mean of the same
+    day-range in up to YEARS_BACK previous years (only complete years count)."""
+    out: list[dict[str, Any]] = []
+    for back in range(months - 1, -1, -1):
+        first = _month_start(d, back)
+        last = d if back == 0 else _month_start(d, back - 1) - timedelta(days=1)
+        n = (last - first).days + 1
+        p = _sum(_window(series, last, n), 0)
+        prev = [
+            v for k in range(1, YEARS_BACK + 1)
+            if (v := _sum(_window(series, shift_years(last, -k), n), 0)) is not None
+        ]
+        out.append({
+            "month": first.strftime("%Y-%m"),
+            "precip": None if p is None else round(p, 1),
+            "normal": round(sum(prev) / len(prev), 1) if len(prev) >= 5 else None,
+            "years": len(prev),
+            "partial": back == 0 and last != _month_start(d, -1) - timedelta(days=1),
+        })
+    return out
 
 
 # --------------------------------------------------------------------------- public API
@@ -301,7 +331,8 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     today = today_pl()
     recent = (today - d).days <= RECENT_DAYS
     # Start 10 years back *minus* one window so the oldest comparison year is complete.
-    start = shift_years(d, -YEARS_BACK) - timedelta(days=WINDOW_60)
+    # One extra year so the 12-month histogram has 10 comparison years for every month.
+    start = shift_years(d, -YEARS_BACK - 1) - timedelta(days=WINDOW_60)
     end = min(d, today)
 
     async def fetch() -> dict[str, Any] | PartialResult:
@@ -360,7 +391,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     res = await run_adapter(
         "Open-Meteo",
         ARCHIVE_URL,
-        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 2},
+        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 3},
         fetch,
         cache_ttl_sec=3600 if recent else None,
     )

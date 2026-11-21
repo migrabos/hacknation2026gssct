@@ -1,7 +1,7 @@
 """Evidence / Report truth models.
 
 1:1 mirror of `apps/web/lib/types.ts` — that file is the shared contract.
-Change field names in BOTH places (and in `apps/web/mocks/*.json`) or not at all.
+Change field names in BOTH places or not at all.
 Extra backend-only fields (scores, meta) are allowed; the UI ignores them.
 """
 
@@ -48,10 +48,43 @@ class Terrain(BaseModel):
     runoffRisk: RiskLevel | None = None
 
 
+class RetentionSpot(BaseModel):
+    """Lowest sampled NMT point of the plot – suggested place for a pond / micro-retention.
+
+    lat/lng are None when no place is suggested (flat plot, coarse or missing DEM).
+    """
+    lat: float | None = None
+    lng: float | None = None
+    elevationM: float | None = None
+    elevationDropM: float | None = None  # highest − lowest sampled point
+    pointsSampled: int | None = None
+    gridSpacingM: float | None = None  # ≈ accuracy of the location
+    nearEdge: bool | None = None
+    confidence: Confidence
+    reason: str
+
+
 class Hydro(BaseModel):
     nearbyWater: bool | None = None
     distanceClass: str | None = None
     missing: bool | None = None
+
+
+LandUseCategory = Literal[
+    "arable", "meadow", "pasture", "orchard", "farmyard", "forest", "woodland",
+    "built", "transport", "water", "wetland", "bare", "other", "mixed",
+]
+
+
+class LandUse(BaseModel):
+    category: LandUseCategory | None = None
+    labelPl: str | None = None
+    isAgricultural: bool | None = None
+    source: Literal["egib"] | None = None  # official land register only – never inferred
+    uses: list[str] = Field(default_factory=list)  # all official uses on the parcel (EGiB)
+    codes: list[str] = Field(default_factory=list)  # raw EGiB contour codes, e.g. RIIIa, Br/PsIV
+    soilClasses: list[str] = Field(default_factory=list)  # EGiB soil valuation classes, e.g. IIIa
+    notes: list[str] = Field(default_factory=list)
 
 
 class Source(BaseModel):
@@ -77,7 +110,9 @@ class Plot(BaseModel):
     county: str | None = None
     commune: str | None = None
     terrain: Terrain | None = None
+    retentionSpot: RetentionSpot | None = None
     hydro: Hydro | None = None
+    landUse: LandUse | None = None
     sources: list[Source] | None = None
     fetchedAt: str | None = None
 
@@ -172,10 +207,20 @@ class Narrative(BaseModel):
 
 class ReportMeta(BaseModel):
     engineVersion: str
-    adapters: Literal["live", "mock"]
+    adapters: Literal["live"]
     llmEnabled: bool
     llmModel: str | None = None
     durationMs: int = 0
+
+
+class PrecipMonth(BaseModel):
+    """One histogram bar: precipitation in a calendar month vs the multi-year mean."""
+
+    month: str  # YYYY-MM
+    precipMm: float | None = None
+    normalMm: float | None = None  # mean of the same day-range in previous years
+    normalYears: int = 0  # how many years the mean is based on
+    partial: bool = False  # analysis month: counted only up to analysisDate
 
 
 class Report(BaseModel):
@@ -191,6 +236,7 @@ class Report(BaseModel):
     causes: list[Cause] = Field(default_factory=list)
     recommendations: Recommendations
     evidence: list[Evidence] = Field(default_factory=list)
+    precipMonthly: list[PrecipMonth] = Field(default_factory=list)  # last 12 months, oldest first
     sources: list[Source] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     missingData: list[MissingData] = Field(default_factory=list)

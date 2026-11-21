@@ -1,7 +1,6 @@
 """Runtime configuration from environment."""
 
 from functools import lru_cache
-from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -14,10 +13,6 @@ class Settings(BaseSettings):
     )
 
     engine_version: str = "0.2.0"
-
-    # "live" = real public data (ULDK, Open-Meteo, SoilGrids, NMT, OSM, Sentinel-2, EDO)
-    # "mock" = deterministic DEMO data (tests / offline)
-    adapters: Literal["live", "mock"] = "live"
 
     # Comma-separated list of allowed browser origins ("*" = any)
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
@@ -34,6 +29,7 @@ class Settings(BaseSettings):
     # Whole /analyze target. The LLM only gets whatever time is left after the
     # data + engine steps; when too little is left, the template narrative is used.
     analyze_budget_s: float = 30.0
+    data_budget_s: float = 25.0      # all data adapters together (plot + terrain + meteo + …)
     llm_min_time_s: float = 4.0      # less than this left → skip LLM, use template
     llm_retry_min_time_s: float = 10.0  # stricter retry only if at least this much is left
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 
+from adapters.base import adapter_deadline
 from app.adapters import fetch_bundle
 from app.config import get_settings
 from app.crops.catalog import get_crop
@@ -19,12 +20,14 @@ async def analyze(req: AnalyzeRequest) -> Report:
     deadline = t0 + get_settings().analyze_budget_s
     get_crop(req.cropId)  # validate early (clear PL error)
 
-    bundle = await fetch_bundle(
-        plot_id=req.plotId,
-        lat=req.lat,
-        lng=req.lng,
-        analysis_date=req.analysisDate,
-    )
+    # Every source shares one deadline: a slow one is cut (→ missingData), never the whole report.
+    with adapter_deadline(get_settings().data_budget_s):
+        bundle = await fetch_bundle(
+            plot_id=req.plotId,
+            lat=req.lat,
+            lng=req.lng,
+            analysis_date=req.analysisDate,
+        )
     report = run_engine(
         bundle=bundle,
         crop_id=req.cropId,

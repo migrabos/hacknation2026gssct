@@ -21,6 +21,7 @@ from app.schemas.evidence import Evidence, MissingData, Source
 SRC_ULDK = "uldk"
 SRC_DEM = "dem"
 SRC_HYDRO = "hydro"
+SRC_LAND = "land_use"
 SRC_METEO = "open_meteo"
 SRC_SOIL = "soilgrids"
 SRC_SAT = "sentinel2"
@@ -74,6 +75,12 @@ class Facts:
     nearby_water: bool | None = None
     water_dist: float | None = None
     water_type: str | None = None
+    # land use (EGiB register only)
+    land_category: str | None = None
+    land_label: str | None = None
+    land_source: str | None = None
+    land_soil_classes: list[str] = field(default_factory=list)
+    land_agri: bool | None = None
     # satellite / drought
     ndvi: float | None = None
     ndvi_date: str | None = None
@@ -113,6 +120,7 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
     dr = bundle.drought.get("values") or {}
     terrain = bundle.plot.get("terrain") or {}
     hydro = bundle.plot.get("hydro") or {}
+    lu = bundle.plot.get("landUse") or {}
 
     runoff = terrain.get("runoffRisk")
     cdi = dr.get("cdi_class")
@@ -137,6 +145,11 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry) -> Facts:
         nearby_water=hydro.get("nearbyWater") if not hydro.get("missing") else None,
         water_dist=_num(hydro.get("nearestDistanceM")),
         water_type=hydro.get("nearestType"),
+        land_category=lu.get("category"),
+        land_label=lu.get("labelPl"),
+        land_source=lu.get("source"),
+        land_soil_classes=list(lu.get("soilClasses") or []),
+        land_agri=lu.get("isAgricultural"),
         ndvi=_num(sat.get("ndvi_mean")),
         ndvi_date=sat.get("scene_date"),
         cdi=int(cdi) if isinstance(cdi, (int, float)) else None,
@@ -194,6 +207,14 @@ def build_evidence(f: Facts, crop: CropEntry) -> list[Evidence]:
         else:
             add("ev_water", "Woda w pobliżu działki", "nie znaleziono w promieniu 500 m", SRC_HYDRO,
                 comparison="rowy mogą być niezmapowane – sprawdź na miejscu")
+
+    if f.land_label:
+        parts = ["z ewidencji gruntów (EGiB)"]
+        if f.land_soil_classes:
+            parts.append("klasa gleby " + ", ".join(f.land_soil_classes))
+        if f.land_agri is False:
+            parts.append("nie jest to pole, łąka, pastwisko ani sad")
+        add("ev_land_use", "Rodzaj użytku na działce", f.land_label, SRC_LAND, comparison="; ".join(parts))
 
     add("ev_ndvi", "Kondycja roślin z satelity (NDVI)", f.ndvi, SRC_SAT,
         comparison=f"zdjęcie z {f.ndvi_date}; 0 = goła gleba, >0,6 = gęsta zieleń" if f.ndvi_date else None)
@@ -266,6 +287,18 @@ def build_sources(bundle: AdapterBundle, analysis_date: date) -> list[Source]:
                       status="ok" if hydro_ok else "failed", license=lic or license_for("OpenStreetMap"),
                       error=None if hydro_ok else (note("Cieki") or str(hydro.get("missing")))))
 
+    lu = plot.get("landUse")
+    if lu is not None:  # None = context not computed (old cache / mock) → no source row
+        prov, url, fetched, lic = _providers(pick("KIEG"))
+        lu_ok = lu.get("category") is not None
+        out.append(Source(
+            id=SRC_LAND, name="Rodzaj użytku (ewidencja gruntów)",
+            provider=prov or "GUGiK KIEG (EGiB)", url=url, fetchedAt=fetched, mode="live",
+            status="ok" if lu_ok else "failed", license=lic or license_for("KIEG GUGiK"),
+            dataPeriod=f"ewidencja gruntów EGiB, publikacja {(lu.get('egib') or {}).get('dataDate')}"
+            if (lu.get("egib") or {}).get("dataDate") else None,
+            error=None if lu_ok else ("; ".join(lu.get("notes") or []) or "brak danych o użytkowaniu")))
+
     mv = bundle.meteo.get("values") or {}
     start = shift_years(analysis_date, -10)
     out.append(_from_resp(SRC_METEO, "Pogoda (opady, parowanie, temperatura)", bundle.meteo,
@@ -293,6 +326,9 @@ _MISSING_COPY: dict[str, tuple[str, str]] = {
               "Nie oceniamy dokładnie spływu wody z pola – zalecenia przeciw spływowi są ostrożniejsze."),
     SRC_HYDRO: ("Rowy i cieki w pobliżu",
                 "Nie wiemy, czy przy działce jest rów – zalecenie retencji w rowie sprawdź na miejscu."),
+    SRC_LAND: ("Rodzaj użytku z ewidencji gruntów (pole, łąka, las…)",
+               "Nie potwierdzamy, czy to pole, łąka czy inny użytek – sprawdź, czy wybrana uprawa "
+               "zgadza się ze stanem faktycznym."),
     SRC_METEO: ("Dane pogodowe",
                 "Bez opadów i parowania ocena wilgotności jest mniej pewna."),
     SRC_SOIL: ("Dane o glebie",

@@ -51,11 +51,11 @@ Moisture level (now): point score from precip ratio, KBW percentile, dry spell, 
 Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
 All constants live at the top of `apps/api/app/engine/assess.py`. Raw inputs for recomputation are in the adapter values (e.g. `kbw_30d_prev_years`, `kbw_summer_by_year`, soil `layers`).
 
-Inspect `causes[].evidenceRefs` and matching adapter `values` in the response / mock bundle.
+Inspect `causes[].evidenceRefs` and matching adapter `values` in the response.
 
 ## 4. Evidence IDs on the fixture
 
-Open [`fixtures/mock_evidence_sample.json`](../fixtures/mock_evidence_sample.json):
+Open [`fixtures/evidence_sample.json`](../fixtures/evidence_sample.json):
 
 - Every cause and recommendation lists `evidenceRefs`.
 - UI should surface these as “dlaczego”.

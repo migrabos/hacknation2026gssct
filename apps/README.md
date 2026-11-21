@@ -24,7 +24,7 @@ See the [root README](../README.md) for env vars, architecture, and verification
 
 ```text
 app/
-  adapters/    mock GIS/meteo/soil (Person 2 swaps live)
+  adapters/    live GIS/meteo/soil/sat/drought bundle
   engine/      deterministic assess → causes → ranked actions
   narrative/   Ollama narrator + Polish template fallback
   schemas/     Evidence / Report / request models

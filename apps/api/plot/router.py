@@ -11,7 +11,6 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.config import get_settings
 from app.plot_dto import plot_to_dto
 
 from .resolver import (
@@ -31,14 +30,6 @@ from .region_index import search as region_index_search
 router = APIRouter(prefix="/plot", tags=["plot"])
 
 
-def _mock(plot_id: str | None = None, lat: float | None = None, lng: float | None = None) -> dict[str, Any] | None:
-    if get_settings().adapters != "mock":
-        return None
-    from app.adapters.mocks import mock_plot
-
-    return plot_to_dto(mock_plot(plot_id, lat, lng)).model_dump(exclude_none=True)
-
-
 async def _guard(coro) -> dict[str, Any]:
     try:
         return plot_to_dto(await coro).model_dump(exclude_none=True)
@@ -52,12 +43,29 @@ async def _guard(coro) -> dict[str, Any]:
         raise HTTPException(500, detail=str(exc)) from exc
 
 
+async def _list_regions(q: str) -> list[dict[str, Any]]:
+    """Grabos/PRG index first; ULDK/brtk search_regions as fallback."""
+    if load_index():
+        if len(norm(q.partition(",")[0])) < 2:
+            raise HTTPException(422, detail="Wpisz co najmniej 2 litery nazwy miejscowości.")
+        return region_index_search(q)[0]
+    try:
+        raw = await search_regions(q)
+    except InvalidPlotInput as exc:
+        raise HTTPException(422, detail=str(exc)) from exc
+    except PlotServiceUnavailable as exc:
+        raise HTTPException(503, detail=str(exc)) from exc
+    if isinstance(raw, dict) and "regions" in raw:
+        return list(raw["regions"])
+    return list(raw)
+
+
 @router.get("/by-id")
 async def plot_by_id(
     id: str = Query(..., description="Identyfikator działki, np. 040308_5.0004.17220"),
     context: bool = Query(False, description="Dołącz spadek terenu i wody w pobliżu (wolniej)"),
 ):
-    return _mock(plot_id=id.strip()) or await _guard(resolve_plot(id, with_context=context))
+    return await _guard(resolve_plot(id, with_context=context))
 
 
 @router.get("/by-point")
@@ -66,39 +74,18 @@ async def plot_by_point(
     lng: float = Query(..., ge=-180, le=180, description="Długość geograficzna (WGS84)"),
     context: bool = Query(False, description="Dołącz spadek terenu i wody w pobliżu (wolniej)"),
 ):
-    return _mock(lat=lat, lng=lng) or await _guard(resolve_point(lat, lng, with_context=context))
+    return await _guard(resolve_point(lat, lng, with_context=context))
 
 
 @router.get("/regions")
 async def plot_regions(q: str = Query(..., description="Pełna nazwa miejscowości / obrębu, np. Krzewina")):
     """Cadastral precincts (obręby) with this name, with commune/county/voivodeship + bbox."""
-    if get_settings().adapters == "mock":
-        from app.adapters.mocks import mock_plot
-
-        p = mock_plot(None, None, None)
-        rid = ".".join(str(p.get("plotId", "000000_0.0000.0")).split(".")[:2])
-        return [{"regionId": rid, "region": q.strip(), "commune": p.get("commune"), "county": p.get("county"),
-                 "voivodeship": p.get("voivodeship"), "bbox": p.get("bbox")}]
-    # Offline PRG index first: prefix / no-diacritics / by-gmina search, ~instant.
-    if load_index():
-        if len(norm(q.partition(",")[0])) < 2:
-            raise HTTPException(422, detail="Wpisz co najmniej 2 litery nazwy miejscowości.")
-        return region_index_search(q)[0]
-    try:
-        return await search_regions(q.partition(",")[0])  # ULDK: exact obręb name only
-    except InvalidPlotInput as exc:
-        raise HTTPException(422, detail=str(exc)) from exc
-    except PlotServiceUnavailable as exc:
-        raise HTTPException(503, detail=str(exc)) from exc
+    return await _list_regions(q)
 
 
 @router.get("/region-extent")
 async def plot_region_extent(regionId: str = Query(..., description="Identyfikator obrębu, np. 060504_2.0013")):
     """[min_lng, min_lat, max_lng, max_lat] of an obręb (to zoom the map), or null if ULDK can't say."""
-    if get_settings().adapters == "mock":
-        from app.adapters.mocks import mock_plot
-
-        return {"regionId": regionId, "bbox": mock_plot(None, None, None).get("bbox")}
     try:
         return {"regionId": regionId, "bbox": await region_extent(regionId)}
     except InvalidPlotInput as exc:
@@ -111,12 +98,10 @@ async def plot_by_region(
     nr: str = Query(..., description="Numer działki w obrębie, np. 134 lub 134/2"),
     context: bool = Query(False),
 ):
-    if get_settings().adapters == "mock":
-        return _mock(plot_id=f"{regionId.strip()}.{nr.strip()}")
     return await _guard(resolve_region_parcel(regionId, nr, with_context=context))
 
 
 # Must stay last: `:path` also matches "by-id" / "by-point" and IDs containing "/" (e.g. 123/4).
 @router.get("/{plot_id:path}")
 async def plot_by_path(plot_id: str, context: bool = Query(False)):
-    return _mock(plot_id=plot_id) or await _guard(resolve_plot(plot_id, with_context=context))
+    return await _guard(resolve_plot(plot_id, with_context=context))

@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   GeoJSON,
   MapContainer,
+  Marker,
   ScaleControl,
   TileLayer,
   WMSTileLayer,
@@ -23,8 +24,9 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import type { Plot } from "@/lib/types";
+import type { Plot, RetentionSpot } from "@/lib/types";
 import { LocateIcon } from "./Icons";
 
 const POLAND_CENTER: LatLngExpression = [52.07, 19.48];
@@ -83,6 +85,7 @@ export default function MapPicker({
   }
 
   return (
+    <div className="map-block">
     <div className="map-wrap" style={{ height }}>
       <MapContainer
         center={POLAND_CENTER}
@@ -123,28 +126,10 @@ export default function MapPicker({
           maxZoom={19}
           opacity={basemap === "orto" ? 0.95 : 0.8}
           attribution="działki: GUGiK KIEG"
-          eventHandlers={{
-            // #region agent log
-            tileerror: (e) => {
-              fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-                method: "POST",
-                headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-                body: JSON.stringify({
-                  sessionId: "68e619",
-                  runId: "pre-fix",
-                  hypothesisId: "H4",
-                  location: "MapPicker.tsx:KIEG",
-                  message: "KIEG WMS tileerror",
-                  data: { coords: (e as { coords?: unknown }).coords ?? null },
-                  timestamp: Date.now(),
-                }),
-              }).catch(() => {});
-            },
-            // #endregion
-          }}
         />
 
         {plot && <PlotShape plot={plot} onOrto={basemap === "orto"} />}
+        {plot?.retentionSpot && <RetentionSpotMarker spot={plot.retentionSpot} />}
         {!plot && focusBbox && <FocusBounds bbox={focusBbox} />}
 
         <ScaleControl position="bottomleft" imperial={false} />
@@ -162,6 +147,59 @@ export default function MapPicker({
           </span>
         </div>
       )}
+    </div>
+    {plot?.retentionSpot && <RetentionLegend spot={plot.retentionSpot} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Retention spot = lowest sampled NMT point of the plot (computed in apps/api).
+
+const fmtPl = (x: number, digits = 1) => x.toFixed(digits).replace(".", ",");
+
+const RETENTION_ICON = L.divIcon({
+  className: "retention-dot-icon",
+  html: '<span class="retention-dot" aria-hidden="true"></span>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+function hasLocation(spot: RetentionSpot): spot is RetentionSpot & { lat: number; lng: number } {
+  return typeof spot.lat === "number" && typeof spot.lng === "number";
+}
+
+function RetentionSpotMarker({ spot }: { spot: RetentionSpot }) {
+  if (!hasLocation(spot)) return null;
+  // Plain map symbol – all details are in the legend under the map (no hover tooltip).
+  return <Marker position={[spot.lat, spot.lng]} icon={RETENTION_ICON} interactive={false} keyboard={false} />;
+}
+
+function RetentionLegend({ spot }: { spot: RetentionSpot }) {
+  if (!hasLocation(spot)) {
+    return (
+      <div className="map-legend" role="note">
+        <span>
+          <strong>Miejsce retencji wody nie zostało wskazane.</strong> {spot.reason}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="map-legend" role="note">
+      <span className="retention-dot" aria-hidden="true" />
+      <span>
+        <strong>Sugerowane miejsce retencji wody</strong> – najniższy punkt działki, gdzie naturalnie spływa woda
+        opadowa; możliwe miejsce na oczko wodne lub zbiornik.
+        {spot.elevationDropM != null && <> Różnica wysokości na działce: {fmtPl(spot.elevationDropM)} m.</>}
+        {spot.nearEdge && <> Punkt leży blisko granicy – zachowaj bezpieczną odległość od działki sąsiada.</>}
+        {spot.confidence === "medium" && <> Teren mało zróżnicowany – wskazanie orientacyjne.</>}
+        <span className="retention-legend-meta">
+          {" "}
+          ({spot.pointsSampled ?? "kilkadziesiąt"} pomiarów NMT GUGiK
+          {spot.gridSpacingM != null && <>, dokładność ok. {Math.round(spot.gridSpacingM)} m</>})
+        </span>
+      </span>
     </div>
   );
 }
@@ -195,44 +233,7 @@ function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
 
   useEffect(() => {
     map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17, animate: true });
-    // #region agent log
-    const ring =
-      plot.geometry?.type === "Polygon"
-        ? plot.geometry.coordinates?.[0]
-        : plot.geometry?.type === "MultiPolygon"
-          ? plot.geometry.coordinates?.[0]?.[0]
-          : undefined;
-    const first = ring?.[0];
-    const mapCenter = map.getCenter();
-    const mapZoom = map.getZoom();
-    fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-      body: JSON.stringify({
-        sessionId: "68e619",
-        runId: "pre-fix",
-        hypothesisId: "H5",
-        location: "MapPicker.tsx:PlotShape",
-        message: "fitBounds + geometry for overlay",
-        data: {
-          plotId: plot.plotId,
-          bbox: plot.bbox,
-          fitBoundsSWNE: [
-            [plot.bbox[1], plot.bbox[0]],
-            [plot.bbox[3], plot.bbox[2]],
-          ],
-          firstCoord: first,
-          geomType: plot.geometry?.type,
-          ringLen: ring?.length,
-          mapCenter: { lat: mapCenter.lat, lng: mapCenter.lng },
-          mapZoom,
-          onOrto,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-    // #endregion
-  }, [map, bounds, plot, onOrto]);
+  }, [map, bounds]);
 
   const stroke = onOrto ? "#3fe07f" : "#0f6b3a";
   return (

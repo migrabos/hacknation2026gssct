@@ -13,7 +13,7 @@ from app.engine.causes import detect_causes
 from app.engine.facts import build_evidence, build_missing, build_sources, extract_facts
 from app.engine.rank import rank_recommendations
 from app.plot_dto import plot_to_dto
-from app.schemas.evidence import Crop, MissingData, Report, ReportMeta
+from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportMeta
 
 ENGINE_LIMITATIONS = [
     "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar "
@@ -24,9 +24,44 @@ ENGINE_LIMITATIONS = [
 ]
 
 
+_GRASS_LAND = {"meadow", "pasture"}
+GRASS_CROP = "uzytki_zielone"
+
+
+def _crop_land_use_mismatch(crop_id: str, crop_name: str, land_use: dict) -> str | None:
+    """Warn when the chosen crop does not fit the plot's land use (only for agricultural land;
+    non-agricultural plots already get a stronger warning from the plot resolver)."""
+    cat, label = land_use.get("category"), land_use.get("labelPl")
+    if not cat or not land_use.get("isAgricultural") or cat == "mixed":
+        return None
+    src = "w ewidencji gruntów (EGiB)"
+    if crop_id == GRASS_CROP and cat in ("arable", "orchard"):
+        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Sprawdź, czy wybór uprawy jest "
+                "właściwy – zalecenia zależą od uprawy.")
+    if crop_id != GRASS_CROP and cat in _GRASS_LAND:
+        return (f"UWAGA: wybrano uprawę „{crop_name}”, a działka {src} to {label}. Jeśli to trwały użytek "
+                "zielony, wybierz „Łąka / pastwisko” – zaorywanie trwałych użytków zielonych może być "
+                "ograniczone przepisami (ochrona TUZ w ramach WPR).")
+    return None
+
+
 def _report_id(plot_id: str, crop_id: str, analysis_date: date) -> str:
     raw = f"{plot_id}|{crop_id}|{analysis_date.isoformat()}"
     return f"r-{analysis_date.isoformat()}-{hashlib.sha256(raw.encode()).hexdigest()[:10]}"
+
+
+def _precip_monthly(bundle: AdapterBundle) -> list[PrecipMonth]:
+    rows = (bundle.meteo.get("values") or {}).get("precip_monthly") or []
+    out = []
+    for r in rows:
+        try:
+            out.append(PrecipMonth(
+                month=str(r["month"]), precipMm=r.get("precip"), normalMm=r.get("normal"),
+                normalYears=int(r.get("years") or 0), partial=bool(r.get("partial")),
+            ))
+        except Exception:
+            continue
+    return out
 
 
 def run_engine(
@@ -72,8 +107,9 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
-    if bundle.mode == "mock":
-        limitations.insert(0, "TRYB DEMO: dane są przykładowe (generowane), nie pochodzą z prawdziwych źródeł.")
+    mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})
+    if mismatch:
+        limitations.insert(0, mismatch)
 
     settings = get_settings()
     return Report(
@@ -87,6 +123,7 @@ def run_engine(
         causes=causes,
         recommendations=recommendations,
         evidence=evidence,
+        precipMonthly=_precip_monthly(bundle),
         sources=sources,
         limitations=limitations,
         missingData=missing,

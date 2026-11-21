@@ -5,7 +5,6 @@ import { useEffect, useMemo } from "react";
 import type { Confidence, Evidence, NarrativeSectionId, Recommendation, Report, Source } from "@/lib/types";
 import {
   CONFIDENCE_LABEL,
-  COST_LABEL,
   MOISTURE_SCALE,
   RISK_SCALE,
   SOURCE_MODE_LABEL,
@@ -16,6 +15,7 @@ import {
 } from "@/lib/labels";
 import Map from "./Map";
 import Notice from "./Notice";
+import RainChart from "./RainChart";
 import { PrintIcon } from "./Icons";
 import { sourcePage } from "@/lib/source-page";
 
@@ -39,10 +39,10 @@ const RISK_TONE: Record<string, string> = {
 
 const SECTIONS = [
   { id: "ocena", title: "Ocena wilgotności" },
-  { id: "przyczyny", title: "Dlaczego tak jest" },
+  { id: "przyczyny", title: "Możliwe przyczyny" },
   { id: "retencja", title: "Zatrzymaj wodę na polu" },
   { id: "agrotechnika", title: "Zmiany w uprawie gleby" },
-  { id: "nawadnianie", title: "Nawadnianie (opcjonalnie)" },
+  { id: "nawadnianie", title: "Nawadnianie" },
 ] as const;
 
 export default function ReportView({ report }: { report: Report }) {
@@ -56,7 +56,7 @@ export default function ReportView({ report }: { report: Report }) {
 
   // Open every "Na jakiej podstawie?" block when printing.
   useEffect(() => {
-    const open = () => document.querySelectorAll<HTMLDetailsElement>("details.evidence").forEach((d) => (d.open = true));
+    const open = () => document.querySelectorAll<HTMLDetailsElement>("details.evidence, details.sources-more, details.rain").forEach((d) => (d.open = true));
     window.addEventListener("beforeprint", open);
     return () => window.removeEventListener("beforeprint", open);
   }, []);
@@ -64,37 +64,11 @@ export default function ReportView({ report }: { report: Report }) {
   const { plot, moistureAssessment: ma, recommendations: rec } = report;
   const failedSources = report.sources.filter((s) => s.status !== "ok");
   const irrigation = rec.irrigation ?? [];
+  const landUse = plot.landUse;
+  const landUseWarnings = report.limitations.filter((l) => l.startsWith("UWAGA:"));
   const place = [plot.commune, plot.county && `pow. ${plot.county}`, plot.voivodeship && `woj. ${plot.voivodeship}`]
     .filter(Boolean)
     .join(", ");
-
-  // #region agent log
-  useEffect(() => {
-    const failedOrPartial = report.sources.filter((s) => s.status !== "ok").map((s) => s.id);
-    fetch("http://127.0.0.1:7469/ingest/78fee146-1b5b-4d90-8bb6-2bc46ba8b822", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "X-Debug-Session-Id": "68e619" },
-      body: JSON.stringify({
-        sessionId: "68e619",
-        runId: "pre-fix",
-        hypothesisId: "H1",
-        location: "ReportView.tsx:mount",
-        message: "report sources + plot for UI",
-        data: {
-          reportStatus: report.status,
-          meta: report.meta ?? null,
-          sources: report.sources.map((s) => ({ id: s.id, status: s.status, mode: s.mode, error: s.error ?? null })),
-          failedOrPartial,
-          plotId: plot.plotId,
-          centroid: plot.centroid,
-          bbox: plot.bbox,
-          geomType: plot.geometry?.type,
-        },
-        timestamp: Date.now(),
-      }),
-    }).catch(() => {});
-  }, [report]);
-  // #endregion
 
   return (
     <article className="report container">
@@ -123,12 +97,6 @@ export default function ReportView({ report }: { report: Report }) {
         </div>
       </header>
 
-      {report.meta?.adapters === "mock" && (
-        <Notice tone="warn" title="Tryb demonstracyjny — dane przykładowe" role="status">
-          <p>Serwer działa na danych przykładowych (DEMO), nie na prawdziwych pomiarach dla tej działki.</p>
-        </Notice>
-      )}
-
       {report.status === "partial" && (
         <Notice tone="warn" title="Raport niepełny — części danych nie udało się pobrać" role="status">
           <p>
@@ -141,11 +109,40 @@ export default function ReportView({ report }: { report: Report }) {
         </Notice>
       )}
 
+      {landUseWarnings.length > 0 && (
+        <Notice tone="warn" title="Sprawdź rodzaj użytku" role="status">
+          {landUseWarnings.map((w, i) => (
+            <p key={i}>{w.replace(/^UWAGA:\s*/, "")}</p>
+          ))}
+        </Notice>
+      )}
+
       <dl className="meta-grid">
         <div>
           <dt>Uprawa</dt>
           <dd>{report.crop.name}</dd>
         </div>
+        {landUse && (
+          <div>
+            <dt>Rodzaj użytku</dt>
+            {landUse.labelPl ? (
+              <dd>
+                {landUse.labelPl.charAt(0).toUpperCase() + landUse.labelPl.slice(1)}
+                {landUse.soilClasses && landUse.soilClasses.length > 0 && <>, klasa gleby {landUse.soilClasses.join(", ")}</>}
+                <span className="muted small" style={{ display: "block" }}>
+                  z ewidencji gruntów (EGiB){landUse.codes && landUse.codes.length > 0 && <>: {landUse.codes.join(", ")}</>}
+                </span>
+              </dd>
+            ) : (
+              <dd>
+                Brak danych
+                <span className="muted small" style={{ display: "block" }}>
+                  {landUse.notes?.[0] ?? "ewidencja gruntów nie podaje użytku dla tej działki"}
+                </span>
+              </dd>
+            )}
+          </div>
+        )}
         <div>
           <dt>Ocena na dzień</dt>
           <dd>{formatDate(report.analysisDate)}</dd>
@@ -187,7 +184,7 @@ export default function ReportView({ report }: { report: Report }) {
       </div>
 
       {/* ---------- 1. Assessment ---------- */}
-      <Section n={1} id="ocena" title="Ocena wilgotności" lead="Jak jest teraz i jak bywa na tej działce przez lata.">
+      <Section n={1} id="ocena" title="Ocena wilgotności" lead="Obecnie i w poprzednich latach">
         <div className="assess-grid">
           <div className="assess-card">
             <div className="assess-kicker">Teraz</div>
@@ -218,11 +215,12 @@ export default function ReportView({ report }: { report: Report }) {
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
         </div>
+        <RainChart months={report.precipMonthly ?? []} analysisDate={report.analysisDate} />
         <NarrativeNote text={narrative.get("assessment")} />
       </Section>
 
       {/* ---------- 2. Causes ---------- */}
-      <Section n={2} id="przyczyny" title="Dlaczego tak jest" lead="Najważniejsze przyczyny, od najpewniejszych.">
+      <Section n={2} id="przyczyny" title="Możliwe przyczyny" lead="Najważniejsze przyczyny, od najpewniejszych.">
         {report.causes.length === 0 ? (
           <p>Nie znaleźliśmy wyraźnych przyczyn niedoboru wody.</p>
         ) : (
@@ -268,7 +266,7 @@ export default function ReportView({ report }: { report: Report }) {
       <Section
         n={5}
         id="nawadnianie"
-        title="Nawadnianie (opcjonalnie)"
+        title="Nawadnianie"
         lead="Nawadnianie to ostateczność — najpierw warto zatrzymać wodę, która już spada na pole."
       >
         {irrigation.length > 0 ? (
@@ -285,16 +283,9 @@ export default function ReportView({ report }: { report: Report }) {
       </Section>
 
       {/* ---------- Sources, gaps, limitations ---------- */}
-      <section className="r-section" id="zrodla" aria-labelledby="zrodla-h">
-        <div className="r-section-head">
-          <div>
-            <h2 id="zrodla-h">Źródła danych i ograniczenia</h2>
-            <p className="muted">Każda liczba w raporcie pochodzi z jednego z tych źródeł. Pokazujemy też, czego nie wiemy.</p>
-          </div>
-        </div>
-
+      <section className="r-section sources-section" id="zrodla" aria-label="Źródła danych i ograniczenia">
         {report.missingData.length > 0 && (
-          <div id="braki" style={{ marginBottom: 28, scrollMarginTop: 16 }}>
+          <div id="braki" style={{ marginBottom: 20, scrollMarginTop: 16 }}>
             <h3>Czego brakuje w tym raporcie</h3>
             <ul className="missing-list">
               {report.missingData.map((m) => (
@@ -310,68 +301,71 @@ export default function ReportView({ report }: { report: Report }) {
           </div>
         )}
 
-        <h3>Skąd pochodzą dane</h3>
-        <div className="table-wrap" style={{ marginBottom: 28 }}>
-          <table className="data">
-            <thead>
-              <tr>
-                <th scope="col">Dane</th>
-                <th scope="col">Źródło</th>
-                <th scope="col">Stan</th>
-                <th scope="col">Okres / pobrano</th>
-              </tr>
-            </thead>
-            <tbody>
-              {report.sources.map((s) => (
-                <tr key={s.id}>
-                  <td>
-                    <strong>{s.name}</strong>
-                  </td>
-                  <td>
-                    <SourceLink source={s} />
-                    {s.license && <div className="small muted">Licencja: {s.license}</div>}
-                  </td>
-                  <td>
-                    <span className={`badge ${s.status === "ok" ? "badge-ok" : "badge-fail"}`}>
-                      {s.mode === "static" && s.status === "ok" ? "wbudowane" : SOURCE_STATUS_LABEL[s.status]}
-                    </span>
-                    {s.status === "ok" && s.mode !== "static" && (
-                      <div className="small muted">{SOURCE_MODE_LABEL[s.mode]}</div>
-                    )}
-                    {s.error && <div className="small muted">{s.error}</div>}
-                  </td>
-                  <td className="small">
-                    {s.dataPeriod && <div>{s.dataPeriod}</div>}
-                    {s.fetchedAt && <div className="muted">pobrano {formatDateTime(s.fetchedAt)}</div>}
-                  </td>
-                </tr>
+        <details className="sources-more">
+          <summary>Źródła danych i ograniczenia</summary>
+          <div className="sources-body">
+            <p className="muted small">Każda liczba w raporcie pochodzi z jednego z tych źródeł.</p>
+            <div className="table-wrap" style={{ marginBottom: 20 }}>
+              <table className="data">
+                <thead>
+                  <tr>
+                    <th scope="col">Dane</th>
+                    <th scope="col">Źródło</th>
+                    <th scope="col">Stan</th>
+                    <th scope="col">Okres / pobrano</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {report.sources.map((s) => (
+                    <tr key={s.id}>
+                      <td>
+                        <strong>{s.name}</strong>
+                      </td>
+                      <td>
+                        <SourceLink source={s} />
+                        {s.license && <div className="small muted">Licencja: {s.license}</div>}
+                      </td>
+                      <td>
+                        <span className={`badge ${s.status === "ok" ? "badge-ok" : "badge-fail"}`}>
+                          {s.mode === "static" && s.status === "ok" ? "wbudowane" : SOURCE_STATUS_LABEL[s.status]}
+                        </span>
+                        {s.status === "ok" && s.mode !== "static" && (
+                          <div className="small muted">{SOURCE_MODE_LABEL[s.mode]}</div>
+                        )}
+                        {s.error && <div className="small muted">{s.error}</div>}
+                      </td>
+                      <td className="small">
+                        {s.dataPeriod && <div>{s.dataPeriod}</div>}
+                        {s.fetchedAt && <div className="muted">pobrano {formatDateTime(s.fetchedAt)}</div>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {failedSources.length === 0 && report.missingData.length === 0 && (
+              <p className="small muted">Wszystkie źródła danych odpowiedziały poprawnie.</p>
+            )}
+
+            <h4>Ograniczenia</h4>
+            <ul className="small">
+              {report.limitations.map((l, i) => (
+                <li key={i}>{l}</li>
               ))}
-            </tbody>
-          </table>
-        </div>
-        {failedSources.length === 0 && report.missingData.length === 0 && (
-          <Notice tone="success">
-            <p>Wszystkie źródła danych odpowiedziały poprawnie.</p>
-          </Notice>
-        )}
+            </ul>
 
-        <h3>Ograniczenia</h3>
-        <ul>
-          {report.limitations.map((l, i) => (
-            <li key={i}>{l}</li>
-          ))}
-        </ul>
-
-        {report.narrative && (
-          <p className="small muted">
-            Opisy słowne w raporcie{" "}
-            {report.narrative.generatedBy === "llm"
-              ? "napisała sztuczna inteligencja wyłącznie na podstawie powyższych danych i sprawdziliśmy je automatycznie."
-              : "powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych."}{" "}
-            Oceny i zalecenia wylicza deterministyczny silnik reguł.
-          </p>
-        )}
-        <p className="small muted">Identyfikator raportu: {report.reportId}</p>
+            {report.narrative && (
+              <p className="small muted">
+                Opisy słowne w raporcie{" "}
+                {report.narrative.generatedBy === "llm"
+                  ? "napisała sztuczna inteligencja wyłącznie na podstawie powyższych danych i sprawdziliśmy je automatycznie."
+                  : "powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych."}{" "}
+                Oceny i zalecenia wylicza deterministyczny silnik reguł.
+              </p>
+            )}
+            <p className="small muted">Identyfikator raportu: {report.reportId}</p>
+          </div>
+        </details>
       </section>
     </article>
   );
@@ -455,17 +449,13 @@ function RecList({
             <div className="rec-head">
               <h3>{r.title}</h3>
             </div>
-            {(r.costLevel || r.timeframe) && (
+            {r.timeframe && (
               <div className="rec-tags">
-                {r.timeframe && <span className="badge">kiedy: {r.timeframe}</span>}
-                {r.costLevel && <span className="badge">{COST_LABEL[r.costLevel]}</span>}
+                <span className="badge">kiedy: {r.timeframe}</span>
               </div>
             )}
             <p style={{ marginBottom: 0 }}>{r.description}</p>
-            <p className="why">
-              <strong>Dlaczego na Twojej działce: </strong>
-              {r.why}
-            </p>
+            <p className="why">{r.why}</p>
             <EvidenceDetails refs={r.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
         </li>
@@ -513,9 +503,6 @@ function NarrativeNote({ text }: { text?: string }) {
   const clean = text.replace(/\s*\[[a-z0-9_]+\]/gi, "");
   return (
     <div className="narrative" style={{ marginTop: 20 }}>
-      <p className="small muted" style={{ margin: "0 0 4px", fontWeight: 600 }}>
-        W skrócie
-      </p>
       <p style={{ margin: 0 }}>{clean}</p>
     </div>
   );

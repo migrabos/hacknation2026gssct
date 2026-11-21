@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import BrandMark from "./BrandMark";
+import ThemeToggle from "./ThemeToggle";
 
 const NAV = [
   { href: "/analizuj", label: "Sprawdź działkę" },
@@ -24,13 +25,16 @@ export default function SiteHeader() {
             <span className="brand-sub">woda na Twoim polu</span>
           </span>
         </Link>
-        <nav className="site-nav" aria-label="Menu główne">
-          {NAV.map((n) => (
-            <Link key={n.href} href={n.href} aria-current={pathname === n.href ? "page" : undefined}>
-              {n.label}
-            </Link>
-          ))}
-        </nav>
+        <div className="site-header-actions">
+          <nav className="site-nav" aria-label="Menu główne">
+            {NAV.map((n) => (
+              <Link key={n.href} href={n.href} aria-current={pathname === n.href ? "page" : undefined}>
+                {n.label}
+              </Link>
+            ))}
+          </nav>
+          <ThemeToggle />
+        </div>
       </div>
     </header>
   );
