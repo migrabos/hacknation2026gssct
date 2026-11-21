@@ -270,6 +270,9 @@ def _slope_from_heights(pts: list[Point], heights: list[float]) -> dict[str, Any
     if len(valid) < 2:
         return {"slopePct": None, "runoffRisk": "unknown"}
     (p_lo, h_lo), (p_hi, h_hi) = min(valid, key=lambda t: t[1]), max(valid, key=lambda t: t[1])
+    if h_lo == h_hi:
+        # Both extrema otherwise select the same sample on a level surface.
+        p_hi = max((p for p, _ in valid), key=p_lo.distance)
     dist_m = p_lo.distance(p_hi)
     slope = None if dist_m == 0 else round((h_hi - h_lo) / dist_m * 100, 2)
     return {
@@ -285,7 +288,7 @@ def _slope_from_heights(pts: list[Point], heights: list[float]) -> dict[str, Any
 
 async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometry) -> dict[str, Any]:
     pts = _sample_points_2180(poly_2180)
-    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts]}
+    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts], "slopeVersion": 2}
 
     # 1) GUGiK NMT – national LIDAR DEM (~1 m grid), point list in "northing easting".
     nmt_list = ",".join(f"{p.y:.1f} {p.x:.1f}" for p in pts)

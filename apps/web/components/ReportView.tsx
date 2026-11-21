@@ -147,6 +147,15 @@ export default function ReportView({ report }: { report: Report }) {
           <dt>Powierzchnia</dt>
           <dd>{formatNumber(plot.areaHa, 2)} ha</dd>
         </div>
+        {plot.terrain?.slopePct != null && (
+          <div>
+            <dt>Spadek terenu według modelu</dt>
+            <dd>
+              {formatNumber(plot.terrain.slopePct, 2)}%
+              {sources.get("dem")?.dataPeriod && <> · {sources.get("dem")?.dataPeriod}</>}
+            </dd>
+          </div>
+        )}
         <div>
           <dt>Raport utworzono</dt>
           <dd>{formatDateTime(report.generatedAt)}</dd>
