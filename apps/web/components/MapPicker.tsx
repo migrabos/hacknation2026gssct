@@ -8,7 +8,9 @@
  *  - Geoportal ORTO WMTS StandardResolution (EPSG:3857) — fast overview
  *  - Geoportal ORTO WMS HighResolution — sharp photo from zoom 15
  *  - GUGiK Krajowa Integracja Ewidencji Gruntów (KIEG) WMS — parcel lines + numbers, zoom ≥ 15
- *  - OpenStreetMap standard tiles — street basemap (light use, attribution required)
+ *  - Esri World Topo Map — clean street basemap (no key)
+ *  - Esri Reference layers (places + transportation) on top of the aerial photo,
+ *    so villages / roads stay readable (no key)
  *
  * Load via components/Map.tsx (dynamic, ssr:false) — Leaflet needs `window`.
  */
@@ -42,10 +44,14 @@ const ORTO_WMTS =
   "&FORMAT=image/jpeg&TILEMATRIXSET=EPSG:3857&TILEMATRIX=EPSG:3857:{z}&TILEROW={y}&TILECOL={x}";
 const ORTO_WMS_HR = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/HighResolution";
 const KIEG_WMS = "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow";
-const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
+/** Esri tiles use {z}/{y}/{x} order. Keyless; attribution required. */
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
+const BASE_MAP = `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`;
+const LABELS_PLACES = `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`;
+const LABELS_ROADS = `${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`;
 
 const ATTR_GUGIK = '&copy; <a href="https://www.geoportal.gov.pl/">GUGiK</a>';
-const ATTR_OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+const ATTR_ESRI = 'Mapa &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap';
 
 type Basemap = "orto" | "map";
 
@@ -101,7 +107,7 @@ export default function MapPicker({
         {basemap === "orto" ? (
           <>
             {/* street map underneath (overview zooms only) fills areas outside Poland's photo coverage */}
-            <TileLayer key="osm-under" url={OSM_TILES} attribution={ATTR_OSM} maxZoom={11} />
+            <TileLayer key="map-under" url={BASE_MAP} attribution={ATTR_ESRI} maxZoom={11} />
             <TileLayer key="orto-wmts" url={ORTO_WMTS} attribution={ATTR_GUGIK} maxNativeZoom={19} maxZoom={19} />
             <WMSTileLayer
               key="orto-hr"
@@ -112,9 +118,12 @@ export default function MapPicker({
               minZoom={PARCEL_MIN_ZOOM}
               maxZoom={19}
             />
+            {/* place + road names over the photo, so the farmer can find their village */}
+            <TileLayer key="labels-roads" url={LABELS_ROADS} attribution={ATTR_ESRI} maxNativeZoom={18} maxZoom={19} zIndex={2} opacity={0.85} />
+            <TileLayer key="labels-places" url={LABELS_PLACES} maxNativeZoom={18} maxZoom={19} zIndex={2} />
           </>
         ) : (
-          <TileLayer key="osm" url={OSM_TILES} attribution={ATTR_OSM} maxZoom={19} />
+          <TileLayer key="map" url={BASE_MAP} attribution={ATTR_ESRI} maxNativeZoom={18} maxZoom={19} />
         )}
 
         <WMSTileLayer
@@ -122,6 +131,7 @@ export default function MapPicker({
           url={KIEG_WMS}
           params={{ layers: "dzialki,numery_dzialek", format: "image/png", transparent: true }}
           tileSize={512}
+          zIndex={3}
           minZoom={PARCEL_MIN_ZOOM}
           maxZoom={19}
           opacity={basemap === "orto" ? 0.95 : 0.8}

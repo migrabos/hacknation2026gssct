@@ -671,6 +671,10 @@ details.help > div {
 .map-legend .retention-dot {
   margin-top: 2px;
 }
+.map-tools .seg,
+.map-tools .map-btn {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
 .map-tools {
   position: absolute;
   z-index: 500;
