@@ -1,0 +1,60 @@
+{
+  "generatedAt": "2026-11-21T14:35:10Z",
+  "note": "Wszystkie dane pobierane na żywo z API w momencie analizy; cache dyskowy tylko przyspiesza ponowne zapytania. fetchedAt = moment faktycznego pobrania z API.",
+  "sources": [
+    {
+      "name": "EDO Combined Drought Indicator (Copernicus EMS)",
+      "endpoint": "https://drought.emergency.copernicus.eu/api/wms",
+      "exampleUrl": "https://drought.emergency.copernicus.eu/api/wms",
+      "license": "Copernicus Emergency Management Service – EDO, CC BY 4.0",
+      "firstFetchedAt": "2026-11-21T13:58:55Z",
+      "lastFetchedAt": "2026-11-21T13:58:55Z",
+      "requests": 1
+    },
+    {
+      "name": "GUGiK NMT (numeryczny model terenu)",
+      "endpoint": "https://services.gugik.gov.pl/nmt/",
+      "exampleUrl": "https://services.gugik.gov.pl/nmt/?request=GetHByPointList&list=499805.8+374053.2%2C499822.8+374008.1%2C499810.9+374084.2%2C499763.6+374064.6%2C499853.1+374034.3%2C499826.2+374015.7%2C499808.3+374030.9%2C499826.2+374030.9%2C499844.1+374030.9%2C499790.4+374046.2%2C499808.3+374046.2%2C499826.2+374046.2%2C499772.5+374061.4%2C499790.4+374061.4%2C499808.3+374061.4%2C499826.2+374061.4%2C499808.3+374076.6",
+      "license": "Dane GUGiK (NMT) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
+      "firstFetchedAt": "2026-11-21T13:30:18Z",
+      "lastFetchedAt": "2026-11-21T13:30:18Z",
+      "requests": 1
+    },
+    {
+      "name": "ISRIC SoilGrids 2.0",
+      "endpoint": "https://maps.isric.org/mapserv",
+      "exampleUrl": "https://maps.isric.org/mapserv",
+      "license": "ISRIC SoilGrids 2.0 – CC BY 4.0",
+      "firstFetchedAt": "2026-11-21T14:26:21Z",
+      "lastFetchedAt": "2026-11-21T14:26:21Z",
+      "requests": 1
+    },
+    {
+      "name": "NASA POWER Daily API (MERRA-2/CERES; ET0 wg FAO-56 liczone lokalnie)",
+      "endpoint": "https://power.larc.nasa.gov/api/temporal/daily/point",
+      "exampleUrl": "https://power.larc.nasa.gov/api/temporal/daily/point",
+      "license": "NASA POWER – dane publiczne bez ograniczeń (NASA Earth Science Data Policy), prośba o cytowanie",
+      "firstFetchedAt": "2026-11-21T13:58:55Z",
+      "lastFetchedAt": "2026-11-21T13:58:55Z",
+      "requests": 1
+    },
+    {
+      "name": "Sentinel-2 L2A (Copernicus, AWS Earth Search)",
+      "endpoint": "https://earth-search.aws.element84.com/v1/search",
+      "exampleUrl": "https://earth-search.aws.element84.com/v1/search",
+      "license": "Copernicus Sentinel data – licencja pełna, otwarta i bezpłatna (Rozp. UE 1159/2013); katalog STAC Element84 Earth Search",
+      "firstFetchedAt": "2026-11-21T14:34:57Z",
+      "lastFetchedAt": "2026-11-21T14:34:57Z",
+      "requests": 1
+    },
+    {
+      "name": "ULDK GUGiK",
+      "endpoint": "https://uldk.gugik.gov.pl/service.php",
+      "exampleUrl": "https://uldk.gugik.gov.pl/service.php?request=GetParcelById&id=302108_5.0021.431%2F68&result=id%2Cgeom_wkt%2Cvoivodeship%2Ccounty%2Ccommune%2Cregion%2Cparcel&srid=4326",
+      "license": "Dane GUGiK (EGiB) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
+      "firstFetchedAt": "2026-11-21T13:30:27Z",
+      "lastFetchedAt": "2026-11-21T13:30:27Z",
+      "requests": 1
+    }
+  ]
+}
