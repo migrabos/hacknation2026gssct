@@ -3,7 +3,8 @@
 Pipeline for one plot:
     ULDK GUGiK (id or map click)  -> geometry, area, admin names     [required]
     GUGiK NMT (fallback Open-Meteo Elevation) -> slope + runoff risk  [fail-soft]
-    Overpass / OpenStreetMap      -> distance to river/ditch/water    [fail-soft]
+    OpenStreetMap water features  -> distance to river/ditch/water    [fail-soft]
+        (Overpass mirrors raced in parallel with OpenFreeMap z14 vector tiles)
 
 Terrain and hydro run concurrently. Nothing here interprets drought – we only fetch
 and compute simple, verifiable numbers (heights, distances, area). Missing inputs are
@@ -48,13 +49,22 @@ ULDK_FIELDS = "id,geom_wkt,voivodeship,county,commune,region,parcel"
 NMT_URL = "https://services.gugik.gov.pl/nmt/"
 OM_ELEVATION_URL = "https://api.open-meteo.com/v1/elevation"
 
+# Public Overpass instances (https://wiki.openstreetmap.org/wiki/Overpass_API#Public_Overpass_API_instances).
+# All live ones are queried *in parallel*; the first valid answer wins, the rest are cancelled.
 OVERPASS_URLS = (
     "https://overpass-api.de/api/interpreter",
-    "https://overpass.kumi.systems/api/interpreter",  # mirror, tried on failure
+    "https://overpass.private.coffee/api/interpreter",
+    "https://overpass.kumi.systems/api/interpreter",
+    "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
 )
+# Second, independent channel to the same OSM data: OpenMapTiles-schema vector tiles
+# (layers `waterway`: river/stream/canal/drain/ditch, `water`: polygons). No key needed.
+OFM_TILEJSON_URL = "https://tiles.openfreemap.org/planet"
+OFM_ZOOM = 14  # max zoom of the tileset; all waterway classes present here
+OVERPASS_PREFERRED_SEC = 5.0  # give Overpass a head start before accepting the tile answer
 HYDRO_RADIUS_M = 500.0
-HYDRO_TIMEOUT_SEC = 12.0  # whole hydro step incl. mirror retry
-OVERPASS_COOLDOWN_SEC = 120.0  # after a failure, skip the endpoint instead of waiting again
+HYDRO_TIMEOUT_SEC = 15.0  # whole hydro step (mirrors raced in parallel)
+OVERPASS_COOLDOWN_SEC = 60.0  # after a failure, deprioritise the endpoint for a while
 WATERWAY_TYPES = ("river", "stream", "ditch", "drain", "canal")
 
 DAY = 86_400
@@ -379,6 +389,82 @@ HYDRO_MISSING = {
 
 
 _overpass_dead_until: dict[str, float] = {}  # per-process circuit breaker
+_ofm_tile_template: str | None = None  # cached `tiles[0]` from the tilejson
+
+
+def _tile_range(s: float, w: float, n: float, e: float, z: int) -> list[tuple[int, int]]:
+    def xy(lat: float, lng: float) -> tuple[int, int]:
+        k = 2 ** z
+        x = int((lng + 180.0) / 360.0 * k)
+        y = int((1.0 - math.asinh(math.tan(math.radians(lat))) / math.pi) / 2.0 * k)
+        return x, y
+
+    x0, y0 = xy(n, w)
+    x1, y1 = xy(s, e)
+    return [(x, y) for x in range(x0, x1 + 1) for y in range(y0, y1 + 1)]
+
+
+def _mvt_to_elements(tile: bytes, z: int, x: int, y: int) -> list[dict[str, Any]]:
+    """Decode one MVT tile into Overpass-like elements (way + geometry nodes)."""
+    import mapbox_vector_tile  # lazy: only needed on this path
+
+    if tile[:2] == b"\x1f\x8b":
+        tile = gzip.decompress(tile)
+    layers = mapbox_vector_tile.decode(tile, default_options={"y_coord_down": True})
+    k = 2 ** z
+    out: list[dict[str, Any]] = []
+
+    def to_ll(px: float, py: float, extent: int) -> dict[str, float]:
+        fx, fy = (x + px / extent) / k, (y + py / extent) / k
+        lat = math.degrees(math.atan(math.sinh(math.pi * (1 - 2 * fy))))
+        return {"lon": fx * 360.0 - 180.0, "lat": lat}
+
+    def rings(geom: dict[str, Any]) -> list[list[list[float]]]:
+        t, c = geom["type"], geom["coordinates"]
+        if t == "LineString":
+            return [c]
+        if t in ("MultiLineString", "Polygon"):
+            return list(c)
+        if t == "MultiPolygon":
+            return [r for poly in c for r in poly]
+        return []
+
+    for layer, kind_of in (("waterway", lambda p: p.get("class")), ("water", lambda p: "water")):
+        lyr = layers.get(layer)
+        if not lyr:
+            continue
+        extent = lyr.get("extent", 4096)
+        for f in lyr.get("features", []):
+            kind = kind_of(f.get("properties", {}))
+            if layer == "waterway" and kind not in WATERWAY_TYPES:
+                continue
+            tags = {"waterway": kind} if layer == "waterway" else {"natural": "water"}
+            for ring in rings(f["geometry"]):
+                out.append({"type": "way", "tags": tags,
+                            "geometry": [to_ll(px, py, extent) for px, py in ring]})
+    return out
+
+
+async def _ofm_elements(client: httpx.AsyncClient, s: float, w: float, n: float, e: float) -> list[dict[str, Any]]:
+    global _ofm_tile_template
+    if _ofm_tile_template is None:
+        r = await client.get(OFM_TILEJSON_URL, timeout=httpx.Timeout(6.0, connect=3.0))
+        r.raise_for_status()
+        _ofm_tile_template = r.json()["tiles"][0]
+    tiles = _tile_range(s, w, n, e, OFM_ZOOM)
+    if len(tiles) > 9:
+        raise ValueError("obszar zbyt duży dla kafli OSM")
+
+    async def one(x: int, y: int) -> list[dict[str, Any]]:
+        url = _ofm_tile_template.format(z=OFM_ZOOM, x=x, y=y)  # type: ignore[union-attr]
+        r = await client.get(url, timeout=httpx.Timeout(8.0, connect=3.0))
+        if r.status_code == 204 or not r.content:
+            return []  # empty tile
+        r.raise_for_status()
+        return _mvt_to_elements(r.content, OFM_ZOOM, x, y)
+
+    parts = await asyncio.gather(*(one(x, y) for x, y in tiles))
+    return [el for p in parts for el in p]
 
 
 async def _hydro(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometry) -> dict[str, Any]:
@@ -387,26 +473,67 @@ async def _hydro(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometr
     key = {"plotId": plot_id, "bbox": [round(v, 5) for v in (s, w, n, e)], "radiusM": HYDRO_RADIUS_M}
     used_url: list[str] = []
 
+    async def ask(url: str) -> tuple[str, dict[str, Any]]:
+        try:
+            r = await client.post(url, data={"data": query}, timeout=per_try)
+            r.raise_for_status()
+            body = r.json()
+            remark = body.get("remark", "")
+            if "error" in remark.lower() or "timed out" in remark.lower():
+                raise ValueError(f"Overpass: {remark[:120]}")
+            return url, body
+        except Exception:
+            _overpass_dead_until[url] = time.monotonic() + OVERPASS_COOLDOWN_SEC
+            raise
+
+    per_try = httpx.Timeout(HYDRO_TIMEOUT_SEC - 1.0, connect=4.0)
+
+    async def tiles() -> tuple[str, dict[str, Any]]:
+        try:
+            return OFM_TILEJSON_URL, {"elements": await _ofm_elements(client, s, w, n, e)}
+        except Exception:
+            global _ofm_tile_template
+            _ofm_tile_template = None  # tileset version may have rotated
+            raise
+
     async def fetch() -> dict[str, Any] | PartialResult:
-        last_exc: Exception | None = None
-        per_try = httpx.Timeout(HYDRO_TIMEOUT_SEC / len(OVERPASS_URLS), connect=3.0)
         now = time.monotonic()
         live = [u for u in OVERPASS_URLS if _overpass_dead_until.get(u, 0.0) <= now]
-        if not live:
-            return PartialResult({}, ["Serwer OpenStreetMap (Overpass) nie odpowiadał przy ostatnich zapytaniach – pominięto, ponowna próba za 2 min."])
-        for url in live:
-            try:
-                r = await client.post(url, data={"data": query}, timeout=per_try)
-                r.raise_for_status()
-                body = r.json()
-                remark = body.get("remark", "")
-                if "error" in remark.lower() or "timed out" in remark.lower():
-                    raise ValueError(f"Overpass: {remark[:120]}")
-                used_url.append(url)
-                return classify_water(poly_2180, body.get("elements", []))
-            except Exception as exc:  # mark endpoint down for a while, try the mirror
-                _overpass_dead_until[url] = time.monotonic() + OVERPASS_COOLDOWN_SEC
-                last_exc = exc
+        # all in cooldown -> still try everything rather than give up without asking
+        overpass = [asyncio.create_task(ask(u)) for u in (live or OVERPASS_URLS)]
+        tile_task = asyncio.create_task(tiles())
+        tasks = [*overpass, tile_task]
+        last_exc: BaseException | None = None
+        tile_answer: tuple[str, dict[str, Any]] | None = None
+
+        def done(answer: tuple[str, dict[str, Any]]) -> dict[str, Any]:
+            used_url.append(answer[0])
+            return classify_water(poly_2180, answer[1].get("elements", []))
+
+        try:
+            deadline = time.monotonic() + OVERPASS_PREFERRED_SEC
+            pending = set(tasks)
+            while pending:
+                wait = None if tile_answer is None else max(0.0, deadline - time.monotonic())
+                finished, pending = await asyncio.wait(pending, timeout=wait,
+                                                       return_when=asyncio.FIRST_COMPLETED)
+                if not finished:  # Overpass head start used up -> take the tiles
+                    break
+                for fut in finished:
+                    exc = fut.exception()
+                    if exc is not None:
+                        last_exc = exc
+                    elif fut is tile_task:
+                        tile_answer = fut.result()
+                    else:
+                        return done(fut.result())  # Overpass answered: preferred
+                if tile_answer is not None and not (pending - {tile_task}):
+                    break  # every Overpass mirror failed
+            if tile_answer is not None:
+                return done(tile_answer)
+        finally:
+            for t in tasks:
+                t.cancel()
         assert last_exc is not None
         raise last_exc
 
@@ -417,7 +544,10 @@ async def _hydro(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometr
     if res["coverage"] != "full":
         return {"values": dict(HYDRO_MISSING), "sources": [], "errors": res["errors"]}
     sources = res["sources"]
-    if used_url and used_url[0] != OVERPASS_URLS[0]:
+    if used_url and used_url[0] == OFM_TILEJSON_URL:
+        sources = [{**src, "name": "OpenStreetMap (kafle OpenFreeMap)", "url": "https://openfreemap.org"}
+                   for src in sources]
+    elif used_url and used_url[0] != OVERPASS_URLS[0]:
         sources = [{**src, "url": used_url[0]} for src in sources]
     return {"values": res["values"], "sources": sources, "errors": []}
 
