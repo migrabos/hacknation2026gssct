@@ -1,0 +1,79 @@
+/* Print / "Zapisz jako PDF" — one clean column, all evidence expanded. */
+
+@page {
+  size: A4;
+  margin: 14mm 14mm 16mm;
+}
+
+@media print {
+  body {
+    font-size: 11pt;
+    line-height: 1.45;
+    color: #000;
+  }
+  .topbar,
+  .site-header,
+  .site-footer,
+  .demo-strip,
+  .no-print,
+  .map-tools,
+  .map-hint,
+  .leaflet-control-zoom {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .container {
+    max-width: none;
+    padding: 0;
+  }
+  a {
+    color: #000;
+    text-decoration: none;
+  }
+  .report {
+    padding-top: 0;
+  }
+  .report-overview {
+    grid-template-columns: 1fr 1fr;
+  }
+  .assess-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .r-section {
+    padding-block: 14pt;
+    break-inside: auto;
+  }
+  .r-section-head {
+    break-after: avoid;
+  }
+  .cause,
+  .rec,
+  .missing-list li,
+  .ev-list li,
+  table.data tr {
+    break-inside: avoid;
+  }
+  details.evidence > summary {
+    display: none;
+  }
+  /* Show evidence even if <details> was closed (Chrome prints closed details collapsed). */
+  details.evidence {
+    display: block;
+  }
+  details.evidence::details-content {
+    content-visibility: visible;
+    display: block;
+  }
+  .table-wrap {
+    overflow: visible;
+  }
+  .map-wrap {
+    height: 70mm !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
