@@ -1,6 +1,7 @@
 """Runtime configuration from environment."""
 
 from functools import lru_cache
+from typing import Literal
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,7 +13,14 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    engine_version: str = "0.1.0"
+    engine_version: str = "0.2.0"
+
+    # "live" = real public data (ULDK, Open-Meteo, SoilGrids, NMT, OSM, Sentinel-2, EDO)
+    # "mock" = deterministic DEMO data (tests / offline)
+    adapters: Literal["live", "mock"] = "live"
+
+    # Comma-separated list of allowed browser origins ("*" = any)
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     llm_enabled: bool = True
     ollama_base_url: str = "http://127.0.0.1:11434"

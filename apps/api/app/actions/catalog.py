@@ -1,6 +1,7 @@
 """Fixed action IDs + Polish copy + eligibility metadata.
 
 Order in report: retention → agrotech → irrigation (last, optional).
+IDs must match `ActionId` in apps/web/lib/types.ts. The LLM never adds new ones.
 """
 
 from __future__ import annotations
@@ -8,89 +9,83 @@ from __future__ import annotations
 from typing import Literal, TypedDict
 
 ActionKind = Literal["retention", "agrotech", "irrigation"]
+Cost = Literal["low", "medium", "high"]
 
 
 class ActionEntry(TypedDict):
     id: str
     kind: ActionKind
     titlePl: str
-    whyTemplatePl: str
-    # Causes that boost eligibility
+    descriptionPl: str
+    costLevel: Cost
+    timeframePl: str
+    # Causes that make the action eligible
     triggers: list[str]
     # Base priority within kind (1 = highest)
     basePriority: int
 
 
 ACTIONS: dict[str, ActionEntry] = {
-    "small_pond": {
-        "id": "small_pond",
-        "kind": "retention",
-        "titlePl": "Małe oczko / zbiornik retencyjny",
-        "whyTemplatePl": "Zatrzymuje wodę opadową na działce i łagodzi krótkie niedobory.",
-        "triggers": ["precip_deficit", "runoff"],
-        "basePriority": 1,
-    },
     "buffer_strips": {
-        "id": "buffer_strips",
-        "kind": "retention",
-        "titlePl": "Strefy buforowe / pasy zieleni",
-        "whyTemplatePl": "Spowalnia spływ powierzchniowy i zwiększa infiltrację na skraju pola.",
-        "triggers": ["runoff"],
-        "basePriority": 2,
+        "id": "buffer_strips", "kind": "retention",
+        "titlePl": "Pas zieleni na dole pola",
+        "descriptionPl": "Zostaw lub wysiej pas trawy albo krzewów (szerokość 5–10 m) wzdłuż dolnej krawędzi działki "
+                         "lub w poprzek spadku.",
+        "costLevel": "low", "timeframePl": "jesień lub wiosna",
+        "triggers": ["runoff"], "basePriority": 1,
     },
     "ditch_retention": {
-        "id": "ditch_retention",
-        "kind": "retention",
-        "titlePl": "Retencja w rowach melioracyjnych",
-        "whyTemplatePl": "Kontrolowane spiętrzanie w rowach wydłuża czas zatrzymania wody.",
-        "triggers": ["runoff", "precip_deficit"],
-        "basePriority": 3,
+        "id": "ditch_retention", "kind": "retention",
+        "titlePl": "Zatrzymaj wodę w rowie",
+        "descriptionPl": "Na rowie melioracyjnym przy działce ustaw zastawkę lub próg, żeby woda z roztopów "
+                         "i ulew nie odpływała od razu. Uzgodnij to ze spółką wodną.",
+        "costLevel": "medium", "timeframePl": "przed zimą",
+        "triggers": ["precip_deficit", "low_soil_storage"], "basePriority": 2,
     },
-    "residues": {
-        "id": "residues",
-        "kind": "agrotech",
-        "titlePl": "Pozostawianie resztek pożniwnych",
-        "whyTemplatePl": "Mulcz ogranicza parowanie i poprawia strukturę gleby.",
-        "triggers": ["low_soil_storage", "precip_deficit"],
-        "basePriority": 1,
+    "small_pond": {
+        "id": "small_pond", "kind": "retention",
+        "titlePl": "Małe oczko wodne lub zbiornik",
+        "descriptionPl": "W najniższym, podmokłym miejscu działki zrób małe oczko, które zbiera wodę deszczową "
+                         "i z roztopów.",
+        "costLevel": "high", "timeframePl": "po zbiorach",
+        "triggers": ["precip_deficit", "runoff"], "basePriority": 3,
     },
     "cover_crops": {
-        "id": "cover_crops",
-        "kind": "agrotech",
-        "titlePl": "Międzyplony / okrywa roślinna",
-        "whyTemplatePl": "Żywa okrywa chroni glebę i wspiera retencję w profilu glebowym.",
-        "triggers": ["low_soil_storage", "runoff"],
-        "basePriority": 2,
+        "id": "cover_crops", "kind": "agrotech",
+        "titlePl": "Międzyplon po zbiorach",
+        "descriptionPl": "Po zbiorach wysiej międzyplon (np. gorczycę, facelię). Okrywa glebę, ogranicza parowanie "
+                         "i dodaje próchnicy.",
+        "costLevel": "low", "timeframePl": "sierpień–wrzesień",
+        "triggers": ["low_soil_storage", "runoff"], "basePriority": 1,
+    },
+    "residues": {
+        "id": "residues", "kind": "agrotech",
+        "titlePl": "Zostaw resztki pożniwne",
+        "descriptionPl": "Pozostaw rozdrobnione resztki roślin na powierzchni pola, zamiast je usuwać lub palić.",
+        "costLevel": "low", "timeframePl": "po zbiorach",
+        "triggers": ["precip_deficit", "low_soil_storage"], "basePriority": 2,
     },
     "reduce_tillage": {
-        "id": "reduce_tillage",
-        "kind": "agrotech",
-        "titlePl": "Ograniczenie intensywnej uprawy",
-        "whyTemplatePl": "Mniejsza intensywność uprawy chroni strukturę i pojemność wodną gleby.",
-        "triggers": ["low_soil_storage"],
-        "basePriority": 3,
+        "id": "reduce_tillage", "kind": "agrotech",
+        "titlePl": "Mniej orki",
+        "descriptionPl": "Zamiast głębokiej orki stosuj płytką uprawę bezorkową tam, gdzie to możliwe.",
+        "costLevel": "medium", "timeframePl": "od następnego sezonu",
+        "triggers": ["low_soil_storage", "runoff"], "basePriority": 3,
     },
     "irrigation_timing": {
-        "id": "irrigation_timing",
-        "kind": "irrigation",
-        "titlePl": "Nawadnianie — tylko w krytycznych fazach",
-        "whyTemplatePl": "Przy silnym niedoborze i wrażliwej uprawie rozważ podlewanie w kluczowych fazach wzrostu.",
-        "triggers": ["precip_deficit", "crop_sensitivity"],
-        "basePriority": 1,
+        "id": "irrigation_timing", "kind": "irrigation",
+        "titlePl": "Podlewanie tylko w kluczowym momencie",
+        "descriptionPl": "Jeśli masz dostęp do wody, podlej uprawę w jej najbardziej wrażliwej fazie. "
+                         "Podlewaj rano lub wieczorem, mniejszymi dawkami.",
+        "costLevel": "high", "timeframePl": "w najbliższych 2–3 tygodniach",
+        "triggers": ["precip_deficit", "crop_sensitivity"], "basePriority": 1,
     },
 }
 
 VALID_ACTION_IDS = frozenset(ACTIONS.keys())
-RETENTION_IDS = frozenset(a["id"] for a in ACTIONS.values() if a["kind"] == "retention")
-AGROTECH_IDS = frozenset(a["id"] for a in ACTIONS.values() if a["kind"] == "agrotech")
-IRRIGATION_IDS = frozenset(a["id"] for a in ACTIONS.values() if a["kind"] == "irrigation")
 
 
 def get_action(action_id: str) -> ActionEntry:
     if action_id not in ACTIONS:
         raise KeyError(f"Unknown action id: {action_id}")
     return ACTIONS[action_id]
-
-
-def list_actions() -> list[dict]:
-    return [dict(a) for a in ACTIONS.values()]

@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 
 from adapters.base import utc_now_iso
 from adapters.drought_edo import fetch_drought_context
+from adapters.licenses import license_for
 from adapters.open_meteo import fetch_meteo
 from adapters.sentinel_stac import fetch_sentinel
 from adapters.soilgrids import fetch_soil
@@ -41,26 +42,8 @@ DEFAULT_DATES = ["2019-07-15", "2026-07-15", "2026-11-21"]
 
 LOG_PATH = Path(__file__).resolve().parents[2] / "docs" / "data_sources_log.json"
 
-# Licence / terms per source name prefix (as reported in `sources[].name`).
-LICENSES: dict[str, str] = {
-    "ULDK GUGiK": "Dane GUGiK (EGiB) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
-    "GUGiK NMT": "Dane GUGiK (NMT) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a",
-    "Open-Meteo Elevation": "Open-Meteo, dane CC BY 4.0 (Copernicus DEM GLO-90); API bezpłatne do użytku niekomercyjnego",
-    "Open-Meteo Historical": "Open-Meteo, dane CC BY 4.0 (ERA5/ERA5-Land, Copernicus C3S); API bezpłatne do użytku niekomercyjnego (<10 000 zapytań/dzień)",
-    "Open-Meteo Forecast": "Open-Meteo, dane CC BY 4.0; API bezpłatne do użytku niekomercyjnego",
-    "NASA POWER": "NASA POWER – dane publiczne bez ograniczeń (NASA Earth Science Data Policy), prośba o cytowanie",
-    "ISRIC SoilGrids": "ISRIC SoilGrids 2.0 – CC BY 4.0",
-    "Sentinel-2": "Copernicus Sentinel data – licencja pełna, otwarta i bezpłatna (Rozp. UE 1159/2013); katalog STAC Element84 Earth Search",
-    "OpenStreetMap": "© OpenStreetMap contributors – ODbL 1.0",
-    "EDO": "Copernicus Emergency Management Service – EDO, CC BY 4.0",
-}
-
-
 def _license(name: str) -> str:
-    for prefix, lic in LICENSES.items():
-        if name.startswith(prefix) or prefix in name:
-            return lic
-    return "DO UZUPEŁNIENIA"
+    return license_for(name) or "DO UZUPEŁNIENIA"
 
 
 def _endpoint(url: str) -> str:

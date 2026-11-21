@@ -5,85 +5,44 @@ from __future__ import annotations
 from app.schemas.evidence import Narrative, NarrativeSection, Report
 
 
+def _refs(*groups: list[str]) -> list[str]:
+    return list(dict.fromkeys(r for g in groups for r in g))
+
+
 def build_template_narrative(report: Report) -> Narrative:
     ma = report.moistureAssessment
-    causes = report.causes
     recs = report.recommendations
 
-    cause_txt = (
-        ", ".join(c.labelPl for c in causes)
-        if causes
-        else "brak wyraźnych etykiet przyczyn (dane częściowe)"
-    )
-
-    retention_txt = (
-        ", ".join(r.titlePl for r in recs.retention)
-        if recs.retention
-        else "brak pilnych działań retencyjnych"
-    )
-    agrotech_txt = (
-        ", ".join(r.titlePl for r in recs.agrotech)
-        if recs.agrotech
-        else "brak pilnych działań agrotechnicznych"
-    )
-
-    sections: list[NarrativeSection] = [
+    sections = [
         NarrativeSection(
-            id="ocena",
-            titlePl="Ocena sytuacji wodnej",
-            bodyPl=(
-                f"Aktualna sytuacja: {ma.current.level} "
-                f"(score {ma.current.score0to100}/100). "
-                f"{ma.current.summaryPl} "
-                f"Wieloletnia podatność: {ma.multiYearSusceptibility.level} "
-                f"(score {ma.multiYearSusceptibility.score0to100}/100). "
-                f"{ma.multiYearSusceptibility.summaryPl} "
-                f"Pewność oceny: {ma.confidence0to1:.2f}."
-            ),
+            id="assessment",
+            text=f"{ma.current.headline}. {ma.susceptibility.headline}. "
+                 f"Pierwsza ocena dotyczy dnia {report.analysisDate}, druga – ostatnich lat.",
+            evidenceRefs=_refs(ma.current.evidenceRefs, ma.susceptibility.evidenceRefs),
         ),
         NarrativeSection(
-            id="przyczyny",
-            titlePl="Przyczyny",
-            bodyPl=f"Wskazane przyczyny: {cause_txt}.",
+            id="causes",
+            text=("Najważniejsze przyczyny: " + ", ".join(c.title.lower() for c in report.causes) + "."
+                  if report.causes else "Nie widać wyraźnych przyczyn niedoboru wody."),
+            evidenceRefs=_refs(*(c.evidenceRefs for c in report.causes)),
         ),
         NarrativeSection(
-            id="retencja",
-            titlePl="Retencja",
-            bodyPl=(
-                f"Rekomendacje retencyjne (najpierw zatrzymaj wodę): {retention_txt}."
-            ),
+            id="retention",
+            text=("Zacznij od zatrzymania wody na polu: " + ", ".join(r.title.lower() for r in recs.retention) + "."
+                  if recs.retention else "Działania retencyjne nie są teraz pilne."),
+            evidenceRefs=_refs(*(r.evidenceRefs for r in recs.retention)),
         ),
         NarrativeSection(
             id="agrotech",
-            titlePl="Agrotechnika",
-            bodyPl=f"Działania glebowe / agrotechniczne: {agrotech_txt}.",
+            text=("W uprawie gleby pomogą: " + ", ".join(r.title.lower() for r in recs.agrotech) + "."
+                  if recs.agrotech else "Zmiany w uprawie gleby nie są teraz pilne."),
+            evidenceRefs=_refs(*(r.evidenceRefs for r in recs.agrotech)),
         ),
     ]
-
     if recs.irrigation:
-        irr = ", ".join(r.titlePl for r in recs.irrigation)
-        sections.append(
-            NarrativeSection(
-                id="nawadnianie",
-                titlePl="Nawadnianie",
-                bodyPl=(
-                    f"Nawadnianie rozważane dopiero po retencji i agrotechnice: {irr}."
-                ),
-            )
-        )
-
-    sources_txt = ", ".join(s.name for s in report.sources) or "brak"
-    missing_txt = "; ".join(report.missingData) if report.missingData else "brak zgłoszonych braków"
-    sections.append(
-        NarrativeSection(
-            id="zrodla",
-            titlePl="Źródła i braki danych",
-            bodyPl=(
-                f"Źródła: {sources_txt}. "
-                f"Braki / ograniczenia: {missing_txt}. "
-                f"Ograniczenia metody: {'; '.join(report.limitations[:2])}."
-            ),
-        )
-    )
-
-    return Narrative(mode="template", sections=sections)
+        sections.append(NarrativeSection(
+            id="irrigation",
+            text="Nawadnianie rozważ dopiero po działaniach retencyjnych – i tylko w najbardziej wrażliwej fazie uprawy.",
+            evidenceRefs=_refs(*(r.evidenceRefs for r in recs.irrigation)),
+        ))
+    return Narrative(generatedBy="template", sections=sections)

@@ -88,6 +88,12 @@ export default function ReportView({ report }: { report: Report }) {
         </div>
       </header>
 
+      {report.meta?.adapters === "mock" && (
+        <Notice tone="warn" title="Tryb demonstracyjny — dane przykładowe" role="status">
+          <p>Serwer działa na danych przykładowych (DEMO), nie na prawdziwych pomiarach dla tej działki.</p>
+        </Notice>
+      )}
+
       {report.status === "partial" && (
         <Notice tone="warn" title="Raport niepełny — części danych nie udało się pobrać" role="status">
           <p>

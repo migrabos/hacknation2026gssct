@@ -1,170 +1,569 @@
 {
+  "reportId": "r-2026-07-15-43429d1754",
+  "status": "partial",
   "plot": {
-    "plotId": "141201_2.0001.123",
-    "centroid": { "lat": 52.2297, "lng": 21.0122 },
-    "areaHa": 2.4,
-    "geometry": null,
-    "voivodeship": "mazowieckie",
-    "terrain": { "slopePct": 3.2, "runoffRisk": "moderate" },
-    "hydro": { "nearbyWater": false, "distanceClass": "far" }
+    "plotId": "040308_5.0004.17220",
+    "geometry": {
+      "type": "Polygon",
+      "coordinates": [
+        [
+          [
+            18.2450626794081,
+            53.0499894604104
+          ],
+          [
+            18.2448740120004,
+            53.0490660393504
+          ],
+          [
+            18.2503705380513,
+            53.0485608827261
+          ],
+          [
+            18.2505000555642,
+            53.0490624149236
+          ],
+          [
+            18.2506428496287,
+            53.0496155013379
+          ],
+          [
+            18.2520793851536,
+            53.0551787763357
+          ],
+          [
+            18.2466068250135,
+            53.0557412047077
+          ],
+          [
+            18.2459393892911,
+            53.0530732460928
+          ],
+          [
+            18.2450626794081,
+            53.0499894604104
+          ]
+        ],
+        [
+          [
+            18.2485991046015,
+            53.0527691881697
+          ],
+          [
+            18.2486134812512,
+            53.0527535216733
+          ],
+          [
+            18.2485836541707,
+            53.0527537637227
+          ],
+          [
+            18.2485991046015,
+            53.0527691881697
+          ]
+        ]
+      ]
+    },
+    "centroid": [
+      18.248475,
+      53.052131
+    ],
+    "areaHa": 27.8735,
+    "bbox": [
+      18.244874,
+      53.0485609,
+      18.2520794,
+      53.0557412
+    ],
+    "voivodeship": "kujawsko-pomorskie",
+    "county": "powiat bydgoski",
+    "commune": "Solec Kujawski",
+    "terrain": {
+      "slopePct": 3.01,
+      "runoffRisk": "medium"
+    },
+    "hydro": {
+      "missing": true
+    },
+    "sources": [
+      {
+        "id": "plot_0",
+        "name": "ULDK GUGiK",
+        "provider": "ULDK GUGiK",
+        "url": "https://uldk.gugik.gov.pl/service.php?request=GetParcelById&id=040308_5.0004.17220&result=id%2Cgeom_wkt%2Cvoivodeship%2Ccounty%2Ccommune%2Cregion%2Cparcel&srid=4326",
+        "fetchedAt": "2026-11-21T14:55:48Z",
+        "mode": "live",
+        "status": "ok",
+        "license": "Dane GUGiK (EGiB) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a"
+      },
+      {
+        "id": "plot_1",
+        "name": "GUGiK NMT (numeryczny model terenu)",
+        "provider": "GUGiK NMT (numeryczny model terenu)",
+        "url": "https://services.gugik.gov.pl/nmt/?request=GetHByPointList&list=576483.3+449626.6%2C576235.4+449401.9%2C576901.9+449880.5%2C576176.9+449759.9%2C576966.5+449524.3%2C576255.9+449449.7%2C576413.8+449449.7%2C576255.9+449545.5%2C576413.8+449545.5%2C576571.7+449545.5%2C576729.6+449545.5%2C576887.5+449545.5%2C576255.9+449641.2%2C576413.8+449641.2%2C576571.7+449641.2%2C576729.6+449641.2%2C576887.5+449641.2%2C576255.9+449736.9%2C576413.8+449736.9%2C576571.7+449736.9%2C576729.6+449736.9%2C576887.5+449736.9%2C576729.6+449832.6%2C576887.5+449832.6",
+        "fetchedAt": "2026-11-21T14:55:49Z",
+        "mode": "live",
+        "status": "ok",
+        "license": "Dane GUGiK (NMT) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a"
+      }
+    ],
+    "fetchedAt": "2026-11-21T14:57:11Z"
   },
   "crop": {
     "id": "kukurydza",
-    "namePl": "Kukurydza",
-    "droughtSensitivity": 0.75
+    "name": "Kukurydza",
+    "droughtSensitivity": "high"
   },
-  "analysisDate": "2025-07-15",
+  "analysisDate": "2026-07-15",
+  "generatedAt": "2026-11-21T14:57:11Z",
   "moistureAssessment": {
     "current": {
-      "level": "deficit",
-      "score0to100": 38,
-      "summaryPl": "Ostatnie 30 dni poniżej normy klimatycznej; gleba o ograniczonej pojemności wodnej.",
-      "evidenceIds": ["meteo.precipMmLast30d", "meteo.precipMmClimate30d", "soil.awcMmProxy"]
+      "headline": "Na działce jest teraz sucho",
+      "summary": "W ostatnich 30 dniach spadło 50 mm deszczu, czyli 67% tego, co zwykle, gleba ma mały zapas wody.",
+      "confidence": "high",
+      "evidenceRefs": [
+        "ev_precip_30d",
+        "ev_kbw_30d",
+        "ev_soil_awc",
+        "ev_ndvi"
+      ],
+      "score0to100": 32,
+      "level": "dry"
     },
-    "multiYearSusceptibility": {
-      "level": "moderate",
-      "score0to100": 55,
-      "peakMonths": [6, 7, 8],
-      "summaryPl": "Wieloletnia podatność umiarkowana — letnie miesiące bywają suche na tej lokalizacji.",
-      "evidenceIds": ["meteo.precipAnomalyPct10y", "meteo.monthlyPrecipMm", "crop.droughtSensitivity"]
-    },
-    "confidence0to1": 0.72,
-    "uncertaintyNotes": [
-      "Dane satelitarne NDVI są uproszczone (stub).",
-      "Ocena pojemności wodnej gleby to proxy z tekstury, nie pomiar lokalny."
-    ]
+    "susceptibility": {
+      "headline": "Ta działka często cierpi na brak wody",
+      "summary": "Latem zwykle brakuje tu wody, a w 4 z 10 ostatnich lat lato było suche.",
+      "confidence": "high",
+      "evidenceRefs": [
+        "ev_crop_sensitivity",
+        "ev_kbw_summer",
+        "ev_dry_summers",
+        "ev_soil_awc",
+        "ev_soil_sand"
+      ],
+      "score0to100": 72,
+      "level": "high"
+    }
   },
   "causes": [
     {
-      "id": "precip_deficit",
-      "labelPl": "Niedobór opadów",
-      "confidence0to1": 0.8,
-      "evidenceIds": ["meteo.precipMmLast30d", "meteo.drySpellDays"],
-      "rationalePl": "Opady z ostatnich 30 dni istotnie poniżej normy klimatycznej."
+      "id": "low_soil_storage",
+      "title": "Gleba słabo trzyma wodę",
+      "explanation": "Gleba ma dużo piasku (72%) i może zatrzymać tylko ok. 109 mm wody w 1 m profilu. Deszcz szybko w nią wsiąka i ucieka w głąb, poza zasięg korzeni.",
+      "confidence": "medium",
+      "evidenceRefs": [
+        "ev_soil_sand",
+        "ev_soil_awc",
+        "ev_soil_soc"
+      ],
+      "confidence0to1": 0.7
     },
     {
-      "id": "low_soil_storage",
-      "labelPl": "Niska pojemność wodna gleby",
-      "confidence0to1": 0.7,
-      "evidenceIds": ["soil.awcMmProxy", "soil.sandPct"],
-      "rationalePl": "Wysoki udział piasku i niski proxy AWC ograniczają magazynowanie wody."
+      "id": "precip_deficit",
+      "title": "Za mało deszczu",
+      "explanation": "W ostatnich 30 dniach spadło 50 mm deszczu, a zwykle w tym czasie pada około 75 mm. Z pola wyparowało o 91 mm więcej wody, niż spadło.",
+      "confidence": "medium",
+      "evidenceRefs": [
+        "ev_precip_30d",
+        "ev_kbw_30d",
+        "ev_dry_spell"
+      ],
+      "confidence0to1": 0.65
     },
     {
       "id": "crop_sensitivity",
-      "labelPl": "Wrażliwość uprawy na suszę",
-      "confidence0to1": 0.75,
-      "evidenceIds": ["crop.droughtSensitivity"],
-      "rationalePl": "Kukurydza ma podwyższoną wrażliwość na niedobór wody w fazie wzrostu."
+      "title": "Uprawa potrzebuje dużo wody",
+      "explanation": "Ta uprawa jest bardzo wrażliwa na brak wody, więc nawet krótki niedobór obniża plon.",
+      "confidence": "medium",
+      "evidenceRefs": [
+        "ev_crop_sensitivity"
+      ],
+      "confidence0to1": 0.62
+    },
+    {
+      "id": "runoff",
+      "title": "Część deszczu spływa z pola",
+      "explanation": "Działka ma spadek ok. 3% (ryzyko spływu: umiarkowane). Przy ulewach część wody spływa po powierzchni, zamiast wsiąkać.",
+      "confidence": "medium",
+      "evidenceRefs": [
+        "ev_slope"
+      ],
+      "confidence0to1": 0.6
     }
   ],
   "recommendations": {
     "retention": [
       {
-        "id": "small_pond",
-        "titlePl": "Małe oczko / zbiornik retencyjny",
-        "whyPl": "Zatrzymuje wodę opadową na działce i łagodzi krótkie niedobory.",
+        "actionId": "buffer_strips",
+        "title": "Pas zieleni na dole pola",
+        "description": "Zostaw lub wysiej pas trawy albo krzewów (szerokość 5–10 m) wzdłuż dolnej krawędzi działki lub w poprzek spadku.",
+        "why": "Działka ma spadek 3%, więc przy ulewach woda spływa. Pas zieleni ją spowalnia i pozwala wsiąknąć.",
         "priority": 1,
-        "evidenceIds": ["meteo.precipMmLast30d", "cause.precip_deficit"]
+        "costLevel": "low",
+        "timeframe": "jesień lub wiosna",
+        "evidenceRefs": [
+          "ev_slope"
+        ]
       },
       {
-        "id": "buffer_strips",
-        "titlePl": "Strefy buforowe / pasy zieleni",
-        "whyPl": "Spowalnia spływ powierzchniowy i zwiększa infiltrację na skraju pola.",
+        "actionId": "ditch_retention",
+        "title": "Zatrzymaj wodę w rowie",
+        "description": "Na rowie melioracyjnym przy działce ustaw zastawkę lub próg, żeby woda z roztopów i ulew nie odpływała od razu. Uzgodnij to ze spółką wodną.",
+        "why": "Wiosną woda z roztopów odpływa rowami, a latem jej brakuje. Nie mamy danych o rowach przy tej działce – sprawdź na miejscu.",
         "priority": 2,
-        "evidenceIds": ["terrain.runoffRisk"]
+        "costLevel": "medium",
+        "timeframe": "przed zimą",
+        "evidenceRefs": []
+      },
+      {
+        "actionId": "small_pond",
+        "title": "Małe oczko wodne lub zbiornik",
+        "description": "W najniższym, podmokłym miejscu działki zrób małe oczko, które zbiera wodę deszczową i z roztopów.",
+        "why": "Suche lata powtarzają się tu często (4 z 10). Oczko zatrzyma wodę na miejscu i poprawi wilgotność wokół.",
+        "priority": 3,
+        "costLevel": "high",
+        "timeframe": "po zbiorach",
+        "evidenceRefs": [
+          "ev_dry_summers"
+        ]
       }
     ],
     "agrotech": [
       {
-        "id": "residues",
-        "titlePl": "Pozostawianie resztek pożniwnych",
-        "whyPl": "Mulcz ogranicza parowanie i poprawia strukturę gleby.",
+        "actionId": "cover_crops",
+        "title": "Międzyplon po zbiorach",
+        "description": "Po zbiorach wysiej międzyplon (np. gorczycę, facelię). Okrywa glebę, ogranicza parowanie i dodaje próchnicy.",
+        "why": "Gleba zatrzymuje tylko ok. 109 mm wody. Okrywa ogranicza parowanie, a korzenie międzyplonu poprawiają strukturę gleby.",
         "priority": 1,
-        "evidenceIds": ["soil.awcMmProxy", "cause.low_soil_storage"]
+        "costLevel": "low",
+        "timeframe": "sierpień–wrzesień",
+        "evidenceRefs": [
+          "ev_soil_awc"
+        ]
       },
       {
-        "id": "cover_crops",
-        "titlePl": "Międzyplony / okrywa roślinna",
-        "whyPl": "Żywa okrywa chroni glebę i wspiera retencję w profilu glebowym.",
+        "actionId": "residues",
+        "title": "Zostaw resztki pożniwne",
+        "description": "Pozostaw rozdrobnione resztki roślin na powierzchni pola, zamiast je usuwać lub palić.",
+        "why": "Resztki chronią glebę przed słońcem i wiatrem, więc mniej wody wyparowuje. To ważne na glebie z 72% piasku.",
         "priority": 2,
-        "evidenceIds": ["soil.awcMmProxy"]
+        "costLevel": "low",
+        "timeframe": "po zbiorach",
+        "evidenceRefs": [
+          "ev_soil_sand"
+        ]
+      },
+      {
+        "actionId": "reduce_tillage",
+        "title": "Mniej orki",
+        "description": "Zamiast głębokiej orki stosuj płytką uprawę bezorkową tam, gdzie to możliwe.",
+        "why": "Gleba zatrzymuje tylko ok. 109 mm wody. Każda orka dodatkowo ją przesusza.",
+        "priority": 3,
+        "costLevel": "medium",
+        "timeframe": "od następnego sezonu",
+        "evidenceRefs": [
+          "ev_soil_awc"
+        ]
       }
     ],
     "irrigation": [
       {
-        "id": "irrigation_timing",
-        "titlePl": "Nawadnianie — tylko w krytycznych fazach",
-        "whyPl": "Przy silnym niedoborze i wrażliwej uprawie rozważ podlewanie w kluczowych fazach wzrostu.",
+        "actionId": "irrigation_timing",
+        "title": "Podlewanie tylko w kluczowym momencie",
+        "description": "Jeśli masz dostęp do wody, podlej uprawę w jej najbardziej wrażliwej fazie. Podlewaj rano lub wieczorem, mniejszymi dawkami.",
+        "why": "Brakuje ok. 25 mm deszczu względem normy, a uprawa jest wrażliwa na suszę. Najpierw jednak zadbaj o zatrzymanie wody na polu.",
         "priority": 1,
-        "evidenceIds": ["moisture.current", "crop.droughtSensitivity"]
+        "costLevel": "high",
+        "timeframe": "w najbliższych 2–3 tygodniach",
+        "evidenceRefs": [
+          "ev_precip_30d",
+          "ev_crop_sensitivity"
+        ]
       }
     ]
   },
+  "evidence": [
+    {
+      "id": "ev_precip_30d",
+      "label": "Opady w ostatnich 30 dniach",
+      "value": 50.1,
+      "unit": "mm",
+      "comparison": "zwykle w tym okresie: 75 mm (67% normy)",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_kbw_30d",
+      "label": "Bilans wodny 30 dni (opad minus parowanie)",
+      "value": -91.3,
+      "unit": "mm",
+      "comparison": "bardziej sucho było w 30% lat z ostatnich 10 (ten sam okres)",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_dry_spell",
+      "label": "Dni bez deszczu (do dnia oceny)",
+      "value": 3.0,
+      "unit": "dni",
+      "comparison": "liczone od dnia oceny wstecz, dzień suchy = opad < 1 mm",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_temp_30d",
+      "label": "Średnia temperatura 30 dni",
+      "value": 20.9,
+      "unit": "°C",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_precip_365d",
+      "label": "Opady w ostatnich 12 miesiącach",
+      "value": 583.7,
+      "unit": "mm",
+      "comparison": "zwykle: 606 mm (-4%)",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_kbw_summer",
+      "label": "Średni letni bilans wodny (VI–VIII, 10 lat)",
+      "value": -132.0,
+      "unit": "mm",
+      "comparison": "ujemny = latem więcej wody paruje, niż spada deszczu",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_dry_summers",
+      "label": "Suche lata w ostatnich latach",
+      "value": "4 z 10",
+      "comparison": "lato z bilansem wodnym poniżej -150 mm",
+      "sourceId": "open_meteo"
+    },
+    {
+      "id": "ev_soil_sand",
+      "label": "Udział piasku w glebie (0–30 cm)",
+      "value": 72.2,
+      "unit": "%",
+      "sourceId": "soilgrids"
+    },
+    {
+      "id": "ev_soil_clay",
+      "label": "Udział iłu w glebie (0–30 cm)",
+      "value": 9.4,
+      "unit": "%",
+      "sourceId": "soilgrids"
+    },
+    {
+      "id": "ev_soil_soc",
+      "label": "Węgiel organiczny (próchnica, 0–30 cm)",
+      "value": 4.76,
+      "unit": "%",
+      "sourceId": "soilgrids"
+    },
+    {
+      "id": "ev_soil_awc",
+      "label": "Ile wody gleba może zatrzymać",
+      "value": 109.0,
+      "unit": "mm na 1 m gleby",
+      "comparison": "niska pojemność (szacunek z tekstury gleby)",
+      "sourceId": "soilgrids"
+    },
+    {
+      "id": "ev_slope",
+      "label": "Spadek terenu na działce",
+      "value": 3.01,
+      "unit": "%",
+      "comparison": "ryzyko spływu: umiarkowane",
+      "sourceId": "dem"
+    },
+    {
+      "id": "ev_ndvi",
+      "label": "Kondycja roślin z satelity (NDVI)",
+      "value": 0.572,
+      "comparison": "zdjęcie z 2026-07-13; 0 = goła gleba, >0,6 = gęsta zieleń",
+      "sourceId": "sentinel2"
+    },
+    {
+      "id": "ev_cdi",
+      "label": "Wskaźnik suszy w regionie (EDO)",
+      "value": "brak sygnału suszy wg EDO",
+      "comparison": "klasa 0 w skali 0–3",
+      "sourceId": "edo"
+    },
+    {
+      "id": "ev_crop_sensitivity",
+      "label": "Wrażliwość uprawy na suszę",
+      "value": "wysoka",
+      "comparison": "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, zawiązywanie ziarna)",
+      "sourceId": "crop_table"
+    }
+  ],
   "sources": [
     {
-      "id": "mock_plot",
-      "name": "Mock ULDK plot resolver",
-      "url": null,
-      "fetchedAt": "2025-07-15T12:00:00Z",
-      "coverage": "demo"
+      "id": "uldk",
+      "name": "Granice działki",
+      "provider": "ULDK GUGiK",
+      "url": "https://uldk.gugik.gov.pl/service.php?request=GetParcelById&id=040308_5.0004.17220&result=id%2Cgeom_wkt%2Cvoivodeship%2Ccounty%2Ccommune%2Cregion%2Cparcel&srid=4326",
+      "fetchedAt": "2026-11-21T14:55:48Z",
+      "dataPeriod": "stan ewidencji na dzień pobrania",
+      "mode": "live",
+      "status": "ok",
+      "license": "Dane GUGiK (EGiB) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a"
     },
     {
-      "id": "mock_meteo",
-      "name": "Mock Open-Meteo climate",
-      "url": "https://open-meteo.com/",
-      "fetchedAt": "2025-07-15T12:00:00Z",
-      "coverage": "demo"
+      "id": "dem",
+      "name": "Ukształtowanie terenu",
+      "provider": "GUGiK NMT (numeryczny model terenu)",
+      "url": "https://services.gugik.gov.pl/nmt/?request=GetHByPointList&list=576483.3+449626.6%2C576235.4+449401.9%2C576901.9+449880.5%2C576176.9+449759.9%2C576966.5+449524.3%2C576255.9+449449.7%2C576413.8+449449.7%2C576255.9+449545.5%2C576413.8+449545.5%2C576571.7+449545.5%2C576729.6+449545.5%2C576887.5+449545.5%2C576255.9+449641.2%2C576413.8+449641.2%2C576571.7+449641.2%2C576729.6+449641.2%2C576887.5+449641.2%2C576255.9+449736.9%2C576413.8+449736.9%2C576571.7+449736.9%2C576729.6+449736.9%2C576887.5+449736.9%2C576729.6+449832.6%2C576887.5+449832.6",
+      "fetchedAt": "2026-11-21T14:55:49Z",
+      "dataPeriod": "model terenu, siatka ~1 m",
+      "mode": "live",
+      "status": "ok",
+      "license": "Dane GUGiK (NMT) udostępniane bezpłatnie – ustawa Prawo geodezyjne i kartograficzne, art. 40a"
     },
     {
-      "id": "mock_soil",
-      "name": "Mock SoilGrids",
-      "url": "https://soilgrids.org/",
-      "fetchedAt": "2025-07-15T12:00:00Z",
-      "coverage": "demo"
+      "id": "hydro",
+      "name": "Rowy, cieki i zbiorniki w pobliżu",
+      "provider": "OpenStreetMap (Overpass API)",
+      "mode": "live",
+      "status": "failed",
+      "license": "© OpenStreetMap contributors – ODbL 1.0",
+      "error": "Cieki i rowy w pobliżu: brak danych hydro – Serwer OpenStreetMap (Overpass) nie odpowiadał przy ostatnich zapytaniach – pominięto, ponowna próba za 2 min."
+    },
+    {
+      "id": "open_meteo",
+      "name": "Pogoda (opady, parowanie, temperatura)",
+      "provider": "NASA POWER Daily API (MERRA-2/CERES; ET0 wg FAO-56 liczone lokalnie)",
+      "url": "https://power.larc.nasa.gov/api/temporal/daily/point",
+      "fetchedAt": "2026-11-21T14:55:49Z",
+      "dataPeriod": "2016-07-15 – 2026-07-15",
+      "mode": "cached",
+      "status": "ok",
+      "license": "NASA POWER – dane publiczne bez ograniczeń (NASA Earth Science Data Policy), prośba o cytowanie"
+    },
+    {
+      "id": "soilgrids",
+      "name": "Gleba (skład, próchnica, pojemność wodna)",
+      "provider": "ISRIC SoilGrids 2.0",
+      "url": "https://maps.isric.org/mapserv",
+      "fetchedAt": "2026-11-21T14:55:49Z",
+      "dataPeriod": "model SoilGrids 2.0, siatka 250 m",
+      "mode": "cached",
+      "status": "ok",
+      "license": "ISRIC SoilGrids 2.0 – CC BY 4.0"
+    },
+    {
+      "id": "sentinel2",
+      "name": "Zdjęcia satelitarne (kondycja roślin)",
+      "provider": "Sentinel-2 L2A (Copernicus, AWS Earth Search)",
+      "url": "https://earth-search.aws.element84.com/v1/search",
+      "fetchedAt": "2026-11-21T14:55:49Z",
+      "dataPeriod": "zdjęcie z 2026-07-13",
+      "mode": "cached",
+      "status": "ok",
+      "license": "Copernicus Sentinel data – licencja pełna, otwarta i bezpłatna (Rozp. UE 1159/2013); katalog STAC Element84 Earth Search"
+    },
+    {
+      "id": "edo",
+      "name": "Susza w regionie (Europejskie Obserwatorium Suszy)",
+      "provider": "EDO Combined Drought Indicator (Copernicus EMS)",
+      "url": "https://drought.emergency.copernicus.eu/api/wms",
+      "fetchedAt": "2026-11-21T14:55:49Z",
+      "dataPeriod": "dekada od 2026-07-11",
+      "mode": "cached",
+      "status": "ok",
+      "license": "Copernicus Emergency Management Service – EDO, CC BY 4.0"
+    },
+    {
+      "id": "engine",
+      "name": "Obliczenia własne",
+      "provider": "Retencja – silnik reguł (deterministyczny)",
+      "mode": "static",
+      "status": "ok"
+    },
+    {
+      "id": "crop_table",
+      "name": "Tabela wrażliwości upraw",
+      "provider": "Retencja – tabela upraw",
+      "mode": "static",
+      "status": "ok"
     }
   ],
   "limitations": [
-    "Silnik używa uproszczonych progów wodnych (proxy), nie modelu hydrologicznego.",
-    "Adaptery są mockami do czasu podłączenia żywych źródeł Person 2."
+    "Granice działki pochodzą z ULDK GUGiK (EGiB) – stan na dzień pobrania, bez weryfikacji w terenie.",
+    "Spadek terenu to różnica wysokości między najwyższym i najniższym z kilkunastu punktów próbkowanych w obrębie działki – wskaźnik orientacyjny, nie pełna analiza spływu.",
+    "Cieki, rowy i zbiorniki pochodzą z OpenStreetMap – rowy melioracyjne mogą być niekompletnie zmapowane, więc „brak wody w pobliżu” nie wyklucza istnienia rowu.",
+    "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar wilgotności w polu ani pełny model hydrologiczny.",
+    "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m) – lokalnie gleba może się różnić.",
+    "Zalecenia to wskazówki retencyjne i agrotechniczne, nie decyzja administracyjna. Budowa zbiornika czy zastawki może wymagać zgłoszenia wodnoprawnego."
   ],
   "missingData": [
-    "Pełna geometria działki (uproszczony centroid).",
-    "NDVI satelitarne — wartość stub."
+    {
+      "id": "missing_hydro",
+      "what": "Rowy i cieki w pobliżu",
+      "reason": "Cieki i rowy w pobliżu: brak danych hydro – Serwer OpenStreetMap (Overpass) nie odpowiadał przy ostatnich zapytaniach – pominięto, ponowna próba za 2 min.",
+      "impact": "Nie wiemy, czy przy działce jest rów – zalecenie retencji w rowie sprawdź na miejscu."
+    }
   ],
   "narrative": {
-    "mode": "template",
+    "generatedBy": "template",
     "sections": [
       {
-        "id": "ocena",
-        "titlePl": "Ocena sytuacji wodnej",
-        "bodyPl": "Aktualna sytuacja: niedobór (score 38/100). Wieloletnia podatność: umiarkowana."
+        "id": "assessment",
+        "text": "Na działce jest teraz sucho. Ta działka często cierpi na brak wody. Pierwsza ocena dotyczy dnia 2026-07-15, druga – ostatnich lat.",
+        "evidenceRefs": [
+          "ev_precip_30d",
+          "ev_kbw_30d",
+          "ev_soil_awc",
+          "ev_ndvi",
+          "ev_crop_sensitivity",
+          "ev_kbw_summer",
+          "ev_dry_summers",
+          "ev_soil_sand"
+        ]
       },
       {
-        "id": "przyczyny",
-        "titlePl": "Przyczyny",
-        "bodyPl": "Wskazano: niedobór opadów, niska pojemność wodna gleby, wrażliwość uprawy."
+        "id": "causes",
+        "text": "Najważniejsze przyczyny: gleba słabo trzyma wodę, za mało deszczu, uprawa potrzebuje dużo wody, część deszczu spływa z pola.",
+        "evidenceRefs": [
+          "ev_soil_sand",
+          "ev_soil_awc",
+          "ev_soil_soc",
+          "ev_precip_30d",
+          "ev_kbw_30d",
+          "ev_dry_spell",
+          "ev_crop_sensitivity",
+          "ev_slope"
+        ]
       },
       {
-        "id": "retencja",
-        "titlePl": "Retencja",
-        "bodyPl": "Rekomendacje retencyjne: małe oczko, strefy buforowe."
+        "id": "retention",
+        "text": "Zacznij od zatrzymania wody na polu: pas zieleni na dole pola, zatrzymaj wodę w rowie, małe oczko wodne lub zbiornik.",
+        "evidenceRefs": [
+          "ev_slope",
+          "ev_dry_summers"
+        ]
       },
       {
         "id": "agrotech",
-        "titlePl": "Agrotechnika",
-        "bodyPl": "Działania glebowe: resztki pożniwne, międzyplony."
+        "text": "W uprawie gleby pomogą: międzyplon po zbiorach, zostaw resztki pożniwne, mniej orki.",
+        "evidenceRefs": [
+          "ev_soil_awc",
+          "ev_soil_sand"
+        ]
       },
       {
-        "id": "nawadnianie",
-        "titlePl": "Nawadnianie",
-        "bodyPl": "Nawadnianie rozważane dopiero po retencji i agrotechnice — tylko w krytycznych fazach."
+        "id": "irrigation",
+        "text": "Nawadnianie rozważ dopiero po działaniach retencyjnych – i tylko w najbardziej wrażliwej fazie uprawy.",
+        "evidenceRefs": [
+          "ev_precip_30d",
+          "ev_crop_sensitivity"
+        ]
       }
     ]
   },
   "meta": {
-    "engineVersion": "0.1.0",
+    "engineVersion": "0.2.0",
+    "adapters": "live",
     "llmEnabled": false,
-    "llmModel": null,
-    "durationMs": 12
+    "durationMs": 22
   }
 }

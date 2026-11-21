@@ -1,10 +1,42 @@
 [
-  { "id": "kukurydza", "name": "Kukurydza", "droughtSensitivity": "high" },
-  { "id": "ziemniak", "name": "Ziemniaki", "droughtSensitivity": "high" },
-  { "id": "warzywa", "name": "Warzywa", "droughtSensitivity": "high" },
-  { "id": "burak", "name": "Buraki cukrowe", "droughtSensitivity": "medium" },
-  { "id": "rzepak", "name": "Rzepak", "droughtSensitivity": "medium" },
-  { "id": "pszenica", "name": "Pszenica", "droughtSensitivity": "medium" },
-  { "id": "zboza_inne", "name": "Inne zboża (żyto, jęczmień, pszenżyto)", "droughtSensitivity": "low" },
-  { "id": "uzytki_zielone", "name": "Łąka / pastwisko", "droughtSensitivity": "medium" }
+  {
+    "id": "kukurydza",
+    "name": "Kukurydza",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "ziemniak",
+    "name": "Ziemniaki",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "warzywa",
+    "name": "Warzywa",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "burak",
+    "name": "Buraki cukrowe",
+    "droughtSensitivity": "medium"
+  },
+  {
+    "id": "rzepak",
+    "name": "Rzepak",
+    "droughtSensitivity": "medium"
+  },
+  {
+    "id": "pszenica",
+    "name": "Pszenica",
+    "droughtSensitivity": "medium"
+  },
+  {
+    "id": "zboza",
+    "name": "Inne zboża (żyto, jęczmień, pszenżyto)",
+    "droughtSensitivity": "low"
+  },
+  {
+    "id": "uzytki_zielone",
+    "name": "Łąka / pastwisko",
+    "droughtSensitivity": "medium"
+  }
 ]

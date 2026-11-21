@@ -1,138 +1,206 @@
-"""Evidence / Report truth models — Person 1 UI contract."""
+"""Evidence / Report truth models.
+
+1:1 mirror of `apps/web/lib/types.ts` — that file is the shared contract.
+Change field names in BOTH places (and in `apps/web/mocks/*.json`) or not at all.
+Extra backend-only fields (scores, meta) are allowed; the UI ignores them.
+"""
 
 from __future__ import annotations
 
-from datetime import date
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-CauseId = Literal[
-    "precip_deficit",
-    "low_soil_storage",
-    "runoff",
-    "crop_sensitivity",
+# ---------- Enums (same literals as types.ts) ----------
+
+Confidence = Literal["low", "medium", "high"]
+RiskLevel = Literal["low", "medium", "high"]
+MoistureLevel = Literal["very_dry", "dry", "normal", "wet"]
+CauseId = Literal["precip_deficit", "low_soil_storage", "runoff", "crop_sensitivity"]
+ActionId = Literal[
+    "residues",
+    "cover_crops",
+    "reduce_tillage",
+    "small_pond",
+    "buffer_strips",
+    "ditch_retention",
+    "irrigation_timing",
 ]
-
-MoistureLevel = Literal["ok", "watch", "deficit", "severe"]
-SusceptibilityLevel = Literal["low", "moderate", "high"]
-NarrativeMode = Literal["llm", "template"]
-ActionKind = Literal["retention", "agrotech", "irrigation"]
+SourceStatus = Literal["ok", "partial", "failed"]
+SourceMode = Literal["live", "cached", "static"]
+NarrativeSectionId = Literal["assessment", "causes", "retention", "agrotech", "irrigation"]
 
 
-class Centroid(BaseModel):
-    lat: float
-    lng: float
+def confidence_label(x: float) -> Confidence:
+    """Numeric engine confidence 0–1 → UI band."""
+    if x >= 0.75:
+        return "high"
+    if x >= 0.55:
+        return "medium"
+    return "low"
 
 
-class TerrainInfo(BaseModel):
+# ---------- Plot (Person 2) ----------
+
+
+class Terrain(BaseModel):
     slopePct: float | None = None
-    runoffRisk: str | None = None
+    runoffRisk: RiskLevel | None = None
 
 
-class HydroInfo(BaseModel):
+class Hydro(BaseModel):
     nearbyWater: bool | None = None
     distanceClass: str | None = None
-
-
-class PlotInfo(BaseModel):
-    plotId: str | None = None
-    centroid: Centroid
-    areaHa: float | None = None
-    geometry: dict[str, Any] | None = None
-    voivodeship: str | None = None
-    terrain: TerrainInfo | None = None
-    hydro: HydroInfo | None = None
-
-
-class CropInfo(BaseModel):
-    id: str
-    namePl: str
-    droughtSensitivity: float
-
-
-class SituationBlock(BaseModel):
-    level: MoistureLevel
-    score0to100: int = Field(ge=0, le=100)
-    summaryPl: str
-    evidenceIds: list[str] = Field(default_factory=list)
-
-
-class SusceptibilityBlock(BaseModel):
-    level: SusceptibilityLevel
-    score0to100: int = Field(ge=0, le=100)
-    peakMonths: list[int] = Field(default_factory=list)
-    summaryPl: str
-    evidenceIds: list[str] = Field(default_factory=list)
-
-
-class MoistureAssessment(BaseModel):
-    current: SituationBlock
-    multiYearSusceptibility: SusceptibilityBlock
-    confidence0to1: float = Field(ge=0, le=1)
-    uncertaintyNotes: list[str] = Field(default_factory=list)
-
-
-class Cause(BaseModel):
-    id: CauseId
-    labelPl: str
-    confidence0to1: float = Field(ge=0, le=1)
-    evidenceIds: list[str] = Field(default_factory=list)
-    rationalePl: str
-
-
-class Recommendation(BaseModel):
-    id: str
-    titlePl: str
-    whyPl: str
-    priority: int = Field(ge=1)
-    evidenceIds: list[str] = Field(default_factory=list)
-    kind: ActionKind | None = None
-
-
-class Recommendations(BaseModel):
-    retention: list[Recommendation] = Field(default_factory=list)
-    agrotech: list[Recommendation] = Field(default_factory=list)
-    irrigation: list[Recommendation] = Field(default_factory=list)
+    missing: bool | None = None
 
 
 class Source(BaseModel):
     id: str
     name: str
+    provider: str | None = None
     url: str | None = None
     fetchedAt: str | None = None
-    coverage: str | None = None
+    dataPeriod: str | None = None
+    mode: SourceMode
+    status: SourceStatus
+    license: str | None = None
+    error: str | None = None
+
+
+class Plot(BaseModel):
+    plotId: str
+    geometry: dict[str, Any]
+    centroid: tuple[float, float]  # [lng, lat] — GeoJSON order
+    areaHa: float
+    bbox: tuple[float, float, float, float]  # [minLng, minLat, maxLng, maxLat]
+    voivodeship: str | None = None
+    county: str | None = None
+    commune: str | None = None
+    terrain: Terrain | None = None
+    hydro: Hydro | None = None
+    sources: list[Source] | None = None
+    fetchedAt: str | None = None
+
+
+# ---------- Crops ----------
+
+
+class Crop(BaseModel):
+    id: str
+    name: str
+    droughtSensitivity: RiskLevel | None = None
+
+
+# ---------- Report / Evidence (Person 3) ----------
+
+
+class Evidence(BaseModel):
+    id: str
+    label: str
+    value: float | str
+    unit: str | None = None
+    comparison: str | None = None
+    sourceId: str
+
+
+class AssessmentBlock(BaseModel):
+    headline: str
+    summary: str
+    confidence: Confidence
+    evidenceRefs: list[str] = Field(default_factory=list)
+    # backend-only transparency
+    score0to100: int | None = None
+
+
+class CurrentBlock(AssessmentBlock):
+    level: MoistureLevel
+
+
+class SusceptibilityBlock(AssessmentBlock):
+    level: RiskLevel
+
+
+class MoistureAssessment(BaseModel):
+    current: CurrentBlock
+    susceptibility: SusceptibilityBlock
+
+
+class Cause(BaseModel):
+    id: CauseId
+    title: str
+    explanation: str
+    confidence: Confidence
+    evidenceRefs: list[str] = Field(default_factory=list)
+    confidence0to1: float | None = None  # backend-only, used for sorting
+
+
+class Recommendation(BaseModel):
+    actionId: ActionId
+    title: str
+    description: str
+    why: str
+    priority: int = Field(ge=1)
+    costLevel: RiskLevel | None = None
+    timeframe: str | None = None
+    evidenceRefs: list[str] = Field(default_factory=list)
+
+
+class Recommendations(BaseModel):
+    retention: list[Recommendation] = Field(default_factory=list)
+    agrotech: list[Recommendation] = Field(default_factory=list)
+    irrigation: list[Recommendation] | None = None
+    irrigationNote: str | None = None
+
+
+class MissingData(BaseModel):
+    id: str
+    what: str
+    reason: str
+    impact: str
 
 
 class NarrativeSection(BaseModel):
-    id: str
-    titlePl: str
-    bodyPl: str
+    id: NarrativeSectionId
+    text: str
+    evidenceRefs: list[str] = Field(default_factory=list)
 
 
 class Narrative(BaseModel):
-    mode: NarrativeMode
+    generatedBy: Literal["llm", "template"]
     sections: list[NarrativeSection] = Field(default_factory=list)
 
 
 class ReportMeta(BaseModel):
     engineVersion: str
+    adapters: Literal["live", "mock"]
     llmEnabled: bool
     llmModel: str | None = None
     durationMs: int = 0
 
 
 class Report(BaseModel):
-    """Full analyze response — deterministic Evidence + optional narrative."""
+    """Full /analyze response — deterministic Evidence + optional narrative."""
 
-    plot: PlotInfo
-    crop: CropInfo
-    analysisDate: date
+    reportId: str
+    status: Literal["complete", "partial"]
+    plot: Plot
+    crop: Crop
+    analysisDate: str  # YYYY-MM-DD
+    generatedAt: str  # ISO timestamp
     moistureAssessment: MoistureAssessment
     causes: list[Cause] = Field(default_factory=list)
     recommendations: Recommendations
+    evidence: list[Evidence] = Field(default_factory=list)
     sources: list[Source] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
-    missingData: list[str] = Field(default_factory=list)
+    missingData: list[MissingData] = Field(default_factory=list)
     narrative: Narrative | None = None
-    meta: ReportMeta
+    meta: ReportMeta | None = None
+
+
+class HealthResponse(BaseModel):
+    status: Literal["ok", "degraded"]
+    version: str | None = None
+    adapters: str | None = None
+    llm: bool | None = None
+    model: str | None = None

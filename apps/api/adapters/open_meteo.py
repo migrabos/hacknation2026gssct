@@ -242,8 +242,33 @@ def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], l
     prev: list[dict[str, Any]] = []
     for k in range(1, YEARS_BACK + 1):
         end_k = shift_years(d, -k)
-        prev.append({"year": end_k.year, "kbw30": _kbw(series, end_k, WINDOW_30)})
+        p_k = _sum(_window(series, end_k, WINDOW_30), 0)
+        prev.append({
+            "year": end_k.year,
+            "kbw30": _kbw(series, end_k, WINDOW_30),
+            "precip30": None if p_k is None else round(p_k, 1),
+        })
     prev_vals = [y["kbw30"] for y in prev if y["kbw30"] is not None]
+    prev_p30 = [y["precip30"] for y in prev if y["precip30"] is not None]
+
+    # 12-month precipitation vs the same 12 months in earlier years (fully inside the series).
+    p365 = _sum(_window(series, d, 365), 0)
+    prev_p365 = [
+        v for k in range(1, YEARS_BACK)
+        if (v := _sum(_window(series, shift_years(d, -k), 365), 0)) is not None
+    ]
+
+    # Summer (Jun–Aug) climatic water balance for every complete summer before the analysis date.
+    summers: list[dict[str, Any]] = []
+    for year in range(d.year - YEARS_BACK, d.year + 1):
+        aug31 = date(year, 8, 31)
+        if aug31 > d:
+            continue
+        rows = _window(series, aug31, 92)  # 1 Jun – 31 Aug
+        p, e = _sum(rows, 0), _sum(rows, 1)
+        if p is not None and e is not None:
+            summers.append({"year": year, "kbw": round(p - e, 1), "precip": round(p, 1)})
+    summers = summers[-YEARS_BACK:]
     pct = None
     if kbw30 is not None and len(prev_vals) >= 5:
         pct = round(100.0 * sum(v <= kbw30 for v in prev_vals) / len(prev_vals), 1)
@@ -259,6 +284,11 @@ def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], l
         "kbw_10y_percentile": pct,
         "kbw_30d_median_10y": round(median(prev_vals), 1) if prev_vals else None,
         "kbw_30d_prev_years": prev,  # transparency: lets the jury recompute the percentile
+        "precip_30d_median_10y": round(median(prev_p30), 1) if prev_p30 else None,
+        "precip_365d": None if p365 is None else round(p365, 1),
+        "precip_365d_median_prev": round(median(prev_p365), 1) if len(prev_p365) >= 5 else None,
+        "kbw_summer_by_year": summers,  # Jun–Aug P − ET0 per year
+        "kbw_summer_mean_10y": round(sum(s["kbw"] for s in summers) / len(summers), 1) if summers else None,
         "dry_spell_days": dry,
         "temp_mean_30d": t30,
     }
@@ -341,7 +371,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     res = await run_adapter(
         "Open-Meteo",
         ARCHIVE_URL,
-        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 1},
+        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 2},
         fetch,
         cache_ttl_sec=3600 if recent else None,
     )

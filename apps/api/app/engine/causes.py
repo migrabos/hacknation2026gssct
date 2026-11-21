@@ -1,111 +1,83 @@
-"""Multi-label cause detection with confidence + evidence ids."""
+"""Multi-label cause detection with confidence + evidence ids (sorted most-certain first)."""
 
 from __future__ import annotations
 
-from typing import Any
+from app.engine.assess import (
+    AWC_LOW,
+    DRY_SPELL_DEFICIT,
+    HIGH_SENSITIVITY,
+    KBW_PCT_LOW,
+    PRECIP_RATIO_WATCH,
+    SAND_HIGH,
+)
+from app.engine.facts import RUNOFF_PL, Facts, fmt
+from app.schemas.evidence import Cause, MoistureAssessment, confidence_label
 
-from app.engine.assess import AWC_LOW, HIGH_SENSITIVITY, PRECIP_RATIO_WATCH
-from app.schemas.evidence import Cause, MoistureAssessment
-
-CAUSE_LABELS = {
-    "precip_deficit": "Niedobór opadów",
-    "low_soil_storage": "Niska pojemność wodna gleby",
-    "runoff": "Spływ powierzchniowy",
-    "crop_sensitivity": "Wrażliwość uprawy na suszę",
+CAUSE_TITLES = {
+    "precip_deficit": "Za mało deszczu",
+    "low_soil_storage": "Gleba słabo trzyma wodę",
+    "runoff": "Część deszczu spływa z pola",
+    "crop_sensitivity": "Uprawa potrzebuje dużo wody",
 }
 
 
-def detect_causes(
-    *,
-    assessment: MoistureAssessment,
-    meteo: dict[str, Any],
-    soil: dict[str, Any],
-    terrain: dict[str, Any] | None,
-    crop_sensitivity: float,
-) -> list[Cause]:
-    causes: list[Cause] = []
+def _cause(id_: str, conf: float, refs: list[str], text: str) -> Cause:
+    conf = round(min(0.95, conf), 2)
+    return Cause(id=id_, title=CAUSE_TITLES[id_], explanation=text, confidence=confidence_label(conf),  # type: ignore[arg-type]
+                 evidenceRefs=refs, confidence0to1=conf)
 
-    precip = float(meteo.get("precipMmLast30d", 0))
-    climate = float(meteo.get("precipMmClimate30d", 1) or 1)
-    dry_spell = int(meteo.get("drySpellDays", 0))
-    ratio = precip / climate if climate > 0 else 0.0
-    awc = float(soil.get("awcMmProxy", 70))
-    sand = float(soil.get("sandPct", 50))
+
+def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
+    causes: list[Cause] = []
+    dry_now = assessment.current.level in ("dry", "very_dry")
 
     # precip_deficit
-    if ratio < PRECIP_RATIO_WATCH or dry_spell >= 10 or assessment.current.level in (
-        "deficit",
-        "severe",
-    ):
-        conf = 0.55
-        if ratio < 0.5:
-            conf += 0.25
-        elif ratio < PRECIP_RATIO_WATCH:
-            conf += 0.15
-        if dry_spell >= 14:
-            conf += 0.1
-        causes.append(
-            Cause(
-                id="precip_deficit",
-                labelPl=CAUSE_LABELS["precip_deficit"],
-                confidence0to1=round(min(0.95, conf), 2),
-                evidenceIds=["meteo.precipMmLast30d", "meteo.precipMmClimate30d", "meteo.drySpellDays"],
-                rationalePl=(
-                    f"Opady {precip:.0f} mm / 30 dni vs norma {climate:.0f} mm "
-                    f"(stosunek {ratio:.2f}); suchy okres {dry_spell} dni."
-                ),
-            )
-        )
+    ratio = f.precip_ratio
+    low_ratio = ratio is not None and ratio < PRECIP_RATIO_WATCH
+    low_kbw = f.kbw_pct is not None and f.kbw_pct <= KBW_PCT_LOW
+    long_dry = f.dry_spell is not None and f.dry_spell >= 10
+    if low_ratio or low_kbw or long_dry:
+        conf = 0.5 + (0.25 if ratio is not None and ratio < 0.5 else 0.15 if low_ratio else 0)
+        conf += 0.1 if low_kbw else 0
+        conf += 0.1 if f.dry_spell is not None and f.dry_spell >= DRY_SPELL_DEFICIT else 0
+        parts = []
+        if ratio is not None:
+            parts.append(f"W ostatnich 30 dniach spadło {fmt(f.precip30, 0)} mm deszczu, "
+                         f"a zwykle w tym czasie pada około {fmt(f.precip30_normal, 0)} mm.")
+        if f.kbw30 is not None and f.kbw30 < 0:
+            parts.append(f"Z pola wyparowało o {fmt(-f.kbw30, 0)} mm więcej wody, niż spadło.")
+        if long_dry:
+            parts.append(f"Od {fmt(f.dry_spell, 0)} dni nie było deszczu.")
+        causes.append(_cause("precip_deficit", conf, ["ev_precip_30d", "ev_kbw_30d", "ev_dry_spell"], " ".join(parts)))
 
     # low_soil_storage
-    if awc < AWC_LOW or sand >= 55:
-        conf = 0.5 + (0.25 if awc < 45 else 0.1) + (0.1 if sand >= 60 else 0.0)
-        causes.append(
-            Cause(
-                id="low_soil_storage",
-                labelPl=CAUSE_LABELS["low_soil_storage"],
-                confidence0to1=round(min(0.95, conf), 2),
-                evidenceIds=["soil.awcMmProxy", "soil.sandPct"],
-                rationalePl=(
-                    f"Proxy AWC {awc:.0f} mm i udział piasku {sand:.0f}% "
-                    "ograniczają magazynowanie wody w glebie."
-                ),
-            )
-        )
+    low_awc = f.awc is not None and f.awc < AWC_LOW
+    sandy = f.sand is not None and f.sand >= SAND_HIGH
+    if low_awc or sandy:
+        conf = 0.5 + (0.25 if f.awc is not None and f.awc < 90 else 0.1 if low_awc else 0) + (0.1 if sandy else 0)
+        text = "Gleba"
+        if sandy:
+            text += f" ma dużo piasku ({fmt(f.sand, 0)}%)"
+        if low_awc:
+            text += (" i" if sandy else "") + f" może zatrzymać tylko ok. {fmt(f.awc, 0)} mm wody w 1 m profilu"
+        text += ". Deszcz szybko w nią wsiąka i ucieka w głąb, poza zasięg korzeni."
+        causes.append(_cause("low_soil_storage", conf, ["ev_soil_sand", "ev_soil_awc", "ev_soil_soc"], text))
 
     # runoff
-    terrain = terrain or {}
-    slope = float(terrain.get("slopePct") or 0)
-    runoff_risk = (terrain.get("runoffRisk") or "").lower()
-    if slope >= 3.5 or runoff_risk in ("moderate", "high"):
-        conf = 0.45 + (0.2 if slope >= 5 else 0.1) + (0.15 if runoff_risk == "high" else 0.05)
-        causes.append(
-            Cause(
-                id="runoff",
-                labelPl=CAUSE_LABELS["runoff"],
-                confidence0to1=round(min(0.9, conf), 2),
-                evidenceIds=["terrain.slopePct", "terrain.runoffRisk"],
-                rationalePl=(
-                    f"Nachylenie ~{slope:.1f}% i ryzyko spływu '{runoff_risk or 'nieznane'}' "
-                    "sprzyjają utracie wody z pola."
-                ),
-            )
-        )
+    if f.slope is not None and (f.slope >= 3.5 or f.runoff in ("medium", "high")):
+        conf = 0.45 + (0.2 if f.slope >= 5 else 0.1) + (0.15 if f.runoff == "high" else 0.05)
+        causes.append(_cause(
+            "runoff", conf, ["ev_slope"],
+            f"Działka ma spadek ok. {fmt(f.slope)}% (ryzyko spływu: {RUNOFF_PL.get(f.runoff or '', 'nieznane')}). "
+            "Przy ulewach część wody spływa po powierzchni, zamiast wsiąkać.",
+        ))
 
-    # crop_sensitivity — fire when crop is sensitive AND moisture not ok
-    if crop_sensitivity >= HIGH_SENSITIVITY and assessment.current.level != "ok":
-        conf = 0.5 + crop_sensitivity * 0.4
-        causes.append(
-            Cause(
-                id="crop_sensitivity",
-                labelPl=CAUSE_LABELS["crop_sensitivity"],
-                confidence0to1=round(min(0.95, conf), 2),
-                evidenceIds=["crop.droughtSensitivity", "moisture.current"],
-                rationalePl=(
-                    f"Uprawa o wrażliwości {crop_sensitivity:.2f} przy aktualnej "
-                    f"ocenie '{assessment.current.level}'."
-                ),
-            )
-        )
+    # crop_sensitivity — only matters when it's not wet
+    if f.crop_sens >= HIGH_SENSITIVITY and (dry_now or assessment.susceptibility.level == "high"):
+        causes.append(_cause(
+            "crop_sensitivity", 0.4 + f.crop_sens * 0.3, ["ev_crop_sensitivity"],
+            "Ta uprawa jest bardzo wrażliwa na brak wody, więc nawet krótki niedobór obniża plon.",
+        ))
 
+    causes.sort(key=lambda c: -(c.confidence0to1 or 0))
     return causes

@@ -71,7 +71,8 @@ async function request<T>(path: string, init: RequestInit = {}, timeoutMs = DEFA
   }
   if (res.status === 404) throw new ApiError("not_found", detail);
   if (res.status === 400 || res.status === 422) throw new ApiError("bad_request", detail);
-  if (res.status === 504) throw new ApiError("timeout", detail);
+  // 503 = an upstream public service (e.g. ULDK) is down; 504 = gateway timeout
+  if (res.status === 503 || res.status === 504) throw new ApiError("timeout", detail);
   throw new ApiError("server", detail);
 }
 
@@ -155,9 +156,15 @@ const realApi = {
   plotById: (id: string) => request<Plot>(`/plot/by-id?id=${encodeURIComponent(id.trim())}`),
   plotByPoint: (lat: number, lng: number) =>
     request<Plot>(`/plot/by-point?lat=${lat}&lng=${lng}`),
+  // The backend re-resolves the plot itself (ULDK is cached), so `_plot` is unused here.
+  // plotId wins over lat/lng; coords are only sent when there is no plotId.
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  analyze: (req: AnalyzeRequest, _plot?: Plot) =>
-    request<Report>("/analyze", { method: "POST", body: JSON.stringify(req) }, ANALYZE_TIMEOUT_MS),
+  analyze: (req: AnalyzeRequest, _plot?: Plot) => {
+    const body: AnalyzeRequest = req.plotId
+      ? { plotId: req.plotId, cropId: req.cropId, analysisDate: req.analysisDate }
+      : req;
+    return request<Report>("/analyze", { method: "POST", body: JSON.stringify(body) }, ANALYZE_TIMEOUT_MS);
+  },
 };
 
 export const api = API_MODE === "real" ? realApi : mockApi;
