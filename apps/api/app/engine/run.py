@@ -99,6 +99,12 @@ def run_engine(
 
     sources = build_sources(bundle, analysis_date)
     missing = build_missing(sources)
+    if assessment.susceptibility.level == "insufficient_data":
+        missing.append(MissingData(
+            id="missing_summer_history", what="Historia letniego bilansu wodnego",
+            reason=assessment.susceptibility.summary,
+            impact="Brak podstaw do określenia wieloletniej podatności działki na suszę.",
+        ))
     if assessment.current.level == "insufficient_data":
         missing.append(MissingData(
             id="missing_moisture_comparison", what="Dane do oceny bieżącej wilgotności",

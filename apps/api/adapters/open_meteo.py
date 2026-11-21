@@ -17,6 +17,7 @@ Set OPEN_METEO_API_KEY to use the paid customer endpoint instead of the free one
 from __future__ import annotations
 
 import math
+from calendar import monthrange
 import os
 from datetime import date, datetime, timedelta
 from statistics import median
@@ -300,16 +301,20 @@ def monthly_precip(series: dict[date, Day], d: date, months: int = 12) -> list[d
         last = d if back == 0 else _month_start(d, back - 1) - timedelta(days=1)
         n = (last - first).days + 1
         p = _sum(_window(series, last, n), 0)
-        prev = [
-            v for k in range(1, YEARS_BACK + 1)
-            if (v := _sum(_window(series, shift_years(last, -k), n), 0)) is not None
-        ]
+        partial = last.day < monthrange(first.year, first.month)[1]
+        prev = []
+        for k in range(1, YEARS_BACK + 1):
+            year = first.year - k
+            days = last.day if partial else monthrange(year, first.month)[1]
+            total = _sum(_window(series, date(year, first.month, days), days), 0)
+            if total is not None:
+                prev.append(total)
         out.append({
             "month": first.strftime("%Y-%m"),
             "precip": None if p is None else round(p, 1),
             "normal": round(sum(prev) / len(prev), 1) if len(prev) >= 5 else None,
             "years": len(prev),
-            "partial": back == 0 and last != _month_start(d, -1) - timedelta(days=1),
+            "partial": partial,
         })
     return out
 
@@ -391,7 +396,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     res = await run_adapter(
         "Open-Meteo",
         ARCHIVE_URL,
-        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 3},
+        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 4},
         fetch,
         cache_ttl_sec=3600 if recent else None,
     )

@@ -177,6 +177,12 @@ def _assess_current(f: Facts) -> CurrentBlock:
 
 def assess_moisture(f: Facts) -> MoistureAssessment:
     current = _assess_current(f)
+    if f.dry_summers is None:
+        return MoistureAssessment(current=current, susceptibility=SusceptibilityBlock(
+            level="insufficient_data", headline="Za mało danych do oceny wieloletniej",
+            summary="Do porównania potrzeba bilansu wodnego z co najmniej trzech pełnych sezonów letnich.",
+            confidence="low", evidenceRefs=[],
+        ))
 
     # ---------------- multi-year susceptibility (higher = more chronic risk) ----------------
     sus = 30.0

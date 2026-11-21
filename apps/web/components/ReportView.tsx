@@ -211,12 +211,12 @@ export default function ReportView({ report }: { report: Report }) {
           <div className="assess-card">
             <div className="assess-kicker">Przez ostatnie lata</div>
             <h3>{ma.susceptibility.headline}</h3>
-            <Scale
+            {ma.susceptibility.level !== "insufficient_data" && <Scale
               steps={RISK_SCALE}
               active={ma.susceptibility.level}
               tone={RISK_TONE[ma.susceptibility.level]}
               label="Podatność na suszę"
-            />
+            />}
             <p>{ma.susceptibility.summary}</p>
             <ConfidenceBadge c={ma.susceptibility.confidence} />
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />

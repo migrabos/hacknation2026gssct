@@ -64,7 +64,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     note: str | None = NO_IRRIGATION_NOTE
     if assessment.current.level == "insufficient_data":
         note = "Za mało danych, aby ocenić potrzebę nawadniania."
-    moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level != "low"
+    moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level in ("medium", "high")
     if not moisture_risk and not cause_ids:
         return Recommendations(irrigation=None, irrigationNote=note)
 

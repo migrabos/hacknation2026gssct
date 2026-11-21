@@ -156,7 +156,7 @@ export interface MoistureAssessment {
     evidenceRefs: string[];
   };
   susceptibility: {
-    level: RiskLevel;
+    level: RiskLevel | "insufficient_data";
     headline: string;
     summary: string;
     confidence: Confidence;
