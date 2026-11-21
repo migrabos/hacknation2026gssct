@@ -1,0 +1,170 @@
+{
+  "plot": {
+    "plotId": "141201_2.0001.123",
+    "centroid": { "lat": 52.2297, "lng": 21.0122 },
+    "areaHa": 2.4,
+    "geometry": null,
+    "voivodeship": "mazowieckie",
+    "terrain": { "slopePct": 3.2, "runoffRisk": "moderate" },
+    "hydro": { "nearbyWater": false, "distanceClass": "far" }
+  },
+  "crop": {
+    "id": "kukurydza",
+    "namePl": "Kukurydza",
+    "droughtSensitivity": 0.75
+  },
+  "analysisDate": "2025-07-15",
+  "moistureAssessment": {
+    "current": {
+      "level": "deficit",
+      "score0to100": 38,
+      "summaryPl": "Ostatnie 30 dni poniżej normy klimatycznej; gleba o ograniczonej pojemności wodnej.",
+      "evidenceIds": ["meteo.precipMmLast30d", "meteo.precipMmClimate30d", "soil.awcMmProxy"]
+    },
+    "multiYearSusceptibility": {
+      "level": "moderate",
+      "score0to100": 55,
+      "peakMonths": [6, 7, 8],
+      "summaryPl": "Wieloletnia podatność umiarkowana — letnie miesiące bywają suche na tej lokalizacji.",
+      "evidenceIds": ["meteo.precipAnomalyPct10y", "meteo.monthlyPrecipMm", "crop.droughtSensitivity"]
+    },
+    "confidence0to1": 0.72,
+    "uncertaintyNotes": [
+      "Dane satelitarne NDVI są uproszczone (stub).",
+      "Ocena pojemności wodnej gleby to proxy z tekstury, nie pomiar lokalny."
+    ]
+  },
+  "causes": [
+    {
+      "id": "precip_deficit",
+      "labelPl": "Niedobór opadów",
+      "confidence0to1": 0.8,
+      "evidenceIds": ["meteo.precipMmLast30d", "meteo.drySpellDays"],
+      "rationalePl": "Opady z ostatnich 30 dni istotnie poniżej normy klimatycznej."
+    },
+    {
+      "id": "low_soil_storage",
+      "labelPl": "Niska pojemność wodna gleby",
+      "confidence0to1": 0.7,
+      "evidenceIds": ["soil.awcMmProxy", "soil.sandPct"],
+      "rationalePl": "Wysoki udział piasku i niski proxy AWC ograniczają magazynowanie wody."
+    },
+    {
+      "id": "crop_sensitivity",
+      "labelPl": "Wrażliwość uprawy na suszę",
+      "confidence0to1": 0.75,
+      "evidenceIds": ["crop.droughtSensitivity"],
+      "rationalePl": "Kukurydza ma podwyższoną wrażliwość na niedobór wody w fazie wzrostu."
+    }
+  ],
+  "recommendations": {
+    "retention": [
+      {
+        "id": "small_pond",
+        "titlePl": "Małe oczko / zbiornik retencyjny",
+        "whyPl": "Zatrzymuje wodę opadową na działce i łagodzi krótkie niedobory.",
+        "priority": 1,
+        "evidenceIds": ["meteo.precipMmLast30d", "cause.precip_deficit"]
+      },
+      {
+        "id": "buffer_strips",
+        "titlePl": "Strefy buforowe / pasy zieleni",
+        "whyPl": "Spowalnia spływ powierzchniowy i zwiększa infiltrację na skraju pola.",
+        "priority": 2,
+        "evidenceIds": ["terrain.runoffRisk"]
+      }
+    ],
+    "agrotech": [
+      {
+        "id": "residues",
+        "titlePl": "Pozostawianie resztek pożniwnych",
+        "whyPl": "Mulcz ogranicza parowanie i poprawia strukturę gleby.",
+        "priority": 1,
+        "evidenceIds": ["soil.awcMmProxy", "cause.low_soil_storage"]
+      },
+      {
+        "id": "cover_crops",
+        "titlePl": "Międzyplony / okrywa roślinna",
+        "whyPl": "Żywa okrywa chroni glebę i wspiera retencję w profilu glebowym.",
+        "priority": 2,
+        "evidenceIds": ["soil.awcMmProxy"]
+      }
+    ],
+    "irrigation": [
+      {
+        "id": "irrigation_timing",
+        "titlePl": "Nawadnianie — tylko w krytycznych fazach",
+        "whyPl": "Przy silnym niedoborze i wrażliwej uprawie rozważ podlewanie w kluczowych fazach wzrostu.",
+        "priority": 1,
+        "evidenceIds": ["moisture.current", "crop.droughtSensitivity"]
+      }
+    ]
+  },
+  "sources": [
+    {
+      "id": "mock_plot",
+      "name": "Mock ULDK plot resolver",
+      "url": null,
+      "fetchedAt": "2025-07-15T12:00:00Z",
+      "coverage": "demo"
+    },
+    {
+      "id": "mock_meteo",
+      "name": "Mock Open-Meteo climate",
+      "url": "https://open-meteo.com/",
+      "fetchedAt": "2025-07-15T12:00:00Z",
+      "coverage": "demo"
+    },
+    {
+      "id": "mock_soil",
+      "name": "Mock SoilGrids",
+      "url": "https://soilgrids.org/",
+      "fetchedAt": "2025-07-15T12:00:00Z",
+      "coverage": "demo"
+    }
+  ],
+  "limitations": [
+    "Silnik używa uproszczonych progów wodnych (proxy), nie modelu hydrologicznego.",
+    "Adaptery są mockami do czasu podłączenia żywych źródeł Person 2."
+  ],
+  "missingData": [
+    "Pełna geometria działki (uproszczony centroid).",
+    "NDVI satelitarne — wartość stub."
+  ],
+  "narrative": {
+    "mode": "template",
+    "sections": [
+      {
+        "id": "ocena",
+        "titlePl": "Ocena sytuacji wodnej",
+        "bodyPl": "Aktualna sytuacja: niedobór (score 38/100). Wieloletnia podatność: umiarkowana."
+      },
+      {
+        "id": "przyczyny",
+        "titlePl": "Przyczyny",
+        "bodyPl": "Wskazano: niedobór opadów, niska pojemność wodna gleby, wrażliwość uprawy."
+      },
+      {
+        "id": "retencja",
+        "titlePl": "Retencja",
+        "bodyPl": "Rekomendacje retencyjne: małe oczko, strefy buforowe."
+      },
+      {
+        "id": "agrotech",
+        "titlePl": "Agrotechnika",
+        "bodyPl": "Działania glebowe: resztki pożniwne, międzyplony."
+      },
+      {
+        "id": "nawadnianie",
+        "titlePl": "Nawadnianie",
+        "bodyPl": "Nawadnianie rozważane dopiero po retencji i agrotechnice — tylko w krytycznych fazach."
+      }
+    ]
+  },
+  "meta": {
+    "engineVersion": "0.1.0",
+    "llmEnabled": false,
+    "llmModel": null,
+    "durationMs": 12
+  }
+}
