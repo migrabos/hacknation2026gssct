@@ -196,6 +196,16 @@ class ReportMeta(BaseModel):
     durationMs: int = 0
 
 
+class PrecipMonth(BaseModel):
+    """One histogram bar: precipitation in a calendar month vs the multi-year mean."""
+
+    month: str  # YYYY-MM
+    precipMm: float | None = None
+    normalMm: float | None = None  # mean of the same day-range in previous years
+    normalYears: int = 0  # how many years the mean is based on
+    partial: bool = False  # analysis month: counted only up to analysisDate
+
+
 class Report(BaseModel):
     """Full /analyze response — deterministic Evidence + optional narrative."""
 
@@ -209,6 +219,7 @@ class Report(BaseModel):
     causes: list[Cause] = Field(default_factory=list)
     recommendations: Recommendations
     evidence: list[Evidence] = Field(default_factory=list)
+    precipMonthly: list[PrecipMonth] = Field(default_factory=list)  # last 12 months, oldest first
     sources: list[Source] = Field(default_factory=list)
     limitations: list[str] = Field(default_factory=list)
     missingData: list[MissingData] = Field(default_factory=list)

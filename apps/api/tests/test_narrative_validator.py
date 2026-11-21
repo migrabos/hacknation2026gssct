@@ -11,7 +11,7 @@ from app.narrative.validate import parse_llm_json, validate_narrative_payload
 
 
 async def _report(mock_bundle):
-    return run_engine(bundle=mock_bundle, crop_id="zboza", analysis_date=date(2025, 7, 15))
+    return run_engine(bundle=mock_bundle, crop_id="zboza_ozime", analysis_date=date(2025, 7, 15))
 
 
 async def test_validator_rejects_invented_action(mock_bundle) -> None:

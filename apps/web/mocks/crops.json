@@ -1,23 +1,18 @@
 [
   {
-    "id": "kukurydza",
-    "name": "Kukurydza",
-    "droughtSensitivity": "high"
+    "id": "zboza_ozime",
+    "name": "Zboża ozime (pszenica, pszenżyto, żyto, jęczmień ozimy)",
+    "droughtSensitivity": "low"
   },
   {
-    "id": "ziemniak",
-    "name": "Ziemniaki",
-    "droughtSensitivity": "high"
-  },
-  {
-    "id": "warzywa",
-    "name": "Warzywa",
-    "droughtSensitivity": "high"
-  },
-  {
-    "id": "burak",
-    "name": "Buraki cukrowe",
+    "id": "zboza_jare",
+    "name": "Zboża jare (jęczmień jary, owies, pszenica jara)",
     "droughtSensitivity": "medium"
+  },
+  {
+    "id": "kukurydza",
+    "name": "Kukurydza (na ziarno i kiszonkę)",
+    "droughtSensitivity": "high"
   },
   {
     "id": "rzepak",
@@ -25,14 +20,34 @@
     "droughtSensitivity": "medium"
   },
   {
-    "id": "pszenica",
-    "name": "Pszenica",
+    "id": "burak",
+    "name": "Buraki cukrowe",
     "droughtSensitivity": "medium"
   },
   {
-    "id": "zboza",
-    "name": "Inne zboża (żyto, jęczmień, pszenżyto)",
-    "droughtSensitivity": "low"
+    "id": "ziemniak",
+    "name": "Ziemniaki",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "straczkowe",
+    "name": "Strączkowe (groch, bobik, soja, łubin)",
+    "droughtSensitivity": "medium"
+  },
+  {
+    "id": "warzywa",
+    "name": "Warzywa gruntowe",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "sad",
+    "name": "Sad (jabłonie, wiśnie, śliwy)",
+    "droughtSensitivity": "high"
+  },
+  {
+    "id": "jagodowe",
+    "name": "Truskawki i krzewy owocowe",
+    "droughtSensitivity": "high"
   },
   {
     "id": "uzytki_zielone",

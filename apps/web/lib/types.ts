@@ -208,6 +208,18 @@ export interface Narrative {
   }[];
 }
 
+/** One histogram bar: rain in a calendar month vs the multi-year mean (Open-Meteo). */
+export interface PrecipMonth {
+  /** YYYY-MM */
+  month: string;
+  precipMm?: number | null;
+  /** Mean of the same day-range in previous years (up to 10). */
+  normalMm?: number | null;
+  normalYears: number;
+  /** Analysis month — counted only up to analysisDate. */
+  partial: boolean;
+}
+
 export interface Report {
   reportId: string;
   status: "complete" | "partial";
@@ -228,6 +240,8 @@ export interface Report {
     irrigationNote?: string;
   };
   evidence: Evidence[];
+  /** Last 12 months, oldest first. Empty when meteo is unavailable. */
+  precipMonthly?: PrecipMonth[];
   sources: Source[];
   limitations: string[];
   missingData: MissingData[];

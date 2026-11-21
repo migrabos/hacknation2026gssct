@@ -11,7 +11,7 @@ def test_health(client) -> None:
 
 def test_crops(client) -> None:
     crops = client.get("/crops").json()
-    assert {"kukurydza", "ziemniak", "warzywa", "zboza", "rzepak"} <= {c["id"] for c in crops}
+    assert {"kukurydza", "ziemniak", "warzywa", "zboza_ozime", "zboza_jare", "rzepak", "straczkowe", "sad", "jagodowe"} <= {c["id"] for c in crops}
     for c in crops:
         assert set(c) == {"id", "name", "droughtSensitivity"}
         assert c["droughtSensitivity"] in ("low", "medium", "high")
@@ -29,7 +29,7 @@ def test_analyze_api(client) -> None:
                                           "analysisDate": "2025-07-15"})
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["crop"] == {"id": "kukurydza", "name": "Kukurydza", "droughtSensitivity": "high"}
+    assert data["crop"] == {"id": "kukurydza", "name": "Kukurydza (na ziarno i kiszonkę)", "droughtSensitivity": "high"}
     assert data["moistureAssessment"]["current"]["level"] in ("very_dry", "dry", "normal", "wet")
     assert data["moistureAssessment"]["susceptibility"]["level"] in ("low", "medium", "high")
     assert data["narrative"]["generatedBy"] == "template"
@@ -45,13 +45,13 @@ def test_analyze_api(client) -> None:
 def test_analyze_plot_id_wins_over_coords(client) -> None:
     """Web sends plotId + centroid; plotId must win (no XOR rejection)."""
     resp = client.post("/analyze", json={"plotId": "141201_2.0001.123", "lat": 52.2, "lng": 21.0,
-                                          "cropId": "zboza", "analysisDate": "2025-07-15"})
+                                          "cropId": "zboza_ozime", "analysisDate": "2025-07-15"})
     assert resp.status_code == 200, resp.text
     assert resp.json()["plot"]["plotId"] == "141201_2.0001.123"
 
 
 def test_analyze_requires_location(client) -> None:
-    resp = client.post("/analyze", json={"cropId": "zboza", "analysisDate": "2025-07-15"})
+    resp = client.post("/analyze", json={"cropId": "zboza_ozime", "analysisDate": "2025-07-15"})
     assert resp.status_code == 422
 
 
@@ -91,3 +91,9 @@ def test_analyze_with_only_zero_rainfall(client, mock_bundle, monkeypatch) -> No
     assert any(m["id"] == "missing_moisture_comparison" for m in report["missingData"])
     assert "irrigation" not in report["recommendations"]
     assert "Za mało danych" in report["recommendations"]["irrigationNote"]
+
+
+def test_legacy_crop_ids_still_accepted():
+    from app.crops.catalog import get_crop
+    assert get_crop("pszenica")["id"] == "zboza_ozime"
+    assert get_crop("zboza")["id"] == "zboza_ozime"

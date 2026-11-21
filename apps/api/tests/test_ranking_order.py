@@ -20,7 +20,7 @@ async def test_dry_sensitive_crop_gets_irrigation_after_retention(mock_bundle) -
 
 
 async def test_tolerant_crop_gets_no_irrigation(mock_bundle) -> None:
-    r = run_engine(bundle=dry_bundle(mock_bundle), crop_id="zboza", analysis_date=D)
+    r = run_engine(bundle=dry_bundle(mock_bundle), crop_id="zboza_ozime", analysis_date=D)
     assert not r.recommendations.irrigation
     assert r.recommendations.irrigationNote
 

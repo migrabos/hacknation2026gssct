@@ -15,6 +15,7 @@ import {
 } from "@/lib/labels";
 import Map from "./Map";
 import Notice from "./Notice";
+import RainChart from "./RainChart";
 import { PrintIcon } from "./Icons";
 
 const MOISTURE_TONE: Record<string, string> = {
@@ -48,7 +49,7 @@ export default function ReportView({ report }: { report: Report }) {
 
   // Open every "Na jakiej podstawie?" block when printing.
   useEffect(() => {
-    const open = () => document.querySelectorAll<HTMLDetailsElement>("details.evidence, details.sources-more").forEach((d) => (d.open = true));
+    const open = () => document.querySelectorAll<HTMLDetailsElement>("details.evidence, details.sources-more, details.rain").forEach((d) => (d.open = true));
     window.addEventListener("beforeprint", open);
     return () => window.removeEventListener("beforeprint", open);
   }, []);
@@ -204,6 +205,7 @@ export default function ReportView({ report }: { report: Report }) {
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
         </div>
+        <RainChart months={report.precipMonthly ?? []} analysisDate={report.analysisDate} />
         <NarrativeNote text={narrative.get("assessment")} />
       </Section>
 

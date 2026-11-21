@@ -15,23 +15,42 @@ class CropEntry(TypedDict):
     criticalPhasePl: str
 
 
+# Groups follow the IUNG drought-monitoring crop groups (System Monitoringu Suszy Rolniczej):
+# split by what changes the water story (winter vs spring sowing, critical phase), not by species.
+# Weights ordered after FAO-33 yield response factors (Ky): maize 1.25, spring wheat 1.15,
+# peas 1.15, potato 1.1, winter wheat 1.05, sugar beet 1.0.
 CROPS: dict[str, CropEntry] = {
-    "kukurydza": {"id": "kukurydza", "namePl": "Kukurydza", "droughtSensitivity": 0.75,
+    "zboza_ozime": {"id": "zboza_ozime", "namePl": "Zboża ozime (pszenica, pszenżyto, żyto, jęczmień ozimy)",
+                    "droughtSensitivity": 0.45,
+                    "criticalPhasePl": "najbardziej wrażliwe od strzelania w źdźbło do kłoszenia (V–VI)"},
+    "zboza_jare": {"id": "zboza_jare", "namePl": "Zboża jare (jęczmień jary, owies, pszenica jara)",
+                   "droughtSensitivity": 0.60,
+                   "criticalPhasePl": "płytsze korzenie – wrażliwe na suchą wiosnę, zwłaszcza w V–VI"},
+    "kukurydza": {"id": "kukurydza", "namePl": "Kukurydza (na ziarno i kiszonkę)", "droughtSensitivity": 0.75,
                   "criticalPhasePl": "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, zawiązywanie ziarna)"},
-    "ziemniak": {"id": "ziemniak", "namePl": "Ziemniaki", "droughtSensitivity": 0.70,
-                 "criticalPhasePl": "najbardziej wrażliwe od zawiązywania bulw (VI–VIII)"},
-    "warzywa": {"id": "warzywa", "namePl": "Warzywa", "droughtSensitivity": 0.85,
-                "criticalPhasePl": "wrażliwe przez cały sezon, zwłaszcza przy sadzeniu i wzroście"},
+    "rzepak": {"id": "rzepak", "namePl": "Rzepak", "droughtSensitivity": 0.55,
+               "criticalPhasePl": "wrażliwy przy wschodach jesienią (IX–X) i kwitnieniu wiosną (IV–V)"},
     "burak": {"id": "burak", "namePl": "Buraki cukrowe", "droughtSensitivity": 0.60,
               "criticalPhasePl": "najbardziej wrażliwe w lipcu i sierpniu (przyrost korzenia)"},
-    "rzepak": {"id": "rzepak", "namePl": "Rzepak", "droughtSensitivity": 0.55,
-               "criticalPhasePl": "wrażliwy przy wschodach jesienią i kwitnieniu wiosną"},
-    "pszenica": {"id": "pszenica", "namePl": "Pszenica", "droughtSensitivity": 0.50,
-                 "criticalPhasePl": "najbardziej wrażliwa od strzelania w źdźbło do kłoszenia (V–VI)"},
-    "zboza": {"id": "zboza", "namePl": "Inne zboża (żyto, jęczmień, pszenżyto)", "droughtSensitivity": 0.45,
-              "criticalPhasePl": "najbardziej wrażliwe od strzelania w źdźbło do kłoszenia (V–VI)"},
+    "ziemniak": {"id": "ziemniak", "namePl": "Ziemniaki", "droughtSensitivity": 0.75,
+                 "criticalPhasePl": "najbardziej wrażliwe od zawiązywania bulw (VI–VIII)"},
+    "straczkowe": {"id": "straczkowe", "namePl": "Strączkowe (groch, bobik, soja, łubin)",
+                   "droughtSensitivity": 0.60,
+                   "criticalPhasePl": "najbardziej wrażliwe w kwitnieniu i zawiązywaniu strąków (VI–VII)"},
+    "warzywa": {"id": "warzywa", "namePl": "Warzywa gruntowe", "droughtSensitivity": 0.85,
+                "criticalPhasePl": "wrażliwe przez cały sezon (IV–IX), zwłaszcza przy sadzeniu i wzroście"},
+    "sad": {"id": "sad", "namePl": "Sad (jabłonie, wiśnie, śliwy)", "droughtSensitivity": 0.80,
+            "criticalPhasePl": "najbardziej wrażliwy od kwitnienia do wzrostu owoców (V–VIII)"},
+    "jagodowe": {"id": "jagodowe", "namePl": "Truskawki i krzewy owocowe", "droughtSensitivity": 0.85,
+                 "criticalPhasePl": "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VII)"},
     "uzytki_zielone": {"id": "uzytki_zielone", "namePl": "Łąka / pastwisko", "droughtSensitivity": 0.55,
-                       "criticalPhasePl": "odrost po pokosach latem słabnie przy braku wody"},
+                       "criticalPhasePl": "odrost po pokosach latem (V–VIII) słabnie przy braku wody"},
+}
+
+# Old IDs (before the IUNG-group split) — still accepted so saved links / rehearsal plots keep working.
+CROP_ALIASES: dict[str, str] = {
+    "pszenica": "zboza_ozime",
+    "zboza": "zboza_ozime",
 }
 
 VALID_CROP_IDS = frozenset(CROPS.keys())
@@ -46,6 +65,7 @@ def sensitivity_level(x: float) -> RiskLevel:
 
 
 def get_crop(crop_id: str) -> CropEntry:
+    crop_id = CROP_ALIASES.get(crop_id, crop_id)
     if crop_id not in CROPS:
         raise ValueError(
             f"Nieznany cropId '{crop_id}'. Dozwolone: {', '.join(sorted(VALID_CROP_IDS))}."

@@ -49,13 +49,13 @@ async def test_current_vs_multiyear() -> None:
 async def test_no_report_without_meteo(mock_bundle) -> None:
     mock_bundle.meteo = {"values": {}, "sources": [], "fetchedAt": "", "coverage": "none", "errors": ["x"]}
     with pytest.raises(RuntimeError, match="meteo"):
-        run_engine(bundle=mock_bundle, crop_id="zboza", analysis_date=D)
+        run_engine(bundle=mock_bundle, crop_id="zboza_ozime", analysis_date=D)
 
 
 async def test_failed_source_is_reported(mock_bundle) -> None:
     mock_bundle.soil = {"values": {}, "sources": [{"name": "ISRIC SoilGrids 2.0", "url": "u", "fetchedAt": "t"}],
                         "fetchedAt": "t", "coverage": "none", "errors": ["Przekroczono limit czasu (20 s)"]}
-    r = run_engine(bundle=mock_bundle, crop_id="zboza", analysis_date=D)
+    r = run_engine(bundle=mock_bundle, crop_id="zboza_ozime", analysis_date=D)
     assert r.status == "partial"
     soil = next(s for s in r.sources if s.id == "soilgrids")
     assert soil.status == "failed" and "limit czasu" in (soil.error or "")

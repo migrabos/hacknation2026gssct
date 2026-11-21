@@ -113,7 +113,29 @@ def mock_meteo(key: Any, d: date) -> dict[str, Any]:
         "precip_365d_median_prev": p365_norm,
         "kbw_summer_by_year": summers,
         "kbw_summer_mean_10y": round(sum(s["kbw"] for s in summers) / len(summers), 1),
+        "precip_monthly": _mock_monthly(seed, d),
     })
+
+
+# Typical Polish monthly precipitation (mm), Jan..Dec — shapes the demo histogram.
+_PL_MONTHLY_MM = [35, 30, 35, 35, 55, 65, 80, 70, 50, 40, 40, 40]
+
+
+def _mock_monthly(seed: int, d: date) -> list[dict[str, Any]]:
+    out = []
+    for back in range(11, -1, -1):
+        m = d.year * 12 + d.month - 1 - back
+        y, mo = m // 12, m % 12 + 1
+        normal = round(_PL_MONTHLY_MM[mo - 1] * (0.85 + _u(seed, 40 + back) * 0.3), 1)
+        frac = d.day / 31 if back == 0 else 1.0
+        out.append({
+            "month": f"{y:04d}-{mo:02d}",
+            "precip": round(normal * frac * (0.3 + _u(seed, 60 + back) * 1.1), 1),
+            "normal": round(normal * frac, 1),
+            "years": 10,
+            "partial": back == 0,
+        })
+    return out
 
 
 def mock_soil(key: Any) -> dict[str, Any]:

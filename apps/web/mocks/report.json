@@ -55,7 +55,7 @@
   },
   "crop": {
     "id": "kukurydza",
-    "name": "Kukurydza",
+    "name": "Kukurydza (na ziarno i kiszonkę)",
     "droughtSensitivity": "high"
   },
   "analysisDate": "2026-07-15",
@@ -288,6 +288,92 @@
       "value": "wysoka",
       "comparison": "najbardziej wrażliwa w VII–VIII",
       "sourceId": "crop_table"
+    }
+  ],
+  "precipMonthly": [
+    {
+      "month": "2025-08",
+      "precipMm": 55.0,
+      "normalMm": 62.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2025-09",
+      "precipMm": 38.0,
+      "normalMm": 48.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2025-10",
+      "precipMm": 44.0,
+      "normalMm": 42.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2025-11",
+      "precipMm": 31.0,
+      "normalMm": 40.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2025-12",
+      "precipMm": 40.0,
+      "normalMm": 36.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-01",
+      "precipMm": 26.0,
+      "normalMm": 32.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-02",
+      "precipMm": 29.0,
+      "normalMm": 38.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-03",
+      "precipMm": 25.0,
+      "normalMm": 30.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-04",
+      "precipMm": 31.0,
+      "normalMm": 52.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-05",
+      "precipMm": 22.0,
+      "normalMm": 62.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-06",
+      "precipMm": 35.0,
+      "normalMm": 80.0,
+      "normalYears": 10,
+      "partial": false
+    },
+    {
+      "month": "2026-07",
+      "precipMm": 12.0,
+      "normalMm": 40.0,
+      "normalYears": 10,
+      "partial": true
     }
   ],
   "sources": [
