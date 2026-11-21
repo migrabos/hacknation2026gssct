@@ -1,0 +1,170 @@
+# Person 3 — Engine + grounded AI + docs / demo package
+
+**You own:** Evidence/Report schema, scores, causes, ranked actions, grounded LLM narrator, README, slides, demo film edit, sample reports, license table, verification notes  
+**You do not own:** Map basemap polish, adapter HTTP details, frontend layout  
+**Pair with:** **1** on UI field names + film walkthrough; **2** on adapter values / schema lock before prompts
+
+**Stack:** FastAPI + Pydantic — `apps/api/engine/` + `apps/api/narrative/`; docs in `README.md` + `docs/pitch/`
+
+---
+
+## Goal
+
+Turn raw adapter outputs into a **deterministic**, contest-ordered report (assess → causes → retention/agrotech → irrigation last), narrate it in grounded Polish, and ship a submission package the jury can run and trust. Demo must work even if the LLM is down.
+
+---
+
+## Must ship
+
+### Engine (truth layer)
+
+1. Pydantic models: `Evidence`, `Report`, causes, recommendations, sources, limitations
+2. **Moisture assessment**
+   - Current situation
+   - Multi-year susceptibility (separate fields — don’t mix them)
+3. **Cause labels** (multi-label OK):
+   - `precip_deficit`
+   - `low_soil_storage`
+   - `runoff`
+   - `crop_sensitivity`
+4. **Ranked actions** from a **fixed catalog** (IDs never invented by LLM)
+   - Order: retencja krajobrazowa → gleba/agrotechnika → nawadnianie (optional/last)
+5. **Crop table** — kukurydza, ziemniak, warzywa, zboża, etc. + drought sensitivity weights
+6. Confidence + missing-data propagation into the report
+7. Orchestrate `POST /analyze`: Person 2 plot → Person 2 adapters (parallel) → your engine → narrator (optional)
+8. `docs/verify.md` — how jury can spot-check numbers against sources
+
+### Fixed action catalog examples (IDs stable)
+
+| ID | Type | Idea |
+|----|------|------|
+| `residues` | agrotech | leave crop residues |
+| `cover_crops` | agrotech | międzyplony |
+| `reduce_tillage` | agrotech | less intensive tillage |
+| `small_pond` | retention | oczka / małe zbiorniki |
+| `buffer_strips` | retention | strefy buforowe |
+| `ditch_retention` | retention | rowy melioracyjne as retention |
+| `irrigation_timing` | irrigation | only if deficit + crop need |
+
+### Grounded LLM + docs
+
+9. **Narrator** — system prompt forbids new facts; sectioned PL text with `[evidence_id]` tags
+10. **Validator** — reject/retry if LLM invents numbers or action IDs not in Evidence
+11. **Template fallback** — Polish sentences built from Evidence without any LLM
+12. **README** with launch, architecture, sources, live vs cached + dates, AI tools, licenses, limits, verification
+13. **≤10 slide PDF** + **≤3 min demo film** + script (Person 1 drives UI)
+14. **2–3 sample report PDFs** from the real prototype
+15. **License table** (OSS + data + AI) — must allow KOWR use if you win IP transfer
+
+---
+
+## Grounding rules (non-negotiable)
+
+```text
+System: You are a Polish agricultural advisor. You ONLY restate facts from the Evidence JSON.
+You may explain actions whose IDs appear in recommendations.
+If data is missing, say so. Never invent rainfall mm, NDVI, or measures not listed.
+Cite evidence_id in brackets after each factual sentence.
+```
+
+**Pipeline:**
+1. Engine builds Evidence (truth)
+2. LLM → `narrative.sections[]`
+3. Validator strips/rejects unknown claims
+4. UI shows structured cards first, narrative second
+5. If LLM fails → template fallback (demo still valid)
+
+---
+
+## Scientific sequence (do not skip)
+
+```
+ocena sytuacji wodnej
+  → identyfikacja przyczyn
+    → rekomendacje retencyjne
+      → działania agrotechniczne
+        → ewentualne nawadnianie
+```
+
+Align with KOWR appendix: water balance thinking, not rainfall-only; retention before irrigation; show uncertainty.
+
+---
+
+## Hour-by-hour focus
+
+| Hours | What you do |
+|-------|-------------|
+| 0–2 | Draft schema / Pydantic; team locks it; mock Evidence for 1; README outline; license list start |
+| 2–8 | Engine vs **mocked** adapters; real plot+meteo+soil by checkpoint; action catalog PL copy; prompt skeleton |
+| 8–14 | Full cause→action ranking; grounded LLM + validator; first sample reports; NDVI when 2 delivers sat |
+| 14–20 | Tune thresholds; verify notes; slides; record film with 1; freeze license table |
+| 20–24 | Freeze rules; package submission; science + AI Q&A support |
+
+---
+
+## Report JSON you own (truth layer)
+
+```
+plot, crop, analysisDate
+moistureAssessment
+causes[]
+recommendations.retention[]
+recommendations.agrotech[]
+recommendations.irrigation?   # optional
+sources[]
+limitations[]
+missingData[]
+narrative?                     # optional, from narrator
+```
+
+---
+
+## Suggested files
+
+```
+apps/api/engine/             # schema, scores, ranking
+apps/api/narrative/
+  prompt.py
+  llm_client.py
+  validate.py
+  templates_pl.py            # fallback
+README.md
+docs/verify.md
+docs/pitch/
+  slides.pdf                 # ≤10 slides
+  demo-script.md
+  sample-reports/
+licenses.md                  # or section inside README
+```
+
+---
+
+## Demo film script (≤3 min)
+
+1. Open site → one-line value prop (15s)
+2. Enter plot ID or map click + crop + date (30s)
+3. Show pipeline loading steps (15s)
+4. Walk report: ocena → przyczyny → retencja/agrotech → optional nawadnianie (90s)
+5. Show sources / uncertainty / PDF print (30s)
+6. Close on “retention first” (15s)
+
+---
+
+## Acceptance checks
+
+- [ ] Same inputs → same structured scores (deterministic)
+- [ ] Current drought ≠ chronic risk (two fields)
+- [ ] No recommendation without plot conditions recognized
+- [ ] Irrigation never appears as the only/first advice when retention applies
+- [ ] Missing adapter data lowers confidence / fills `missingData` — no fake precision
+- [ ] Person 1 can render report from your JSON with zero LLM
+- [ ] LLM cannot invent action IDs; validator catches a bad reply in a unit test
+- [ ] Fallback narrative works with `LLM_ENABLED=false`
+- [ ] README lists every data source + live vs cached + dates + AI disclosure
+- [ ] Slides ≤10; film ≤3:00; ≥2 sample reports; license table complete
+
+---
+
+## Pitch role
+
+Answer science / methodology / “why this recommendation?” and AI grounding (“no hallucinations”); own docs/licenses submission checklist.
