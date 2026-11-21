@@ -5,10 +5,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import Map from "@/components/Map";
 import Notice from "@/components/Notice";
-import PipelineLoader from "@/components/PipelineLoader";
+import PipelineLoader, { CROP_FIT_STEPS } from "@/components/PipelineLoader";
 import { ApiError, api } from "@/lib/api";
 import { ERROR_MESSAGE, formatNumber } from "@/lib/labels";
-import { saveReport } from "@/lib/report-store";
+import { saveCropFitReport, saveReport } from "@/lib/report-store";
 import type { ApiErrorKind, Crop, Plot, Region } from "@/lib/types";
 
 function isoDay(d: Date): string {
@@ -77,6 +77,8 @@ export default function AnalyzePage() {
   const [crops, setCrops] = useState<Crop[] | null>(null);
   const [cropsError, setCropsError] = useState(false);
   const [cropId, setCropId] = useState("");
+  // Two separate reports: the water report (contest order) or the crop-fit report (no crop needed).
+  const [reportType, setReportType] = useState<"water" | "crops">("water");
 
   const [date, setDate] = useState("");
   const [dateMin, setDateMin] = useState("");
@@ -234,7 +236,7 @@ export default function AnalyzePage() {
   }
 
   const dateValid = Boolean(date) && date >= dateMin && date <= dateMax;
-  const canSubmit = Boolean(plot && cropId && dateValid);
+  const canSubmit = Boolean(plot && dateValid && (reportType === "crops" || cropId));
 
   function submit(e: FormEvent) {
     e.preventDefault();
@@ -248,12 +250,14 @@ export default function AnalyzePage() {
     setRunning(true);
     window.scrollTo({ top: 0 });
     try {
-      const report = await api.analyze(
-        { plotId: plot.plotId, lat: plot.centroid[1], lng: plot.centroid[0], cropId, analysisDate: date },
-        plot,
-      );
-      saveReport(report);
-      router.push("/raport");
+      const where = { plotId: plot.plotId, lat: plot.centroid[1], lng: plot.centroid[0], analysisDate: date };
+      if (reportType === "crops") {
+        saveCropFitReport(await api.cropFit(where));
+        router.push("/dobor-uprawy");
+      } else {
+        saveReport(await api.analyze({ ...where, cropId }, plot));
+        router.push("/raport");
+      }
     } catch (err) {
       setAnalyzeError(errorKind(err));
       setRunning(false);
@@ -263,7 +267,7 @@ export default function AnalyzePage() {
   if (running) {
     return (
       <div className="container" style={{ paddingBottom: 24 }}>
-        <PipelineLoader plotLabel={plot?.plotId} />
+        <PipelineLoader plotLabel={plot?.plotId} steps={reportType === "crops" ? CROP_FIT_STEPS : undefined} />
       </div>
     );
   }
@@ -510,9 +514,40 @@ export default function AnalyzePage() {
           <hr className="panel-divider" />
 
           <p className="panel-step">
-            <span className="num">2</span> Uprawa i termin
+            <span className="num">2</span> Jaki raport?
           </p>
 
+          <fieldset className="report-type">
+            <legend className="visually-hidden">Rodzaj raportu</legend>
+            <label className="report-type-option" data-checked={reportType === "water"}>
+              <input
+                type="radio"
+                name="reportType"
+                value="water"
+                checked={reportType === "water"}
+                onChange={() => setReportType("water")}
+              />
+              <span>
+                <strong>Raport wodny</strong>
+                <span className="muted small">Jak sucho jest teraz, dlaczego i jak zatrzymać wodę na polu.</span>
+              </span>
+            </label>
+            <label className="report-type-option" data-checked={reportType === "crops"}>
+              <input
+                type="radio"
+                name="reportType"
+                value="crops"
+                checked={reportType === "crops"}
+                onChange={() => setReportType("crops")}
+              />
+              <span>
+                <strong>Dobór uprawy</strong>
+                <span className="muted small">Która uprawa najlepiej poradzi sobie z wodą i glebą na tej działce.</span>
+              </span>
+            </label>
+          </fieldset>
+
+          {reportType === "water" && (
           <div className="field">
             <label htmlFor="crop">Co rośnie (lub będzie rosło) na działce?</label>
             {cropsError ? (
@@ -539,10 +574,15 @@ export default function AnalyzePage() {
             )}
             {showErrors && !cropId && <p className="field-error">Wybierz uprawę.</p>}
           </div>
+          )}
 
           <div className="field">
             <label htmlFor="date">Na jaki dzień przygotować ocenę?</label>
-            <p className="hint">Domyślnie dzisiaj. Możesz wybrać dowolny dzień z ostatnich 10 lat.</p>
+            <p className="hint">
+              {reportType === "crops"
+                ? "Domyślnie dzisiaj. Porównanie upraw opiera się na pogodzie z 10 lat przed tym dniem."
+                : "Domyślnie dzisiaj. Możesz wybrać dowolny dzień z ostatnich 10 lat."}
+            </p>
             <input
               id="date"
               type="date"
@@ -556,7 +596,7 @@ export default function AnalyzePage() {
           </div>
 
           <button type="submit" className="btn btn-lg" style={{ width: "100%" }} disabled={showErrors && !canSubmit}>
-            Przygotuj raport
+            {reportType === "crops" ? "Przygotuj dobór uprawy" : "Przygotuj raport wodny"}
           </button>
           <p className="muted small" style={{ margin: "10px 0 0", textAlign: "center" }}>
             Raport powstaje na żywo z publicznych danych. Zwykle trwa to kilkanaście sekund.
