@@ -74,6 +74,20 @@ export interface RegionSearch {
   total: number;
 }
 
+export interface RetentionSpot {
+  lat?: number | null;
+  lng?: number | null;
+  elevationM?: number | null;
+  /** highest − lowest sampled point, m */
+  elevationDropM?: number | null;
+  pointsSampled?: number | null;
+  /** distance between sample points ≈ accuracy of the location, m */
+  gridSpacingM?: number | null;
+  nearEdge?: boolean | null;
+  confidence: Confidence;
+  reason: string;
+}
+
 export interface Plot {
   plotId: string;
   geometry: PlotGeometry;
@@ -87,6 +101,8 @@ export interface Plot {
     slopePct?: number;
     runoffRisk?: RiskLevel;
   };
+  /** Lowest sampled NMT point = suggested pond / micro-retention spot. lat/lng null = none suggested. */
+  retentionSpot?: RetentionSpot;
   hydro?: {
     nearbyWater?: boolean;
     distanceClass?: string;

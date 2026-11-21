@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import Any
 
 from adapters.licenses import license_for
-from app.schemas.evidence import Hydro, LandUse, Plot, Source, Terrain
+from app.schemas.evidence import Hydro, LandUse, Plot, RetentionSpot, Source, Terrain
 
 
 def plot_to_dto(p: dict[str, Any]) -> Plot:
@@ -31,6 +31,7 @@ def plot_to_dto(p: dict[str, Any]) -> Plot:
             slopePct=terrain.get("slopePct"),
             runoffRisk=runoff if runoff in ("low", "medium", "high") else None,
         ) if terrain else None,
+        retentionSpot=RetentionSpot(**terrain["retentionSpot"]) if (terrain or {}).get("retentionSpot") else None,
         hydro=Hydro(
             nearbyWater=hydro.get("nearbyWater"),
             distanceClass=hydro.get("distanceClass"),

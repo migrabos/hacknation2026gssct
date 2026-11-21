@@ -153,8 +153,36 @@ def _url(base: str, params: dict[str, Any]) -> str:
 ULDK_MAX_BYTES = 3_000_000
 
 
+GUGIK_ATTEMPTS = 6  # GUGiK load balancer 302-redirects part of the traffic to a broken backend
+
+
+class _GugikRedirect(Exception):
+    pass
+
+
+async def _gugik_get_text(client: httpx.AsyncClient, url: str, max_bytes: int = ULDK_MAX_BYTES,
+                          attempts: int = GUGIK_ATTEMPTS) -> str:
+    """GET a GUGiK service (ULDK, NMT) robustly.
+
+    services.gugik.gov.pl / uldk.gugik.gov.pl sometimes answer 302 → integracja01.gugik.gov.pl/resp/…,
+    which drops the query and returns megabytes of garbage ("0\n0101…"). The direct 200 answer is
+    correct, so never follow that redirect – ask again with a short backoff instead.
+    """
+    last: Exception | None = None
+    for attempt in range(attempts):
+        try:
+            return await _get_text_limited(client, url, max_bytes)
+        except _GugikRedirect as exc:
+            last = exc
+            await asyncio.sleep(0.2 * (attempt + 1))
+    raise ValueError(f"Usługa GUGiK przekierowuje na niedziałający serwer ({attempts} prób) – spróbuj ponownie.") \
+        from last
+
+
 async def _get_text_limited(client: httpx.AsyncClient, url: str, max_bytes: int = ULDK_MAX_BYTES) -> str:
-    async with client.stream("GET", url) as r:
+    async with client.stream("GET", url, follow_redirects=False) as r:
+        if r.is_redirect:
+            raise _GugikRedirect(r.headers.get("location", ""))
         r.raise_for_status()
         declared = int(r.headers.get("content-length") or 0)
         if declared > max_bytes:
@@ -208,7 +236,7 @@ async def _fetch_uldk(
     not_found: list[PlotNotFound] = []
 
     async def fetch() -> dict[str, Any]:
-        text = await _get_text_limited(client, url)
+        text = await _gugik_get_text(client, url)
         try:
             return _parse_uldk(text)
         except PlotNotFound as exc:
@@ -231,10 +259,20 @@ async def _fetch_uldk(
 # --------------------------------------------------------------------------- terrain
 
 
-def _sample_points_2180(poly: BaseGeometry, grid: int = 5) -> list[Point]:
+TERRAIN_TARGET_POINTS = 30     # square grid sized to the plot area → ~30 NMT points (+5 extremes)
+
+
+def terrain_step_m(poly: BaseGeometry, target: int = TERRAIN_TARGET_POINTS) -> float:
+    """Square-grid spacing giving ~`target` points over the plot area (min 5 m = NMT noise level)."""
+    return max(5.0, math.sqrt(max(poly.area, 1.0) / target))
+
+
+def _sample_points_2180(poly: BaseGeometry, grid: int = 5, step_m: float | None = None) -> list[Point]:
     """Points inside the plot: interior point, 4 extreme vertices, interior grid.
 
     Sampling is ~5 m inside the boundary so border ditches / roads don't skew slope.
+    `step_m` switches the n×n bbox grid to a square grid with that spacing (even coverage
+    of long, narrow strips).
     """
     inner = poly.buffer(-5.0)
     if inner.is_empty or inner.area < 0.2 * poly.area:
@@ -248,11 +286,20 @@ def _sample_points_2180(poly: BaseGeometry, grid: int = 5) -> list[Point]:
             pts.append(Point(pick(coords, key=lambda c: c[key])))
 
     minx, miny, maxx, maxy = inner.bounds
-    for i in range(grid):
-        for j in range(grid):
-            p = Point(minx + (i + 0.5) * (maxx - minx) / grid, miny + (j + 0.5) * (maxy - miny) / grid)
-            if inner.contains(p):
-                pts.append(p)
+    if step_m:
+        nx, ny = max(1, int((maxx - minx) // step_m) + 1), max(1, int((maxy - miny) // step_m) + 1)
+        ox, oy = (maxx - minx - (nx - 1) * step_m) / 2, (maxy - miny - (ny - 1) * step_m) / 2
+        for i in range(nx):
+            for j in range(ny):
+                p = Point(minx + ox + i * step_m, miny + oy + j * step_m)
+                if inner.contains(p):
+                    pts.append(p)
+    else:
+        for i in range(grid):
+            for j in range(grid):
+                p = Point(minx + (i + 0.5) * (maxx - minx) / grid, miny + (j + 0.5) * (maxy - miny) / grid)
+                if inner.contains(p):
+                    pts.append(p)
 
     seen: set[tuple[int, int]] = set()
     unique: list[Point] = []
@@ -292,26 +339,84 @@ def _slope_from_heights(pts: list[Point], heights: list[float]) -> dict[str, Any
     }
 
 
+NMT_ATTEMPTS = 8               # GUGiK NMT load balancer sends many requests to a broken backend
+FLAT_DROP_M = 0.3              # below this the plot is treated as flat – no spot is suggested
+CLEAR_DROP_M = 1.0             # from this drop on (with 1 m NMT) the lowest point is "high" confidence
+EDGE_DIST_M = 15.0             # lowest point this close to the boundary → water may leave the plot
+
+
+def _retention_spot(pts: list[Point], heights: list[float], poly_2180: BaseGeometry,
+                    resolution_m: float) -> dict[str, Any]:
+    """Lowest sampled NMT point of the plot = natural collection spot for rain water.
+
+    Purely from measured heights: no centroid, no randomness. On flat plots (drop < 0.3 m)
+    or with a coarse DEM (90 m) no location is suggested (lat/lng = None, confidence low).
+    """
+    valid = [(p, h) for p, h in zip(pts, heights) if h is not None and math.isfinite(h)]
+    none = {"lat": None, "lng": None, "elevationM": None, "elevationDropM": None,
+            "pointsSampled": len(valid), "gridSpacingM": None, "nearEdge": None, "confidence": "low"}
+    if len(valid) < 4:
+        return {**none, "reason": "Za mało punktów wysokościowych w obrębie działki, aby wskazać najniższe "
+                                  "miejsce – nie wskazujemy lokalizacji retencji."}
+    (p_lo, h_lo), (_, h_hi) = min(valid, key=lambda t: t[1]), max(valid, key=lambda t: t[1])
+    drop = round(h_hi - h_lo, 2)
+    spacing = round(terrain_step_m(poly_2180))
+    base = {**none, "elevationDropM": drop, "gridSpacingM": spacing}
+    drop_txt = f"{drop:.1f}".replace(".", ",")
+
+    if resolution_m >= 90:
+        return {**base, "reason": "Dostępny był tylko zgrubny model terenu (siatka ~90 m) – zbyt mało dokładny, "
+                                  "by wskazać najniższe miejsce w obrębie działki. Nie wskazujemy lokalizacji."}
+    if drop < FLAT_DROP_M:
+        return {**base, "reason": f"Teren działki jest praktycznie płaski (różnica wysokości {drop_txt} m między "
+                                  f"{len(valid)} punktami pomiarowymi NMT) – nie ma wyraźnego zagłębienia, więc "
+                                  "nie wskazujemy miejsca na oczko wodne ani zbiornik."}
+
+    lng, lat = _TO_4326.transform(p_lo.x, p_lo.y)
+    near_edge = bool(poly_2180.boundary.distance(p_lo) < EDGE_DIST_M)
+    h_txt = f"{h_lo:.1f}".replace(".", ",")
+    reason = (f"Najniżej położony z {len(valid)} punktów pomiarowych działki ({h_txt} m n.p.m., "
+              f"{drop_txt} m niżej niż najwyższy punkt) – naturalne miejsce spływu i gromadzenia wód "
+              f"opadowych. Dokładność wskazania: ok. {spacing} m (odstęp punktów pomiarowych).")
+    if near_edge:
+        reason += (" Punkt leży przy granicy działki – część wody może spływać dalej, na działkę sąsiednią "
+                   "lub do rowu.")
+    return {
+        **base,
+        "lat": round(lat, 6), "lng": round(lng, 6),
+        "elevationM": round(h_lo, 1),
+        "nearEdge": near_edge,
+        "confidence": "high" if drop >= CLEAR_DROP_M else "medium",
+        "reason": reason,
+    }
+
+
 async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometry) -> dict[str, Any]:
-    pts = _sample_points_2180(poly_2180)
-    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts]}
+    pts = _sample_points_2180(poly_2180, step_m=terrain_step_m(poly_2180))
+    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts], "v": 3}
 
     # 1) GUGiK NMT – national LIDAR DEM (~1 m grid), point list in "northing easting".
     nmt_list = ",".join(f"{p.y:.1f} {p.x:.1f}" for p in pts)
     nmt_url = _url(NMT_URL, {"request": "GetHByPointList", "list": nmt_list})
 
-    async def fetch_nmt() -> dict[str, Any]:
-        r = await client.get(nmt_url)
-        r.raise_for_status()
+    def parse_nmt(text: str) -> list[float] | None:
         heights = []
-        for triple in r.text.strip().split(","):
+        for triple in text.strip().split(","):
             fields = triple.split()
             if len(fields) != 3:
-                raise ValueError(f"Nieoczekiwana odpowiedź NMT: {r.text[:120]}")
+                return None
             heights.append(float(fields[2]))
-        if len(heights) != len(pts):
-            raise ValueError("NMT zwrócił inną liczbę punktów niż zapytano.")
-        return {**_slope_from_heights(pts, heights), "resolutionM": 1, "dem": "GUGiK NMT"}
+        return heights if len(heights) == len(pts) else None
+
+    async def fetch_nmt() -> dict[str, Any]:
+        text = await _gugik_get_text(client, nmt_url, max_bytes=200_000, attempts=NMT_ATTEMPTS)
+        heights = parse_nmt(text)
+        if heights is None:
+            raise ValueError(f"Nieoczekiwana odpowiedź NMT: {text[:80]}")
+        if all(h == 0.0 for h in heights):  # seen under load: every height exactly 0.0
+            raise ValueError("NMT GUGiK zwrócił same zera zamiast wysokości – odpowiedź odrzucona.")
+        return {**_slope_from_heights(pts, heights), "resolutionM": 1, "dem": "GUGiK NMT",
+                "retentionSpot": _retention_spot(pts, heights, poly_2180, 1)}
 
     res = await run_adapter(
         "GUGiK NMT (numeryczny model terenu)", nmt_url, key, fetch_nmt, timeout_sec=NMT_TIMEOUT_SEC
@@ -332,7 +437,8 @@ async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeome
         r = await client.get(om_url)
         r.raise_for_status()
         heights = [float(h) if h is not None else math.nan for h in r.json()["elevation"]]
-        return {**_slope_from_heights(pts, heights), "resolutionM": 90, "dem": "Copernicus GLO-90"}
+        return {**_slope_from_heights(pts, heights), "resolutionM": 90, "dem": "Copernicus GLO-90",
+                "retentionSpot": _retention_spot(pts, heights, poly_2180, 90)}
 
     res = await run_adapter(
         "Open-Meteo Elevation API", om_url, key, fetch_om, timeout_sec=OM_ELEVATION_TIMEOUT_SEC
@@ -645,7 +751,10 @@ async def add_plot_context(plot: dict[str, Any], client: httpx.AsyncClient | Non
 
     missing: list[str] = []
     if terrain_r["values"] is None:
-        terrain = {"slopePct": None, "runoffRisk": "unknown"}
+        terrain = {"slopePct": None, "runoffRisk": "unknown", "retentionSpot": {
+            "lat": None, "lng": None, "elevationM": None, "elevationDropM": None, "pointsSampled": 0,
+            "gridSpacingM": None, "nearEdge": None, "confidence": "low",
+            "reason": "Brak danych wysokościowych (NMT) – nie wskazujemy miejsca retencji."}}
         missing.append("Ukształtowanie terenu (spadek): brak danych wysokościowych – "
                        + "; ".join(terrain_r["errors"]))
     else:
@@ -853,7 +962,7 @@ async def _search_regions_uldk(name: str) -> list[dict[str, Any]]:
 
     async with _client() as client:
         async def fetch() -> dict[str, Any]:
-            return {"regions": _parse_regions(await _get_text_limited(client, url))}
+            return {"regions": _parse_regions(await _gugik_get_text(client, url))}
 
         res = await run_adapter(
             "ULDK GUGiK", url, {"region": name.lower()}, fetch, cache_ttl_sec=ULDK_CACHE_TTL
@@ -883,7 +992,7 @@ async def region_extent(region_id: str) -> list[float] | None:
     url = _url(ULDK_URL, params)
     async with _client() as client:
         async def fetch() -> dict[str, Any]:
-            regions = _parse_regions(await _get_text_limited(client, url))
+            regions = _parse_regions(await _gugik_get_text(client, url))
             hit = next((r for r in regions if r["regionId"] == region_id and r["bbox"]), None)
             if hit is None:
                 raise ValueError("ULDK nie podało zasięgu obrębu.")

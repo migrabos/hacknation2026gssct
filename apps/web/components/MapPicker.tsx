@@ -16,6 +16,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   GeoJSON,
   MapContainer,
+  Marker,
   ScaleControl,
   TileLayer,
   WMSTileLayer,
@@ -23,8 +24,9 @@ import {
   useMap,
   useMapEvents,
 } from "react-leaflet";
+import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
-import type { Plot } from "@/lib/types";
+import type { Plot, RetentionSpot } from "@/lib/types";
 import { LocateIcon } from "./Icons";
 
 const POLAND_CENTER: LatLngExpression = [52.07, 19.48];
@@ -83,6 +85,7 @@ export default function MapPicker({
   }
 
   return (
+    <div className="map-block">
     <div className="map-wrap" style={{ height }}>
       <MapContainer
         center={POLAND_CENTER}
@@ -126,6 +129,7 @@ export default function MapPicker({
         />
 
         {plot && <PlotShape plot={plot} onOrto={basemap === "orto"} />}
+        {plot?.retentionSpot && <RetentionSpotMarker spot={plot.retentionSpot} />}
         {!plot && focusBbox && <FocusBounds bbox={focusBbox} />}
 
         <ScaleControl position="bottomleft" imperial={false} />
@@ -143,6 +147,59 @@ export default function MapPicker({
           </span>
         </div>
       )}
+    </div>
+    {plot?.retentionSpot && <RetentionLegend spot={plot.retentionSpot} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Retention spot = lowest sampled NMT point of the plot (computed in apps/api).
+
+const fmtPl = (x: number, digits = 1) => x.toFixed(digits).replace(".", ",");
+
+const RETENTION_ICON = L.divIcon({
+  className: "retention-dot-icon",
+  html: '<span class="retention-dot" aria-hidden="true"></span>',
+  iconSize: [16, 16],
+  iconAnchor: [8, 8],
+});
+
+function hasLocation(spot: RetentionSpot): spot is RetentionSpot & { lat: number; lng: number } {
+  return typeof spot.lat === "number" && typeof spot.lng === "number";
+}
+
+function RetentionSpotMarker({ spot }: { spot: RetentionSpot }) {
+  if (!hasLocation(spot)) return null;
+  // Plain map symbol – all details are in the legend under the map (no hover tooltip).
+  return <Marker position={[spot.lat, spot.lng]} icon={RETENTION_ICON} interactive={false} keyboard={false} />;
+}
+
+function RetentionLegend({ spot }: { spot: RetentionSpot }) {
+  if (!hasLocation(spot)) {
+    return (
+      <div className="map-legend" role="note">
+        <span>
+          <strong>Miejsce retencji wody nie zostało wskazane.</strong> {spot.reason}
+        </span>
+      </div>
+    );
+  }
+  return (
+    <div className="map-legend" role="note">
+      <span className="retention-dot" aria-hidden="true" />
+      <span>
+        <strong>Sugerowane miejsce retencji wody</strong> – najniższy punkt działki, gdzie naturalnie spływa woda
+        opadowa; możliwe miejsce na oczko wodne lub zbiornik.
+        {spot.elevationDropM != null && <> Różnica wysokości na działce: {fmtPl(spot.elevationDropM)} m.</>}
+        {spot.nearEdge && <> Punkt leży blisko granicy – zachowaj bezpieczną odległość od działki sąsiada.</>}
+        {spot.confidence === "medium" && <> Teren mało zróżnicowany – wskazanie orientacyjne.</>}
+        <span className="retention-legend-meta">
+          {" "}
+          ({spot.pointsSampled ?? "kilkadziesiąt"} pomiarów NMT GUGiK
+          {spot.gridSpacingM != null && <>, dokładność ok. {Math.round(spot.gridSpacingM)} m</>})
+        </span>
+      </span>
     </div>
   );
 }

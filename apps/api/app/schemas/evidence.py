@@ -48,6 +48,22 @@ class Terrain(BaseModel):
     runoffRisk: RiskLevel | None = None
 
 
+class RetentionSpot(BaseModel):
+    """Lowest sampled NMT point of the plot – suggested place for a pond / micro-retention.
+
+    lat/lng are None when no place is suggested (flat plot, coarse or missing DEM).
+    """
+    lat: float | None = None
+    lng: float | None = None
+    elevationM: float | None = None
+    elevationDropM: float | None = None  # highest − lowest sampled point
+    pointsSampled: int | None = None
+    gridSpacingM: float | None = None  # ≈ accuracy of the location
+    nearEdge: bool | None = None
+    confidence: Confidence
+    reason: str
+
+
 class Hydro(BaseModel):
     nearbyWater: bool | None = None
     distanceClass: str | None = None
@@ -94,6 +110,7 @@ class Plot(BaseModel):
     county: str | None = None
     commune: str | None = None
     terrain: Terrain | None = None
+    retentionSpot: RetentionSpot | None = None
     hydro: Hydro | None = None
     landUse: LandUse | None = None
     sources: list[Source] | None = None

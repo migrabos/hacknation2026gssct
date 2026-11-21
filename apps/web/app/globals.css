@@ -635,6 +635,42 @@ details.help > div {
   font: inherit;
   background: var(--c-map-bg);
 }
+/* Retention spot (lowest NMT point of the plot) – small blue dot, white ring, soft glow */
+.retention-dot-icon {
+  background: none;
+  border: none;
+}
+.retention-dot {
+  display: inline-block;
+  flex: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #1e7be0;
+  border: 2.5px solid #ffffff;
+  box-shadow: 0 0 0 3px rgba(30, 123, 224, 0.35), 0 0 10px 2px rgba(30, 123, 224, 0.55);
+  box-sizing: border-box;
+}
+.retention-legend-meta {
+  color: var(--c-text-muted);
+  font-size: 0.82rem;
+}
+.map-legend {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 8px;
+  padding: 8px 10px;
+  font-size: 0.88rem;
+  line-height: 1.4;
+  color: var(--c-text);
+  background: var(--c-info-bg);
+  border-left: 3px solid var(--c-info-line);
+  border-radius: var(--radius);
+}
+.map-legend .retention-dot {
+  margin-top: 2px;
+}
 .map-tools {
   position: absolute;
   z-index: 500;
