@@ -176,12 +176,14 @@ export default function ReportView({ report }: { report: Report }) {
           <div className="assess-card">
             <div className="assess-kicker">Teraz</div>
             <h3>{ma.current.headline}</h3>
-            <Scale
-              steps={MOISTURE_SCALE}
-              active={ma.current.level}
-              tone={MOISTURE_TONE[ma.current.level]}
-              label="Wilgotność teraz"
-            />
+            {ma.current.level !== "insufficient_data" && (
+              <Scale
+                steps={MOISTURE_SCALE}
+                active={ma.current.level}
+                tone={MOISTURE_TONE[ma.current.level]}
+                label="Wilgotność teraz"
+              />
+            )}
             <p>{ma.current.summary}</p>
             <ConfidenceBadge c={ma.current.confidence} />
             <EvidenceDetails refs={ma.current.evidenceRefs} evidence={evidence} sources={sources} />
@@ -257,7 +259,7 @@ export default function ReportView({ report }: { report: Report }) {
           <RecList items={irrigation} evidence={evidence} sources={sources} />
         ) : (
           <div className="irrigation-note">
-            <strong>Nawadnianie nie jest teraz potrzebne.</strong>
+            <strong>{ma.current.level === "insufficient_data" ? "Potrzeba nawadniania jest nieznana." : "Nawadnianie nie jest teraz potrzebne."}</strong>
             <p style={{ margin: "6px 0 0" }}>
               {rec.irrigationNote ?? "Przy obecnych warunkach lepsze efekty dadzą działania z punktów 3 i 4."}
             </p>

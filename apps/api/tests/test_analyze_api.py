@@ -66,3 +66,28 @@ def test_analyze_by_coords(client) -> None:
 def test_unknown_crop(client) -> None:
     resp = client.post("/analyze", json={"plotId": "x", "cropId": "banan", "analysisDate": "2025-06-01"})
     assert resp.status_code == 422
+
+
+def test_analyze_with_only_zero_rainfall(client, mock_bundle, monkeypatch) -> None:
+    async def sparse_bundle(**kwargs):
+        mock_bundle.meteo["values"] = {"precip_30d": 0}
+        for source in (mock_bundle.soil, mock_bundle.sat, mock_bundle.drought):
+            source.update(values={}, coverage="none")
+        return mock_bundle
+
+    monkeypatch.setattr("app.orchestrate.fetch_bundle", sparse_bundle)
+    response = client.post("/analyze", json={"plotId": "x", "cropId": "kukurydza", "analysisDate": "2025-07-15"})
+    assert response.status_code == 200
+    report = response.json()
+    current = report["moistureAssessment"]["current"]
+    assert current["level"] == "insufficient_data"
+    assert "score0to100" not in current
+    assert "Za mało danych do oceny" in current["headline"]
+    assert "0 mm" in current["summary"]
+    assert current["evidenceRefs"] == ["ev_precip_30d"]
+    rain = next(e for e in report["evidence"] if e["id"] == "ev_precip_30d")
+    assert (rain["value"], rain["unit"]) == (0, "mm")
+    assert report["status"] == "partial"
+    assert any(m["id"] == "missing_moisture_comparison" for m in report["missingData"])
+    assert "irrigation" not in report["recommendations"]
+    assert "Za mało danych" in report["recommendations"]["irrigationNote"]

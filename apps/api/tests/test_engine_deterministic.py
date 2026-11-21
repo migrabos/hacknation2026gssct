@@ -7,9 +7,24 @@ from datetime import date
 import pytest
 
 from app.adapters.mocks import fetch_all_mocks
+from app.engine.assess import assess_moisture
+from app.engine.facts import Facts
 from app.engine.run import run_engine
 
 D = date(2025, 7, 15)
+
+
+@pytest.mark.parametrize(("facts", "level", "score"), [
+    (Facts(precip30=12.4, precip30_normal=0, dry_spell=0, awc=150, ndvi=0.6), "insufficient_data", None),
+    (Facts(kbw30=-20), "insufficient_data", None),
+    (Facts(kbw30=-20, kbw_pct=50), "normal", 55),
+    (Facts(precip30=0, precip30_normal=40), "very_dry", 27),
+    (Facts(precip30=0, dry_spell=14), "dry", 45),
+])
+def test_current_moisture_requires_weather_evidence(facts, level, score):
+    current = assess_moisture(facts).current
+    assert (current.level, current.score0to100) == (level, score)
+    assert current.evidenceRefs
 
 
 def _strip(r):

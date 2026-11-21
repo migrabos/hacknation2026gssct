@@ -68,9 +68,12 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
         raise RuntimeError("Nie można rekomendować bez oceny wilgoci.")
 
     cause_ids = {c.id for c in causes}
+    note: str | None = NO_IRRIGATION_NOTE
+    if assessment.current.level == "insufficient_data":
+        note = "Za mało danych, aby ocenić potrzebę nawadniania."
     moisture_risk = assessment.current.level in ("dry", "very_dry") or assessment.susceptibility.level != "low"
     if not moisture_risk and not cause_ids:
-        return Recommendations(irrigation=None, irrigationNote=NO_IRRIGATION_NOTE)
+        return Recommendations(irrigation=None, irrigationNote=note)
 
     selected: dict[str, list[str]] = {"retention": [], "agrotech": []}
     for aid, meta in ACTIONS.items():
@@ -107,7 +110,6 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
 
     # Irrigation last: only when dry now AND sensitive crop AND retention already offered.
     irrigation: list[Recommendation] | None = None
-    note: str | None = NO_IRRIGATION_NOTE
     if assessment.current.level in ("dry", "very_dry") and f.crop_sens >= HIGH_SENSITIVITY and retention:
         irrigation = [to_rec("irrigation_timing", 1)]
         note = None
