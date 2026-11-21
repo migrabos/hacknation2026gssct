@@ -18,7 +18,6 @@ import {
   MapContainer,
   ScaleControl,
   TileLayer,
-  Tooltip,
   WMSTileLayer,
   ZoomControl,
   useMap,
@@ -250,11 +249,7 @@ function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
         data={plot.geometry}
         interactive={false}
         style={{ color: stroke, weight: 3.5, opacity: 1, fillColor: stroke, fillOpacity: onOrto ? 0.22 : 0.16 }}
-      >
-        <Tooltip permanent direction="center" className="plot-label" opacity={1}>
-          Twoja działka
-        </Tooltip>
-      </GeoJSON>
+      />
     </>
   );
 }

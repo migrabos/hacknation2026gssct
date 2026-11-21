@@ -663,20 +663,6 @@ details.help > div {
 .leaflet-container.picking {
   cursor: crosshair;
 }
-.plot-label {
-  background: var(--c-accent) !important;
-  color: #fff !important;
-  border: 0 !important;
-  border-radius: var(--radius) !important;
-  box-shadow: none !important;
-  font-weight: 700;
-  font-size: 0.85rem;
-  padding: 3px 8px !important;
-}
-.plot-label::before {
-  display: none;
-}
-
 /* ---------- Spinner ---------- */
 
 .spinner {
