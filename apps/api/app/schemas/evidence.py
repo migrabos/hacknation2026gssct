@@ -1,7 +1,7 @@
 """Evidence / Report truth models.
 
 1:1 mirror of `apps/web/lib/types.ts` — that file is the shared contract.
-Change field names in BOTH places (and in `apps/web/mocks/*.json`) or not at all.
+Change field names in BOTH places or not at all.
 Extra backend-only fields (scores, meta) are allowed; the UI ignores them.
 """
 
@@ -190,7 +190,7 @@ class Narrative(BaseModel):
 
 class ReportMeta(BaseModel):
     engineVersion: str
-    adapters: Literal["live", "mock"]
+    adapters: Literal["live"]
     llmEnabled: bool
     llmModel: str | None = None
     durationMs: int = 0

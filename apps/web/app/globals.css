@@ -415,15 +415,6 @@ main {
   background: var(--c-accent-soft);
 }
 
-.demo-strip {
-  background: var(--c-warn-bg);
-  border-bottom: 1px solid var(--c-warn-line);
-  font-size: 0.9rem;
-}
-.demo-strip .container {
-  padding-block: 8px;
-}
-
 /* ---------- Landing ---------- */
 
 .hero {

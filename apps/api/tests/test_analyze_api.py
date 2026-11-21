@@ -6,18 +6,18 @@ from __future__ import annotations
 def test_health(client) -> None:
     data = client.get("/health").json()
     assert data["status"] == "ok"
-    assert data["adapters"] == "mock"
+    assert data["adapters"] == "live"
 
 
 def test_crops(client) -> None:
     crops = client.get("/crops").json()
-    assert {"kukurydza", "ziemniak", "warzywa", "zboza_ozime", "zboza_jare", "rzepak", "straczkowe", "sad", "jagodowe"} <= {c["id"] for c in crops}
+    assert {"kukurydza", "ziemniak", "warzywa", "zboza_ozime", "zboza_jare", "rzepak", "burak", "straczkowe", "sad", "jagodowe"} <= {c["id"] for c in crops}
     for c in crops:
         assert set(c) == {"id", "name", "droughtSensitivity"}
         assert c["droughtSensitivity"] in ("low", "medium", "high")
 
 
-def test_plot_by_point_mock(client) -> None:
+def test_plot_by_point(client) -> None:
     p = client.get("/plot/by-point", params={"lat": 52.2, "lng": 19.4}).json()
     assert p["centroid"] == [19.4, 52.2]  # [lng, lat]
     assert p["geometry"]["type"] == "Polygon"
@@ -34,7 +34,7 @@ def test_analyze_api(client) -> None:
     assert data["moistureAssessment"]["susceptibility"]["level"] in ("low", "medium", "high")
     assert data["narrative"]["generatedBy"] == "template"
     assert data["status"] in ("complete", "partial")
-    assert data["meta"]["adapters"] == "mock"
+    assert data["meta"]["adapters"] == "live"
     ev_ids = {e["id"] for e in data["evidence"]}
     src_ids = {s["id"] for s in data["sources"]}
     assert all(e["sourceId"] in src_ids for e in data["evidence"])
@@ -68,12 +68,12 @@ def test_unknown_crop(client) -> None:
     assert resp.status_code == 422
 
 
-def test_analyze_with_only_zero_rainfall(client, mock_bundle, monkeypatch) -> None:
+def test_analyze_with_only_zero_rainfall(client, sample_bundle, monkeypatch) -> None:
     async def sparse_bundle(**kwargs):
-        mock_bundle.meteo["values"] = {"precip_30d": 0}
-        for source in (mock_bundle.soil, mock_bundle.sat, mock_bundle.drought):
+        sample_bundle.meteo["values"] = {"precip_30d": 0}
+        for source in (sample_bundle.soil, sample_bundle.sat, sample_bundle.drought):
             source.update(values={}, coverage="none")
-        return mock_bundle
+        return sample_bundle
 
     monkeypatch.setattr("app.orchestrate.fetch_bundle", sparse_bundle)
     response = client.post("/analyze", json={"plotId": "x", "cropId": "kukurydza", "analysisDate": "2025-07-15"})

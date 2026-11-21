@@ -110,8 +110,6 @@ def run_engine(
     mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})
     if mismatch:
         limitations.insert(0, mismatch)
-    if bundle.mode == "mock":
-        limitations.insert(0, "TRYB DEMO: dane są przykładowe (generowane), nie pochodzą z prawdziwych źródeł.")
 
     settings = get_settings()
     return Report(

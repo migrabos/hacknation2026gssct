@@ -3,8 +3,8 @@
  *
  * Mirrors the "Evidence / report shape" in AGENTS.md (owned by Person 3).
  * Backend twin: apps/api/app/schemas/evidence.py (Pydantic, 1:1 field names).
- * Change BOTH files + mocks/*.json together — apps/api/tests/test_contract_web.py
- * validates mocks/*.json against the backend schema and fails on drift.
+ * Change BOTH files together — apps/api/tests/test_contract_web.py validates a
+ * sample report fixture against the backend schema and fails on drift.
  */
 
 // ---------- Geometry (WGS84, GeoJSON order: [lng, lat]) ----------
@@ -246,13 +246,12 @@ export interface Report {
   limitations: string[];
   missingData: MissingData[];
   narrative?: Narrative;
-  /** Backend run info — `adapters: "mock"` means DEMO data. */
   meta?: ReportMeta;
 }
 
 export interface ReportMeta {
   engineVersion: string;
-  adapters: "live" | "mock";
+  adapters: "live";
   llmEnabled: boolean;
   llmModel?: string;
   durationMs: number;
@@ -271,8 +270,7 @@ export interface AnalyzeRequest {
 export interface HealthResponse {
   status: "ok" | "degraded";
   version?: string;
-  /** "mock" = backend serves DEMO data */
-  adapters?: "live" | "mock";
+  adapters?: "live";
   llm?: boolean;
   model?: string;
 }
