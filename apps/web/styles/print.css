@@ -6,10 +6,32 @@
 }
 
 @media print {
+  /* Always print light — dark UI tokens must not bleed into PDF. */
+  html.dark {
+    --c-bg: #ffffff;
+    --c-bg-subtle: #f4f6f4;
+    --c-surface: #ffffff;
+    /* print stays pure white for ink/PDF clarity */
+    --c-text: #1b1f1c;
+    --c-text-muted: #545b56;
+    --c-border: #d5dbd6;
+    --c-border-strong: #8c968f;
+    --c-accent: #0f6b3a;
+    --c-accent-hover: #0b5530;
+    --c-accent-soft: #e7f2eb;
+    --c-accent-line: #9fcbb0;
+    --c-warn-bg: #fff6dc;
+    --c-warn-line: #d9a81e;
+    --c-danger: #b3261e;
+    --c-danger-bg: #fdecea;
+    --c-info-bg: #eef3f9;
+    --c-info-line: #7d9cc0;
+  }
   body {
     font-size: 11pt;
     line-height: 1.45;
     color: #000;
+    background: #fff;
   }
   .topbar,
   .site-header,
