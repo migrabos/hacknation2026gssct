@@ -40,7 +40,7 @@ ACTIONS: dict[str, ActionEntry] = {
         "descriptionPl": "Na rowie melioracyjnym przy działce ustaw zastawkę lub próg, żeby woda z roztopów "
                          "i ulew nie odpływała od razu. Uzgodnij to ze spółką wodną.",
         "costLevel": "medium", "timeframePl": "przed zimą",
-        "triggers": ["precip_deficit", "low_soil_storage"], "basePriority": 2,
+        "triggers": [], "basePriority": 2,  # Selected from mapped ditch evidence in rank.py.
     },
     "small_pond": {
         "id": "small_pond", "kind": "retention",

@@ -107,6 +107,8 @@ def run_engine(
         ))
 
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
+    if f.nearby_water is None or (f.nearby_water and (not f.water_type or f.water_dist is None)):
+        limitations.append("Sprawdź w terenie, czy przy działce jest rów odprowadzający wodę z pola.")
     mismatch = _crop_land_use_mismatch(crop_id, crop["namePl"], bundle.plot.get("landUse") or {})
     if mismatch:
         limitations.insert(0, mismatch)
