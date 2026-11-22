@@ -66,7 +66,8 @@ def sample_bundle() -> AdapterBundle:
 def dry_bundle(bundle: AdapterBundle) -> AdapterBundle:
     """Force a clear drought signal on top of sample data."""
     bundle.meteo["values"].update(
-        precip_30d=8.0, precip_30d_median_10y=62.0, kbw_30d=-110.0, kbw_10y_percentile=0.0, dry_spell_days=24,
+        precip_30d=8.0, precip_30d_median_10y=62.0, kbw_30d=-110.0, kbw_60d=-200.0,
+        kbw_10y_percentile=0.0, dry_spell_days=24,
     )
     bundle.soil["values"].update(sand_pct=72.0, awc_mm=85.0, retention_class="low")
     bundle.plot["terrain"] = {"slopePct": 6.0, "runoffRisk": "high", "resolutionM": 1}

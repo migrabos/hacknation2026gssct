@@ -7,9 +7,9 @@ Jury / teammates can confirm the engine is deterministic and honest from Evidenc
 ```bash
 cd apps/api
 curl -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json" ^
-  -d "{\"plotId\":\"141201_2.0001.123\",\"cropId\":\"kukurydza\",\"analysisDate\":\"2025-07-15\"}" > a.json
+  -d "{\"plotId\":\"141201_2.0001.123\",\"cropId\":\"kukurydza_ziarno\",\"analysisDate\":\"2025-07-15\"}" > a.json
 curl -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json" ^
-  -d "{\"plotId\":\"141201_2.0001.123\",\"cropId\":\"kukurydza\",\"analysisDate\":\"2025-07-15\"}" > b.json
+  -d "{\"plotId\":\"141201_2.0001.123\",\"cropId\":\"kukurydza_ziarno\",\"analysisDate\":\"2025-07-15\"}" > b.json
 ```
 
 Compare:
@@ -34,16 +34,27 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `precip_deficit` | 30-day precip / 10-year median of the same window < 0.70, or 30-day KBW (P − ET0) in the driest 25 % of the last 10 years, or ≥ 10 days without rain |
 | `low_soil_storage` | AWC (0–100 cm, Saxton & Rawls on SoilGrids) < 110 mm or sand ≥ 55 % |
 | `runoff` | slope ≥ 3.5 % or runoffRisk medium/high (GUGiK NMT) |
-| `crop_sensitivity` | crop sensitivity ≥ 0.65 and (dry now or high multi-year susceptibility) |
+| `crop_sensitivity` | FAO-derived sensitivity ≥ 0.65 and (dry now or high multi-year susceptibility), **or** 60-day KBW below the IUNG SMSR threshold for crop×soil×period |
 | `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
-Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
-Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
+Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI, SMSR 60-day threshold breach → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
+Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, FAO Ky–derived crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
+
+### Crop weights are not hand-tuned
+
+| Layer | Source | Role |
+|-------|--------|------|
+| Crop groups | IUNG SMSR (exact 14 categories) | Same buckets as agricultural-drought monitoring |
+| `droughtSensitivity` 0–1 | FAO-33 seasonal Ky → linear map `[0.85, 1.25] → [0.25, 1.00]` in `app/crops/fao.py` | Structural yield response |
+| Situational drought flag | MRiRW 2019 / IUNG SMSR KBW thresholds (`app/crops/smsr.py`) vs Open-Meteo `kbw_60d` | ~20% yield-loss line for crop×soil×period |
+
+Spot-check: for `kukurydza_ziarno` on 2025-07-15, evidence should include `ev_fao_ky` (1.25) and, when soil AWC + `kbw_60d` are present, `ev_smsr_threshold`.
+
 ### Season, irrigation dose, slope, pond spot (engine 0.3.0)
 
 | Value | Rule | Where |
 |-------|------|-------|
-| Crop season / critical months / Kc | static table per IUNG crop group (`seasonMonths`, `criticalMonths`, `kcMid` from FAO-56 Table 12) | `apps/api/app/crops/catalog.py` |
+| Crop season / critical months / Kc | static table per SMSR crop (`seasonMonths`, `criticalMonths`, `kcMid` from FAO-56 Table 12) | `apps/api/app/crops/catalog.py` |
 | `ev_crop_deficit` | `et0_30d × kcMid − precip_30d` (mm), shown only when > 0 | `facts.py` (`crop_deficit30`) |
 | Irrigation | only when current level is dry/very_dry, crop sensitivity ≥ 0.65, **analysis month in `seasonMonths`**, and retention was already offered. Outside the season: no recommendation and `irrigationNote` explains why | `rank.py` |
 | Irrigation timeframe | month in `criticalMonths` → "teraz"; otherwise "w okresie krytycznym (…)" | `rank.py` |

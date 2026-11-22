@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone
 
 from app.adapters.bundle import AdapterBundle
 from app.config import get_settings
-from app.crops.catalog import get_crop, sensitivity_level
+from app.crops.catalog import ORCHARD_CROPS, get_crop, sensitivity_level
 from app.engine.assess import assess_moisture
 from app.engine.causes import detect_causes
 from app.engine.facts import NO_SAT_HISTORY_NOTE, build_evidence, build_missing, build_sources, extract_facts
@@ -18,7 +18,11 @@ from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportM
 ENGINE_LIMITATIONS = [
     "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar "
     "wilgotności w polu ani pełny model hydrologiczny.",
-    "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m) – lokalnie gleba może się różnić.",
+    "Kategorie upraw są dokładnie z IUNG SMSR (MRiRW 2019). Wrażliwość bierze sezonowe Ky z FAO-33; "
+    "porównanie z progami SMSR używa KBW 60 dni z Open-Meteo (ET0), podczas gdy SMSR liczy Penmana na "
+    "stałych oknach kalendarzowych – to przybliżenie, nie oficjalne orzeczenie suszy.",
+    "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m) i mapowana na kategorie "
+    "glebowe SMSR – lokalnie gleba może się różnić.",
     "Zalecenia to wskazówki retencyjne i agrotechniczne, nie decyzja administracyjna. Budowa zbiornika czy "
     "zastawki może wymagać zgłoszenia wodnoprawnego.",
 ]
@@ -32,23 +36,25 @@ SAT_LIMITATION = (
 )
 
 _GRASS_LAND = {"meadow", "pasture"}
-GRASS_CROP = "uzytki_zielone"
 
 
 def _crop_land_use_mismatch(crop_id: str, crop_name: str, land_use: dict) -> str | None:
-    """Warn when the chosen crop does not fit the plot's land use (only for agricultural land;
+    """Warn when the chosen SMSR crop does not fit the plot's land use (agricultural land only;
     non-agricultural plots already get a stronger warning from the plot resolver)."""
     cat, label = land_use.get("category"), land_use.get("labelPl")
     if not cat or not land_use.get("isAgricultural") or cat == "mixed":
         return None
     src = "w ewidencji gruntów (EGiB)"
-    if crop_id == GRASS_CROP and cat in ("arable", "orchard"):
-        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Sprawdź, czy wybór uprawy jest "
-                "właściwy – zalecenia zależą od uprawy.")
-    if crop_id != GRASS_CROP and cat in _GRASS_LAND:
-        return (f"UWAGA: wybrano uprawę „{crop_name}”, a działka {src} to {label}. Jeśli to trwały użytek "
-                "zielony, wybierz „Łąka / pastwisko” – zaorywanie trwałych użytków zielonych może być "
+    if cat in _GRASS_LAND:
+        return (f"UWAGA: działka {src} to {label}. SMSR nie ma kategorii łąka/pastwisko – wybrano "
+                f"„{crop_name}” tylko jako przybliżenie. Zaorywanie trwałych użytków zielonych może być "
                 "ograniczone przepisami (ochrona TUZ w ramach WPR).")
+    if cat == "orchard" and crop_id not in ORCHARD_CROPS:
+        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Dla sadu / plantacji "
+                "lepiej wybrać drzewa owocowe, krzewy owocowe lub truskawki (kategorie SMSR).")
+    if cat == "arable" and crop_id in ORCHARD_CROPS:
+        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Sprawdź, czy wybór uprawy "
+                "jest właściwy – zalecenia zależą od uprawy.")
     return None
 
 
@@ -83,7 +89,7 @@ def run_engine(
         raise RuntimeError("Brak lokalizacji działki — ocena niemożliwa.")
 
     crop = get_crop(crop_id)
-    f = extract_facts(bundle, crop)
+    f = extract_facts(bundle, crop, analysis_date)
     f.month = analysis_date.month
 
     assessment = assess_moisture(f)  # raises without meteo

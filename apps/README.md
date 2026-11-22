@@ -29,6 +29,6 @@ app/
   narrative/   Polish template narrative
   schemas/     Evidence / Report / request models
   actions/     fixed action catalog
-  crops/       crop drought-sensitivity table
+  crops/       SMSR groups + FAO-33 Ky weights + IUNG KBW thresholds
 tests/         pytest (deterministic engine + grounding)
 ```

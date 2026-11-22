@@ -193,6 +193,20 @@ def _assess_current(f: Facts) -> CurrentBlock:
     else:
         conf -= 0.04
 
+    if f.smsr is not None:
+        refs.extend(["ev_smsr_threshold", "ev_kbw_60d"])
+        if f.smsr.below_threshold:
+            # How far below the ~20% yield-loss line (mm).
+            depth = max(0.0, -f.smsr.margin_mm)
+            score -= 10 + min(12.0, depth * 0.08)
+            why.append(
+                f"bilans wodny 60 dni jest poniżej progu SMSR dla tej uprawy "
+                f"({fmt(f.smsr.threshold_mm, 0)} mm)"
+            )
+        elif f.smsr.margin_mm < 20:
+            score -= 4
+            why.append("bilans wodny 60 dni jest blisko progu suszy rolniczej SMSR")
+
     if f.ndvi is not None:
         refs.append("ev_ndvi")  # NDVI itself is context only: depends on crop & stage
         delta, sat_why = satellite_moisture_signal(f)
@@ -224,6 +238,8 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
     # ---------------- multi-year susceptibility (higher = more chronic risk) ----------------
     sus = 30.0
     sus_refs: list[str] = ["ev_crop_sensitivity"]
+    if f.fao_ky is not None:
+        sus_refs.append("ev_fao_ky")
     sus_why: list[str] = []
     sus_conf = 0.85
 

@@ -1,39 +1,17 @@
 # Licenses — Retencja (HackNation 2026 / KOWR)
 
-Intent: every component allows KOWR to use the tool if IP transfers after the contest. The exact attribution string per data source is also emitted at runtime in `sources[].license` (`apps/api/adapters/licenses.py`).
+Intent: all listed components allow KOWR use if IP transfers after the contest. Confirm upstream terms before commercial redistribution.
 
-## Software — API (`apps/api`)
+## Software (this API)
 
-| Component | License | Use |
-|-----------|---------|-----|
+| Component | License (typical) | Notes |
+|-----------|-------------------|-------|
 | FastAPI | MIT | Web framework |
 | Pydantic / pydantic-settings | MIT | Schemas + config |
 | Uvicorn | BSD-3-Clause | ASGI server |
-| httpx | BSD-3-Clause | HTTP client for adapters |
-| Shapely | BSD-3-Clause | Plot geometry, sampling points |
-| pyproj | MIT | EPSG:2180 ⇄ WGS84 |
-| rasterio | BSD-3-Clause | Windowed reads of Sentinel-2 COGs (bundles GDAL, MIT/X) |
-| NumPy | BSD-3-Clause | Band arithmetic (NDVI/NDMI) |
-| Pillow | MIT-CMU (HPND) | Reading EDO WMS PNG colours |
-| mapbox-vector-tile | MIT | OpenFreeMap vector tiles (hydro fallback) |
-| tzdata | Apache-2.0 | Time zone data |
-| pytest / pytest-asyncio | MIT / Apache-2.0 | Tests |
-
-## Software — Web (`apps/web`)
-
-| Component | License | Use |
-|-----------|---------|-----|
-| Next.js | MIT | App framework |
-| React / react-dom | MIT | UI |
-| Leaflet | BSD-2-Clause | Map |
-| react-leaflet | Hippocratic License 2.1 | React bindings for Leaflet. **Check before KOWR transfer:** HL 2.1 is not an OSI license and adds ethical-use conditions. Replacing it with plain Leaflet is a small change if needed. |
-| TypeScript | Apache-2.0 | Build only |
-
-## This repository
-
-| Item | License |
-|------|---------|
-| Repository code | `TODO: zespół` – choose before submission (e.g. MIT, or full transfer of rights to KOWR per contest rules) |
+| httpx | BSD-3-Clause | Adapter HTTP client |
+| pytest / pytest-asyncio | MIT | Tests |
+| This repository code | TBD by team | Keep private until submit; grant KOWR rights if required |
 
 ## AI / models
 
@@ -56,6 +34,9 @@ No generative LLM and no ML model in the runtime. Polish narrative sections are 
 | OpenStreetMap (Overpass API) | Rivers, streams, ditches, ponds near the plot | © OpenStreetMap contributors – ODbL 1.0 |
 | OpenFreeMap vector tiles | Hydro fallback (OSM-derived) | OSM data ODbL 1.0; OpenFreeMap free, no key |
 | OpenStreetMap tiles | Basemap in the web map | ODbL 1.0 data, OSM Tile Usage Policy (light use only; self-host or use a provider for production) |
+| IUNG SMSR / MRiRW 2019 (Dz.U. 2019 poz. 739) | Crop×soil KBW drought thresholds | Regulation tables; https://susza.iung.pulawy.pl/progi/ |
+| FAO Irrigation & Drainage Paper 33 | Seasonal crop Ky (yield response) | FAO open publication; cite Doorenbos & Kassam 1979 |
+| FAO-56 (Allen et al. 1998) | Mid-season Kc for crop water need | FAO open publication |
 
 ## Disclosure checklist
 

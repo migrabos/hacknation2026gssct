@@ -103,6 +103,7 @@ def sample_meteo(key: Any, d: date) -> dict[str, Any]:
         "precip_30d": precip,
         "et0_30d": et0,
         "kbw_30d": round(precip - et0, 1),
+        "kbw_60d": round((precip - et0) * 1.8, 1),  # ~60-day window proxy for SMSR compare
         "kbw_10y_percentile": round(_u(seed, 4) * 100, 1),
         "precip_30d_median_10y": normal,
         "dry_spell_days": int(_u(seed, 5) * 22),

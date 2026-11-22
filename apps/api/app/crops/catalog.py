@@ -1,9 +1,17 @@
-"""Fixed crop IDs + drought sensitivity weights (0–1, higher = more sensitive)."""
+"""SMSR crop categories + drought sensitivity from FAO-33 Ky.
+
+Catalog IDs and Polish names match IUNG SMSR rows exactly
+(https://susza.iung.pulawy.pl/progi/). Weights from FAO-33 Ky via
+`fao.ky_to_sensitivity`. Live drought flag: `smsr.evaluate_smsr`.
+
+Also carries seasonMonths / criticalMonths / kcMid (FAO-56) for irrigation timing.
+"""
 
 from __future__ import annotations
 
 from typing import TypedDict
 
+from app.crops.fao import FAO_KY, ky_to_sensitivity
 from app.schemas.evidence import RiskLevel
 
 
@@ -11,7 +19,7 @@ class CropEntry(TypedDict):
     id: str
     namePl: str
     droughtSensitivity: float
-    # Farmer-language note on when the crop needs water most (shown as evidence comparison)
+    faoKy: float | None
     criticalPhasePl: str
     # Months (1–12) when the crop stands in the field and uses water – outside them watering is pointless.
     seasonMonths: tuple[int, ...]
@@ -22,56 +30,115 @@ class CropEntry(TypedDict):
     kcMid: float
 
 
-# Groups follow the IUNG drought-monitoring crop groups (System Monitoringu Suszy Rolniczej):
-# split by what changes the water story (winter vs spring sowing, critical phase), not by species.
-# Weights ordered after FAO-33 yield response factors (Ky): maize 1.25, spring wheat 1.15,
-# peas 1.15, potato 1.1, winter wheat 1.05, sugar beet 1.0.
+def _crop(
+    id_: str,
+    name_pl: str,
+    critical: str,
+    *,
+    season: tuple[int, ...],
+    critical_months: tuple[int, ...],
+    kc_mid: float,
+) -> CropEntry:
+    ky = FAO_KY[id_]
+    return {
+        "id": id_,
+        "namePl": name_pl,
+        "droughtSensitivity": ky_to_sensitivity(ky),
+        "faoKy": ky,
+        "criticalPhasePl": critical,
+        "seasonMonths": season,
+        "criticalMonths": critical_months,
+        "kcMid": kc_mid,
+    }
+
+
+# Exact SMSR categories (MRiRW 2019 / IUNG), in regulation table order.
 CROPS: dict[str, CropEntry] = {
-    "zboza_ozime": {"id": "zboza_ozime", "namePl": "Zboża ozime (pszenica, pszenżyto, żyto, jęczmień ozimy)",
-                    "droughtSensitivity": 0.45,
-                    "criticalPhasePl": "najbardziej wrażliwe od strzelania w źdźbło do kłoszenia (V–VI)",
-                    "seasonMonths": (3, 4, 5, 6, 7), "criticalMonths": (5, 6), "kcMid": 1.15},
-    "zboza_jare": {"id": "zboza_jare", "namePl": "Zboża jare (jęczmień jary, owies, pszenica jara)",
-                   "droughtSensitivity": 0.60,
-                   "criticalPhasePl": "płytsze korzenie – wrażliwe na suchą wiosnę, zwłaszcza w V–VI",
-                   "seasonMonths": (4, 5, 6, 7), "criticalMonths": (5, 6), "kcMid": 1.15},
-    "kukurydza": {"id": "kukurydza", "namePl": "Kukurydza (na ziarno i kiszonkę)", "droughtSensitivity": 0.75,
-                  "criticalPhasePl": "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, zawiązywanie ziarna)",
-                  "seasonMonths": (5, 6, 7, 8, 9), "criticalMonths": (7, 8), "kcMid": 1.2},
-    "rzepak": {"id": "rzepak", "namePl": "Rzepak", "droughtSensitivity": 0.55,
-               "criticalPhasePl": "wrażliwy przy wschodach jesienią (IX–X) i kwitnieniu wiosną (IV–V)",
-               "seasonMonths": (3, 4, 5, 6, 9, 10), "criticalMonths": (4, 5, 9, 10), "kcMid": 1.1},
-    "burak": {"id": "burak", "namePl": "Buraki cukrowe", "droughtSensitivity": 0.60,
-              "criticalPhasePl": "najbardziej wrażliwe w lipcu i sierpniu (przyrost korzenia)",
-              "seasonMonths": (4, 5, 6, 7, 8, 9, 10), "criticalMonths": (7, 8), "kcMid": 1.2},
-    "ziemniak": {"id": "ziemniak", "namePl": "Ziemniaki", "droughtSensitivity": 0.75,
-                 "criticalPhasePl": "najbardziej wrażliwe od zawiązywania bulw (VI–VIII)",
-                 "seasonMonths": (5, 6, 7, 8, 9), "criticalMonths": (6, 7, 8), "kcMid": 1.15},
-    "straczkowe": {"id": "straczkowe", "namePl": "Strączkowe (groch, bobik, soja, łubin)",
-                   "droughtSensitivity": 0.60,
-                   "criticalPhasePl": "najbardziej wrażliwe w kwitnieniu i zawiązywaniu strąków (VI–VII)",
-                   "seasonMonths": (4, 5, 6, 7, 8), "criticalMonths": (6, 7), "kcMid": 1.15},
-    "warzywa": {"id": "warzywa", "namePl": "Warzywa gruntowe", "droughtSensitivity": 0.85,
-                "criticalPhasePl": "wrażliwe przez cały sezon (IV–IX), zwłaszcza przy sadzeniu i wzroście",
-                "seasonMonths": (4, 5, 6, 7, 8, 9), "criticalMonths": (4, 5, 6, 7, 8, 9), "kcMid": 1.05},
-    "sad": {"id": "sad", "namePl": "Sad (jabłonie, wiśnie, śliwy)", "droughtSensitivity": 0.80,
-            "criticalPhasePl": "najbardziej wrażliwy od kwitnienia do wzrostu owoców (V–VIII)",
-            "seasonMonths": (4, 5, 6, 7, 8, 9), "criticalMonths": (5, 6, 7, 8), "kcMid": 0.95},
-    "jagodowe": {"id": "jagodowe", "namePl": "Truskawki i krzewy owocowe", "droughtSensitivity": 0.85,
-                 "criticalPhasePl": "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VII)",
-                 "seasonMonths": (4, 5, 6, 7, 8), "criticalMonths": (5, 6, 7), "kcMid": 0.9},
-    "uzytki_zielone": {"id": "uzytki_zielone", "namePl": "Łąka / pastwisko", "droughtSensitivity": 0.55,
-                       "criticalPhasePl": "odrost po pokosach latem (V–VIII) słabnie przy braku wody",
-                       "seasonMonths": (4, 5, 6, 7, 8, 9), "criticalMonths": (5, 6, 7, 8), "kcMid": 0.95},
+    "zboza_ozime": _crop(
+        "zboza_ozime", "Zboża ozime",
+        "najbardziej wrażliwe od strzelania w źdźbło do kłoszenia (V–VI)",
+        season=(3, 4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15,
+    ),
+    "zboza_jare": _crop(
+        "zboza_jare", "Zboża jare",
+        "płytsze korzenie – wrażliwe na suchą wiosnę, zwłaszcza w V–VI",
+        season=(4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15,
+    ),
+    "kukurydza_ziarno": _crop(
+        "kukurydza_ziarno", "Kukurydza na ziarno",
+        "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, zawiązywanie ziarna)",
+        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2,
+    ),
+    "kukurydza_kiszonka": _crop(
+        "kukurydza_kiszonka", "Kukurydza na kiszonkę",
+        "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, przyrost biomasy)",
+        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2,
+    ),
+    "rzepak": _crop(
+        "rzepak", "Rzepak i rzepik",
+        "wrażliwy przy wschodach jesienią (IX–X) i kwitnieniu wiosną (IV–V)",
+        season=(3, 4, 5, 6, 9, 10), critical_months=(4, 5, 9, 10), kc_mid=1.1,
+    ),
+    "ziemniak": _crop(
+        "ziemniak", "Ziemniak",
+        "najbardziej wrażliwy od zawiązywania bulw (VI–VIII)",
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.15,
+    ),
+    "burak": _crop(
+        "burak", "Burak cukrowy",
+        "najbardziej wrażliwy w lipcu i sierpniu (przyrost korzenia)",
+        season=(4, 5, 6, 7, 8, 9, 10), critical_months=(7, 8), kc_mid=1.2,
+    ),
+    "chmiel": _crop(
+        "chmiel", "Chmiel",
+        "najbardziej wrażliwy latem przy wzroście szyszek (VI–VIII)",
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.05,
+    ),
+    "tyton": _crop(
+        "tyton", "Tytoń",
+        "najbardziej wrażliwy od sadzenia do zbioru liści (V–VIII)",
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.1,
+    ),
+    "warzywa": _crop(
+        "warzywa", "Warzywa gruntowe",
+        "wrażliwe przez cały sezon (IV–IX), zwłaszcza przy sadzeniu i wzroście",
+        season=(4, 5, 6, 7, 8, 9), critical_months=(4, 5, 6, 7, 8, 9), kc_mid=1.05,
+    ),
+    "krzewy": _crop(
+        "krzewy", "Krzewy owocowe",
+        "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VIII)",
+        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7, 8), kc_mid=0.9,
+    ),
+    "drzewa": _crop(
+        "drzewa", "Drzewa owocowe",
+        "najbardziej wrażliwe od kwitnienia do wzrostu owoców (V–VIII)",
+        season=(4, 5, 6, 7, 8, 9), critical_months=(5, 6, 7, 8), kc_mid=0.95,
+    ),
+    "truskawki": _crop(
+        "truskawki", "Truskawki",
+        "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VII)",
+        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7), kc_mid=0.85,
+    ),
+    "straczkowe": _crop(
+        "straczkowe", "Rośliny strączkowe",
+        "najbardziej wrażliwe w kwitnieniu i zawiązywaniu strąków (VI–VII)",
+        season=(4, 5, 6, 7, 8), critical_months=(6, 7), kc_mid=1.15,
+    ),
 }
 
-# Old IDs (before the IUNG-group split) — still accepted so saved links / rehearsal plots keep working.
+# Legacy ids → SMSR ids (saved links / rehearsal plots / old fixtures).
 CROP_ALIASES: dict[str, str] = {
     "pszenica": "zboza_ozime",
     "zboza": "zboza_ozime",
+    "kukurydza": "kukurydza_ziarno",
+    "sad": "drzewa",
+    "jagodowe": "truskawki",
 }
 
 VALID_CROP_IDS = frozenset(CROPS.keys())
+
+# Crops typically on orchard / berry land (EGiB sad, plantacja).
+ORCHARD_CROPS = frozenset({"drzewa", "krzewy", "truskawki"})
 
 
 def sensitivity_level(x: float) -> RiskLevel:

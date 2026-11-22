@@ -1,0 +1,71 @@
+"""FAO Irrigation & Drainage Paper 33 — seasonal yield response factors (Ky).
+
+Ky > 1 → yield drops more than proportionally with ET deficit (more drought-sensitive).
+Ky < 1 → more tolerant. Values from Doorenbos & Kassam (1979), as summarized in
+FAO-56 Table 24 / FAO Paper 66 recapitulation.
+
+Source: https://www.fao.org/4/x0490e/x0490e0e.htm
+
+Keys match exact SMSR crop category ids in `catalog.py`.
+"""
+
+from __future__ import annotations
+
+# Seasonal Ky by SMSR crop id. None = no FAO-33 row → see fao_ky_note / SMSR.
+FAO_KY: dict[str, float | None] = {
+    "zboza_ozime": 1.05,            # winter wheat
+    "zboza_jare": 1.15,             # spring wheat
+    "kukurydza_ziarno": 1.25,      # maize
+    "kukurydza_kiszonka": 1.25,    # maize (same Ky)
+    "rzepak": None,                 # oilseed rape not in FAO-33
+    "ziemniak": 1.1,                # potato
+    "burak": 1.0,                   # sugar beet
+    "chmiel": None,                 # hop not in FAO-33
+    "tyton": None,                  # tobacco not in FAO-33
+    "warzywa": 1.1,                 # onion / pepper band
+    "krzewy": 1.15,                 # no bush-fruit Ky; high (shallow roots)
+    "drzewa": 1.1,                  # no apple Ky; pepper/onion band analog
+    "truskawki": 1.15,              # no strawberry Ky; high (shallow roots)
+    "straczkowe": 1.15,             # peas / beans
+}
+
+FAO_KY_NOTE: dict[str, str] = {
+    "zboza_ozime": "FAO-33 Ky = 1,05 (pszenica ozima)",
+    "zboza_jare": "FAO-33 Ky = 1,15 (pszenica jara)",
+    "kukurydza_ziarno": "FAO-33 Ky = 1,25 (kukurydza)",
+    "kukurydza_kiszonka": "FAO-33 Ky = 1,25 (kukurydza)",
+    "rzepak": "brak Ky dla rzepaku w FAO-33 – wrażliwość z progu SMSR / IUNG",
+    "ziemniak": "FAO-33 Ky = 1,1 (ziemniak)",
+    "burak": "FAO-33 Ky = 1,0 (burak cukrowy)",
+    "chmiel": "brak Ky dla chmielu w FAO-33 – wrażliwość z progu SMSR / IUNG",
+    "tyton": "brak Ky dla tytoniu w FAO-33 – wrażliwość z progu SMSR / IUNG",
+    "warzywa": "FAO-33 Ky ≈ 1,1 (cebula / papryka; typowe warzywa gruntowe)",
+    "krzewy": "brak Ky dla krzewów owocowych w FAO-33 – przyjęto 1,15",
+    "drzewa": "brak Ky dla jabłoni w FAO-33 – analog 1,1",
+    "truskawki": "brak Ky dla truskawki w FAO-33 – przyjęto 1,15 (płytki system korzeniowy)",
+    "straczkowe": "FAO-33 Ky = 1,15 (groch / fasola)",
+}
+
+FAO_SOURCE_URL = "https://www.fao.org/4/x0490e/x0490e0e.htm"
+FAO_SOURCE_NAME = "FAO Irrigation & Drainage Paper 33 (Ky)"
+
+# Map Ky → engine weight 0–1. Linear stretch of the FAO-33 span used by our crops
+# [0.85, 1.25] → [0.25, 1.00]. Winter wheat (1.05) → medium; ≥1.10 → high (≥0.65).
+_KY_LO, _KY_HI = 0.85, 1.25
+_SENS_LO, _SENS_HI = 0.25, 1.00
+_DEFAULT_SENS = 0.55  # when FAO Ky missing — SMSR comparison still applies
+
+
+def ky_to_sensitivity(ky: float | None) -> float:
+    if ky is None:
+        return _DEFAULT_SENS
+    t = (ky - _KY_LO) / (_KY_HI - _KY_LO)
+    return round(max(_SENS_LO, min(_SENS_HI, _SENS_LO + t * (_SENS_HI - _SENS_LO))), 2)
+
+
+def fao_ky(crop_id: str) -> float | None:
+    return FAO_KY.get(crop_id)
+
+
+def fao_note(crop_id: str) -> str:
+    return FAO_KY_NOTE.get(crop_id, "brak wpisu FAO-33")

@@ -55,7 +55,7 @@ Windows (cmd):
 ```bat
 curl -X POST http://127.0.0.1:8000/analyze ^
   -H "Content-Type: application/json" ^
-  -d "{\"plotId\":\"040308_5.0004.17220\",\"cropId\":\"kukurydza\",\"analysisDate\":\"2026-07-15\"}"
+  -d "{\"plotId\":\"040308_5.0004.17220\",\"cropId\":\"kukurydza_ziarno\",\"analysisDate\":\"2026-07-15\"}"
 ```
 
 ### Tests
@@ -81,7 +81,7 @@ Farmer / Next.js
 
 **Grounding rule:** the engine owns numbers and action IDs. Section prose is a deterministic Polish template over those fields — no generative LLM in the product path.
 
-Sample report from a real live run (plot 040308_5.0004.17220, kukurydza, 2026-07-15): [`fixtures/evidence_sample.json`](fixtures/evidence_sample.json).
+Sample report from a real live run (plot 040308_5.0004.17220, kukurydza_ziarno, 2026-07-15): [`fixtures/evidence_sample.json`](fixtures/evidence_sample.json).
 
 ---
 

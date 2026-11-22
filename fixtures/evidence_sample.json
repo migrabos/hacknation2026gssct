@@ -110,8 +110,8 @@
     "fetchedAt": "2026-11-21T14:57:11Z"
   },
   "crop": {
-    "id": "kukurydza",
-    "name": "Kukurydza",
+    "id": "kukurydza_ziarno",
+    "name": "Kukurydza na ziarno",
     "droughtSensitivity": "high"
   },
   "analysisDate": "2026-07-15",

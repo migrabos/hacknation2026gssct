@@ -11,7 +11,11 @@ def test_health(client) -> None:
 
 def test_crops(client) -> None:
     crops = client.get("/crops").json()
-    assert {"kukurydza", "ziemniak", "warzywa", "zboza_ozime", "zboza_jare", "rzepak", "burak", "straczkowe", "sad", "jagodowe"} <= {c["id"] for c in crops}
+    assert {
+        "zboza_ozime", "zboza_jare", "kukurydza_ziarno", "kukurydza_kiszonka", "rzepak",
+        "ziemniak", "burak", "chmiel", "tyton", "warzywa", "krzewy", "drzewa", "truskawki", "straczkowe",
+    } <= {c["id"] for c in crops}
+    assert len(crops) == 14
     for c in crops:
         assert set(c) == {"id", "name", "droughtSensitivity"}
         assert c["droughtSensitivity"] in ("low", "medium", "high")
@@ -29,7 +33,7 @@ def test_analyze_api(client) -> None:
                                           "analysisDate": "2025-07-15"})
     assert resp.status_code == 200, resp.text
     data = resp.json()
-    assert data["crop"] == {"id": "kukurydza", "name": "Kukurydza (na ziarno i kiszonkę)", "droughtSensitivity": "high"}
+    assert data["crop"] == {"id": "kukurydza_ziarno", "name": "Kukurydza na ziarno", "droughtSensitivity": "high"}
     assert data["moistureAssessment"]["current"]["level"] in ("very_dry", "dry", "normal", "wet")
     assert data["moistureAssessment"]["susceptibility"]["level"] in ("low", "medium", "high")
     assert data["narrative"]["sections"][0]["id"] == "assessment"
@@ -97,3 +101,6 @@ def test_legacy_crop_ids_still_accepted():
     from app.crops.catalog import get_crop
     assert get_crop("pszenica")["id"] == "zboza_ozime"
     assert get_crop("zboza")["id"] == "zboza_ozime"
+    assert get_crop("kukurydza")["id"] == "kukurydza_ziarno"
+    assert get_crop("sad")["id"] == "drzewa"
+    assert get_crop("jagodowe")["id"] == "truskawki"

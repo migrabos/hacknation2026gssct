@@ -227,7 +227,7 @@ def _score(p: FitProfile, f: Facts, site: Site) -> CropFitItem:
             cons.append(f"W ewidencji gruntów to {f.land_label} — zaoranie trwałego użytku zielonego może być "
                         "zabronione (ochrona TUZ).")
         refs.append("ev_land_use")
-    elif f.land_category == "orchard" and f.land_label and p["group"] in ("sad", "jagodowe"):
+    elif f.land_category == "orchard" and f.land_label and p["group"] in ("drzewa", "krzewy", "truskawki"):
         pros.append(f"Zgodne z ewidencją gruntów ({f.land_label}).")
         refs.append("ev_land_use")
 

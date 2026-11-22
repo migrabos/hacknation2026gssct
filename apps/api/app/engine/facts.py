@@ -15,6 +15,14 @@ from adapters.dates import shift_years
 from adapters.licenses import license_for
 from app.adapters.bundle import AdapterBundle
 from app.crops.catalog import CropEntry, sensitivity_level
+from app.crops.fao import FAO_SOURCE_NAME, FAO_SOURCE_URL, fao_note
+from app.crops.smsr import (
+    SMSR_SOURCE_NAME,
+    SMSR_SOURCE_URL,
+    SmsrMatch,
+    evaluate_smsr,
+    soil_cat_label,
+)
 from app.schemas.evidence import Evidence, MissingData, Source
 
 # Source ids used across Evidence.sourceId
@@ -29,6 +37,8 @@ SRC_SAT_HIST = "sentinel2_history"
 SRC_EDO = "edo"
 SRC_ENGINE = "engine"
 SRC_CROPS = "crop_table"
+SRC_FAO = "fao_ky"
+SRC_SMSR = "smsr_kbw"
 
 RUNOFF_PL = {"low": "niskie", "medium": "umiarkowane", "high": "wysokie"}
 WATER_TYPE_PL = {
@@ -57,6 +67,7 @@ class Facts:
     precip30: float | None = None
     precip30_normal: float | None = None
     kbw30: float | None = None
+    kbw60: float | None = None
     kbw_pct: float | None = None
     dry_spell: float | None = None
     temp30: float | None = None
@@ -104,13 +115,17 @@ class Facts:
     hist_years: list[int] = field(default_factory=list)
     cdi: int | None = None
     cdi_label: str | None = None
-    # crop
+    # crop / SMSR / FAO
     crop_sens: float = 0.5
     crop_id: str | None = None
     crop_kc: float | None = None
     crop_season: tuple[int, ...] = ()
     crop_critical: tuple[int, ...] = ()
     crop_phase_pl: str | None = None
+    fao_ky: float | None = None
+    fao_note: str | None = None
+    analysis_date: date | None = None
+    smsr: SmsrMatch | None = None
     month: int | None = None            # month of the analysis date (set by run_engine)
     area_ha: float | None = None
 
@@ -213,7 +228,11 @@ NO_SAT_HISTORY_NOTE = (
 )
 
 
-def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
+def extract_facts(
+    bundle: AdapterBundle,
+    crop: CropEntry | None,
+    analysis_date: date | None = None,
+) -> Facts:
     """`crop=None` for crop-independent analyses (crop fit); crop_sens then stays neutral."""
     m = bundle.meteo.get("values") or {}
     s = bundle.soil.get("values") or {}
@@ -227,10 +246,23 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
 
     runoff = terrain.get("runoffRisk")
     cdi = dr.get("cdi_class")
+    awc = _num(s.get("awc_mm"))
+    kbw60 = _num(m.get("kbw_60d"))
+    ad = analysis_date
+    if ad is None and m.get("analysis_date"):
+        try:
+            ad = date.fromisoformat(str(m["analysis_date"]))
+        except ValueError:
+            ad = None
+    smsr = (
+        evaluate_smsr(crop_id=crop["id"], analysis_date=ad, kbw_60d=kbw60, awc_mm=awc)
+        if crop and ad else None
+    )
     return Facts(
         precip30=_num(m.get("precip_30d")),
         precip30_normal=_num(m.get("precip_30d_median_10y")),
         kbw30=_num(m.get("kbw_30d")),
+        kbw60=kbw60,
         kbw_pct=_num(m.get("kbw_10y_percentile")),
         dry_spell=_num(m.get("dry_spell_days")),
         temp30=_num(m.get("temp_mean_30d")),
@@ -242,7 +274,7 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
         sand=_num(s.get("sand_pct")),
         clay=_num(s.get("clay_pct")),
         soc=_num(s.get("soc_pct")),
-        awc=_num(s.get("awc_mm")),
+        awc=awc,
         awc_class=s.get("retention_class"),
         awc_depth_cm=_num(s.get("awc_depth_cm")),
         slope=_num(terrain.get("slopePct")),
@@ -279,6 +311,10 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
         crop_season=tuple(crop["seasonMonths"]) if crop else (),
         crop_critical=tuple(crop["criticalMonths"]) if crop else (),
         crop_phase_pl=crop["criticalPhasePl"] if crop else None,
+        fao_ky=crop.get("faoKy") if crop else None,
+        fao_note=fao_note(crop["id"]) if crop else None,
+        analysis_date=ad,
+        smsr=smsr,
         area_ha=_num(bundle.plot.get("areaHa")),
     )
 
@@ -302,6 +338,8 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
     add("ev_kbw_30d", "Bilans wodny 30 dni (opad minus parowanie)", f.kbw30, SRC_METEO, "mm",
         f"bardziej sucho było w {fmt(f.kbw_pct, 0)}% lat z ostatnich 10 (ten sam okres)"
         if f.kbw_pct is not None else None)
+    add("ev_kbw_60d", "Bilans wodny 60 dni (okno SMSR)", f.kbw60, SRC_METEO, "mm",
+        "opad minus parowanie; porównywany z progiem IUNG SMSR dla uprawy i gleby")
     add("ev_dry_spell", "Dni bez deszczu (do dnia oceny)", f.dry_spell, SRC_METEO, "dni",
         "liczone od dnia oceny wstecz, dzień suchy = opad < 1 mm")
     add("ev_temp_30d", "Średnia temperatura 30 dni", f.temp30, SRC_METEO, "°C")
@@ -382,9 +420,22 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
             comparison=f"klasa {f.cdi} w skali 0–3")
 
     if crop:
+        ky_cmp = f.fao_note or crop["criticalPhasePl"]
+        if f.fao_ky is not None:
+            add("ev_fao_ky", "Współczynnik odpowiedzi plonu na deficyt wody (FAO Ky)",
+                f.fao_ky, SRC_FAO, comparison=ky_cmp)
         add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
             {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
-            SRC_CROPS, comparison=crop["criticalPhasePl"])
+            SRC_FAO if f.fao_ky is not None else SRC_CROPS,
+            comparison=f"{ky_cmp}; {crop['criticalPhasePl']}")
+        if f.smsr is not None:
+            sm = f.smsr
+            verdict = ("poniżej progu SMSR (~20% spadek plonu)" if sm.below_threshold
+                       else "powyżej progu SMSR (bez formalnej suszy rolniczej)")
+            add("ev_smsr_threshold", "Próg KBW SMSR dla uprawy i gleby",
+                sm.threshold_mm, SRC_SMSR, "mm",
+                f"okres {sm.period_label}, gleba kat. {soil_cat_label(sm.soil_cat)}; "
+                f"KBW 60 dni = {fmt(sm.kbw_60d_mm, 0)} mm → {verdict}")
         deficit, need = f.crop_deficit30, f.crop_water_need30
         if deficit is not None and need is not None and deficit > 0:
             add("ev_crop_deficit", "Niedobór wody dla uprawy (30 dni)", round(deficit), SRC_METEO,
@@ -498,7 +549,20 @@ def build_sources(bundle: AdapterBundle, analysis_date: date) -> list[Source]:
 
     out.append(Source(id=SRC_ENGINE, name="Obliczenia własne", provider="Retencja – silnik reguł (deterministyczny)",
                       mode="static", status="ok"))
-    out.append(Source(id=SRC_CROPS, name="Tabela wrażliwości upraw", provider="Retencja – tabela upraw",
+    out.append(Source(
+        id=SRC_FAO, name="Wrażliwość uprawy (FAO Ky)",
+        provider=FAO_SOURCE_NAME, url=FAO_SOURCE_URL, mode="static", status="ok",
+        license="FAO – publikacja otwarta; cytowanie FAO Irrigation & Drainage Paper 33",
+        dataPeriod="Doorenbos & Kassam 1979 (sezonowe Ky)",
+    ))
+    out.append(Source(
+        id=SRC_SMSR, name="Progi suszy rolniczej (IUNG SMSR)",
+        provider=SMSR_SOURCE_NAME, url=SMSR_SOURCE_URL, mode="static", status="ok",
+        license="MRiRW / IUNG-PIB – wartości z rozporządzenia Dz.U. 2019 poz. 739",
+        dataPeriod="okna sześciodekadowe 21 III – 30 IX",
+    ))
+    out.append(Source(id=SRC_CROPS, name="Katalog upraw (grupy SMSR)",
+                      provider="Retencja – mapowanie grup IUNG SMSR → FAO Ky",
                       mode="static", status="ok"))
     return out
 

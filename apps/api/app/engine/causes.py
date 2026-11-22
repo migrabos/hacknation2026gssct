@@ -108,12 +108,33 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
             "Przy ulewach część wody spływa po powierzchni, zamiast wsiąkać.",
         ))
 
-    # crop_sensitivity — only matters when it's not wet
-    if f.crop_sens >= HIGH_SENSITIVITY and (dry_now or assessment.susceptibility.level == "high"):
-        causes.append(_cause(
-            "crop_sensitivity", 0.4 + f.crop_sens * 0.3, ["ev_crop_sensitivity"],
-            "Ta uprawa jest bardzo wrażliwa na brak wody, więc nawet krótki niedobór obniża plon.",
-        ))
+    # crop_sensitivity — FAO Ky (structural) and/or SMSR threshold breach (situational)
+    smsr_hit = f.smsr is not None and f.smsr.below_threshold
+    high_ky = f.crop_sens >= HIGH_SENSITIVITY
+    if smsr_hit or (high_ky and (dry_now or assessment.susceptibility.level == "high")):
+        refs = ["ev_crop_sensitivity"]
+        if f.fao_ky is not None:
+            refs.append("ev_fao_ky")
+        parts: list[str] = []
+        if high_ky:
+            if f.fao_ky is not None:
+                parts.append(
+                    f"Ta uprawa ma wysoki współczynnik FAO Ky ({fmt(f.fao_ky, 2)}) – "
+                    "plon mocno spada przy niedoborze wody."
+                )
+            else:
+                parts.append("Ta uprawa jest bardzo wrażliwa na brak wody.")
+        if smsr_hit and f.smsr is not None:
+            refs.extend(["ev_smsr_threshold", "ev_kbw_60d"])
+            parts.append(
+                f"Bilans wodny 60 dni ({fmt(f.smsr.kbw_60d_mm, 0)} mm) jest poniżej progu SMSR "
+                f"({fmt(f.smsr.threshold_mm, 0)} mm) dla tej uprawy i kategorii gleby – "
+                "to poziom odpowiadający przeciętnie ok. 20% spadku plonu."
+            )
+        elif high_ky:
+            parts.append("Nawet krótki niedobór może obniżyć plon.")
+        conf = 0.4 + f.crop_sens * 0.25 + (0.15 if smsr_hit else 0)
+        causes.append(_cause("crop_sensitivity", conf, refs, " ".join(parts)))
 
     # bare_soil — satellite: most of the plot without green cover when it could be covered
     if bare_soil_off_season(f):
