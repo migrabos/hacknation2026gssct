@@ -38,11 +38,7 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI, SMSR 60-day threshold breach → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
-<<<<<<< Updated upstream
-Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, and a small FAO Ky crop modifier (`CROP_SENS_SUS_WEIGHT` = 5, max ≈ +5) → `low` < 40 ≤ `medium` < 62 ≤ `high`. Climate and soil dominate; crop is secondary.
-=======
 Susceptibility (multi-year) = weighted mean of 0–100 sub-scores (missing parts drop out, weights rescaled, confidence lowered): IUNG drought line crossed in the worst SMSR window (share of 10 years; 5/10 = 100) × 0,35 · summer (VI–VIII) KBW on the Polish range (−50 mm = 0, −200 mm = 100) × 0,25 · share of dry summers (KBW < −150 mm) × 0,15 · soil (100 − storage score) × 0,25 · crop sensitivity × 0,15 only when the crop has no IUNG thresholds → `low` < 30 ≤ `medium` < 55 ≤ `high`. Calibration check on 14 locations across Poland (2025-07-15): Kujawy/Wielkopolska high, loess and Żuławy low–medium, Podhale low. The 12-month precipitation anomaly is not part of it (it is the current year, not a property of the plot).
->>>>>>> Stashed changes
 
 ### Crop weights are not hand-tuned
 

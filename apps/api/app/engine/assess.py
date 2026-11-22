@@ -30,17 +30,10 @@ AWC_LOW = 110.0              # mm / 1 m — same class limits as the soil adapte
 AWC_HIGH = 155.0
 SAND_HIGH = 55.0
 HIGH_SENSITIVITY = 0.65
-<<<<<<< Updated upstream
-# Crop Ky is a small modifier — climate + soil dominate chronic water risk.
-CROP_SENS_SUS_WEIGHT = 5.0   # was 20; max ≈ +5 on the 0–100 susceptibility score
-SUMMER_KBW_VERY_DRY = -150.0
-SUMMER_KBW_DRY = -100.0
-=======
 # Summer (VI–VIII) KBW anchors for the climate sub-score: −50 mm → 0, −200 mm → 100.
 # Lowland Poland spans roughly −100 … −190 mm (ERA5, 2015–2025); mountains are positive.
 SUMMER_KBW_VERY_DRY = -200.0
 SUMMER_KBW_DRY = -150.0      # named in the summary ("paruje znacznie więcej, niż spada")
->>>>>>> Stashed changes
 SUMMER_KBW_WET = -50.0
 # Satellite (Sentinel-2). NDMI also rises with canopy density, so absolute values are only
 # trusted over dense green cover; the main signal is the anomaly vs this plot's own past years.
@@ -60,7 +53,7 @@ W_SMSR = 0.35                # IUNG drought line crossed (worst SMSR window, las
 W_CLIMATE = 0.25             # mean summer KBW on the Polish range
 W_DRY_SUMMERS = 0.15         # share of dry summers
 W_SOIL = 0.25                # soil water storage
-W_CROP = 0.15                # only without SMSR thresholds (crop already inside them)
+W_CROP = 0.15                # only without SMSR thresholds (crop already inside them); crop stays secondary
 SMSR_FULL_SHARE = 0.5        # drought line crossed in 5 of 10 years → sub-score 100
 SMSR_HIST_MENTION = 0.3      # ≥ 3 of 10 years → named as frequent
 
@@ -340,14 +333,10 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
     else:
         sus_conf -= 0.15
 
-<<<<<<< Updated upstream
-    sus += f.crop_sens * CROP_SENS_SUS_WEIGHT
-=======
     if f.fao_ky is not None:
         sus_refs.append("ev_fao_ky")
     wsum = sum(w for _, w in parts.values())
     sus = sum(v * w for v, w in parts.values()) / wsum if wsum else 50.0
->>>>>>> Stashed changes
     sus_score = int(round(max(0, min(100, sus))))
     sus_level = _sus_level(sus_score)
     # Lead the summary with what explains the level: risk drivers for medium/high,
