@@ -11,6 +11,8 @@
 
   --c-accent: #0f6b3a;
   --c-accent-hover: #0b5530;
+  --c-accent-fill: var(--c-accent);
+  --c-accent-fill-hover: var(--c-accent-hover);
   --c-accent-soft: #e7f2eb;
   --c-accent-line: #9fcbb0;
   --c-on-accent: #ffffff;
@@ -26,7 +28,7 @@
   --c-map-bg: #f3f6f1;
   --c-overlay: rgba(255, 255, 255, 0.55);
   --c-overlay-solid: rgba(255, 255, 255, 0.85);
-  --c-focus: #f2c200;
+  --c-focus: #49765b;
 
   /* moisture scale: very dry → wet */
   --c-m-very-dry: #b3261e;
@@ -49,13 +51,13 @@ html.dark {
   --c-border: #2e3631;
   --c-border-strong: #5c675f;
 
-  --c-accent: #3d9b63;
-  --c-accent-hover: #4db075;
-  --c-accent-soft: #1a2e22;
-  --c-accent-line: #2f5c42;
-  /* white on #3d9b63 is only 3.5:1 (fails WCAG AA); near-black gives 4.9:1. The accent itself must
-     stay light, because it is also the link / badge text colour on the dark background. */
-  --c-on-accent: #0d1f14;
+  --c-accent: #74a28a;
+  --c-accent-hover: #8eb69f;
+  --c-accent-fill: #325e48;
+  --c-accent-fill-hover: #406f55;
+  --c-accent-soft: #1d3025;
+  --c-accent-line: #455c4c;
+  --c-on-accent: #f2f6f2;
 
   --c-warn-bg: #2a2410;
   --c-warn-line: #c9a12a;
@@ -68,11 +70,11 @@ html.dark {
   --c-map-bg: #161b17;
   --c-overlay: rgba(18, 21, 18, 0.6);
   --c-overlay-solid: rgba(28, 34, 30, 0.9);
-  --c-focus: #e0b400;
+  --c-focus: #629578;
 
   --c-m-very-dry: #e5736a;
   --c-m-dry: #e09a45;
-  --c-m-normal: #4caf7a;
+  --c-m-normal: #789d83;
   --c-m-wet: #5b8fc9;
 
   color-scheme: dark;
@@ -91,6 +93,8 @@ html.contrast {
 
   --c-accent: #ffff00;
   --c-accent-hover: #ffff80;
+  --c-accent-fill: #ffff00;
+  --c-accent-fill-hover: #ffff80;
   --c-accent-soft: #1f1f00;
   --c-accent-line: #ffff00;
   --c-on-accent: #000000;
@@ -246,7 +250,7 @@ a.visually-hidden:focus {
 /* ---------- Header / footer ---------- */
 
 .topbar {
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   color: var(--c-on-accent);
   font-size: 0.85rem;
 }
@@ -295,7 +299,7 @@ a.visually-hidden:focus {
 /* active option is shown inverted, not by colour alone */
 .a11y-btn[aria-pressed="true"] {
   background: var(--c-on-accent);
-  color: var(--c-accent);
+  color: var(--c-accent-fill);
   border-color: var(--c-on-accent);
 }
 .a11y-btn:focus-visible {
@@ -424,7 +428,7 @@ html.theme-anim *::after {
   width: 36px;
   height: 36px;
   border-radius: var(--radius);
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   display: grid;
   place-items: center;
 }
@@ -487,7 +491,7 @@ main {
   padding: 10px 22px;
   border-radius: var(--radius);
   border: 2px solid var(--c-accent);
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   color: var(--c-on-accent);
   font: inherit;
   font-weight: 600;
@@ -495,7 +499,7 @@ main {
   cursor: pointer;
 }
 .btn:hover {
-  background: var(--c-accent-hover);
+  background: var(--c-accent-fill-hover);
   border-color: var(--c-accent-hover);
   color: var(--c-on-accent);
 }
@@ -556,8 +560,8 @@ main {
 .input:focus,
 .select:focus {
   border-color: var(--c-accent);
-  outline: 3px solid var(--c-focus);
-  outline-offset: 0;
+  outline: 2px solid var(--c-focus);
+  outline-offset: 2px;
 }
 .input-row {
   display: flex;
@@ -666,7 +670,7 @@ html.dark .step-illustration {
   flex: 1;
   height: 9px;
   border-radius: 2px;
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
 }
 .source-coverage-bar [data-status="partial"] {
   background: repeating-linear-gradient(135deg, var(--c-warn-line) 0 3px, var(--c-warn-bg) 3px 6px);
@@ -785,7 +789,7 @@ html.dark .step-illustration {
   height: 28px;
   flex: none;
   border-radius: 50%;
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   color: var(--c-on-accent);
   display: grid;
   place-items: center;
@@ -1102,7 +1106,7 @@ path.plot-outline--pending {
   border-left: 1px solid var(--c-border);
 }
 .seg button[aria-pressed="true"] {
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   color: var(--c-on-accent);
 }
 .map-btn {
@@ -1251,7 +1255,7 @@ path.plot-outline--pending {
   place-items: center;
 }
 li[data-state="done"] .pipe-icon {
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   border-color: var(--c-accent);
 }
 li[data-state="active"] .pipe-icon {
@@ -1273,7 +1277,7 @@ li[data-state="active"] .pipe-icon {
 }
 .progress > div {
   height: 100%;
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   border-radius: 5px;
   transition: width 0.2s linear;
 }
@@ -1388,7 +1392,7 @@ li[data-state="active"] .pipe-icon {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--c-on-accent);
-  background: var(--c-accent);
+  background: var(--c-accent-fill);
   border-radius: var(--radius);
   padding: 2px 9px;
   flex: none;

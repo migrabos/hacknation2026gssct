@@ -16,7 +16,7 @@ export default function SiteHeader() {
   return (
     <header className="site-header">
       <div className="container">
-        <Link href="/" className="brand" aria-label="Retencja — strona główna">
+        <div className="brand">
           <span className="brand-mark">
             <BrandMark />
           </span>
@@ -24,7 +24,7 @@ export default function SiteHeader() {
             <span className="brand-name">Retencja</span>
             <span className="brand-sub">woda na Twoim polu</span>
           </span>
-        </Link>
+        </div>
         <div className="site-header-actions">
           <nav className="site-nav" aria-label="Menu główne">
             {NAV.map((n) => (
