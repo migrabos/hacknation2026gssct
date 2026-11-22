@@ -81,10 +81,16 @@ def test_no_crop_advice_on_non_agricultural_land() -> None:
     assert rank_crop_fit(Facts(awc=150, land_category="built", land_agri=False)) is None
 
 
-def test_missing_data_lowers_confidence_but_still_ranks() -> None:
-    fit = rank_crop_fit(Facts())
-    assert fit.confidence == "low" and len(fit.ranking) == len(FIT_PROFILES)
-    assert fit.notConsidered
+def test_missing_water_and_soil_basis_withholds_ranking() -> None:
+    assert rank_crop_fit(Facts()) is None
+    assert rank_crop_fit(Facts(land_agri=True, slope=3)) is None
+
+
+def test_dry_climate_with_ample_soil_storage_explains_climate_penalty() -> None:
+    wheat = _item(rank_crop_fit(Facts(awc=180, kbw_summer_mean=-260)), "pszenica_ozima")
+    assert any("Letnie niedobory" in reason for reason in wheat.cons)
+    assert all("korzeni" not in reason for reason in wheat.cons)
+    assert "ev_kbw_summer" in wheat.evidenceRefs
 
 
 def test_crop_fit_report_is_separate_and_deterministic(sample_bundle) -> None:

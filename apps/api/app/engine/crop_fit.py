@@ -144,21 +144,21 @@ def _score(p: FitProfile, f: Facts, site: Site) -> CropFitItem:
     score = 100
 
     # water: sensitivity × (dry summers + little water in the root zone)
-    dry = site.dryness if site.dryness is not None else 0.5
+    dry = site.dryness or 0.0
     root = min(p["rootDepthM"], AWC_DEPTH_M)
     root_water = f.awc * root if f.awc is not None else None
     low_store = (_clamp((ROOT_WATER_OK_MM - root_water) / (ROOT_WATER_OK_MM - ROOT_WATER_MIN_MM))
-                 if root_water is not None else 0.5)
+                 if root_water is not None else 0.0)
     pen = round(WATER_PENALTY_MAX * p["sensitivity"] * (DRY_WEIGHT * dry + (1 - DRY_WEIGHT) * low_store))
     score -= pen
     if pen >= 15:
-        if root_water is not None:
-            cons.append(f"Mało wody dla korzeni: sięgają ok. {fmt(p['rootDepthM'])} m, a gleba zatrzyma w tej "
-                        f"warstwie ok. {fmt(root_water, 0)} mm. Uprawa jest wrażliwa na suszę.")
+        if root_water is not None and low_store > 0:
+            cons.append(f"W warstwie do {fmt(root)} m gleba zatrzyma ok. {fmt(root_water, 0)} mm wody. "
+                        "Ograniczony zapas zwiększa ryzyko niedoboru dla tej uprawy.")
             refs.append("ev_soil_awc")
-        else:
-            cons.append("Uprawa jest wrażliwa na suszę, a lata bywają tu suche.")
-        refs += site.dry_refs
+        if dry > 0:
+            cons.append("Letnie niedobory wody zwiększają ryzyko dla tej uprawy.")
+            refs += site.dry_refs
     elif p["sensitivity"] <= 0.4 and dry >= 0.4:
         pros.append("Dobrze znosi suche lata.")
         refs += site.dry_refs
@@ -238,10 +238,12 @@ def _score(p: FitProfile, f: Facts, site: Site) -> CropFitItem:
 
 
 def rank_crop_fit(f: Facts, selected_group: str | None = None) -> CropFit | None:
-    """None on non-agricultural land (built-up, forest, water…) — no crop advice there."""
+    """Withhold crop advice for non-agricultural land or missing soil and climate evidence."""
     if f.land_agri is False:
         return None
     site = site_from_facts(f)
+    if site.soil_level is None and site.dryness is None:
+        return None
     # ties: the more drought-resilient crop first (then id, so the order is always the same)
     scored = sorted(((_score(p, f, site), p) for p in FIT_PROFILES),
                     key=lambda ip: (-ip[0].score0to100, ip[1]["sensitivity"], ip[1]["id"]))

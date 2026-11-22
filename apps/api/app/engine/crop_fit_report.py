@@ -36,7 +36,7 @@ _FIT_MISSING: dict[str, tuple[str, str]] = {
                "Nie wiemy, ile wody gleba zatrzyma dla korzeni — porównanie upraw opiera się na klimacie, "
                "terenie i ewidencji gruntów i jest mniej pewne."),
     SRC_METEO: ("Pogoda z ostatnich 10 lat",
-                "Nie wiemy, jak suche są tu lata — porównanie zakłada przeciętne warunki i jest mniej pewne."),
+                "Brakujące dane klimatyczne ograniczają ocenę wpływu letnich niedoborów wody na uprawy."),
     SRC_DEM: ("Spadek terenu",
               "Nie oceniamy ryzyka spływu i erozji dla upraw rzędowych."),
     SRC_HYDRO: ("Rowy i cieki w pobliżu",
@@ -88,10 +88,14 @@ def run_crop_fit_report(*, bundle: AdapterBundle, analysis_date: date, duration_
     missing = _missing(sources)
 
     limitations = list(FIT_LIMITATIONS)
-    if fit is None:
+    if f.land_agri is False:
         label = f.land_label or "teren nierolniczy"
         limitations.insert(0, f"UWAGA: w ewidencji gruntów ta działka to {label} — nie porównujemy upraw "
                               "na terenie, który nie jest polem, łąką, pastwiskiem ani sadem.")
+    elif fit is None:
+        missing.append(MissingData(id="missing_crop_fit_basis", what="Gleba lub letni bilans wodny",
+                                   reason="Brakuje klasy gleby, udziału piasku, pojemności wodnej i historii letniego bilansu.",
+                                   impact="Za mało danych do doboru upraw na tej działce."))
 
     settings = get_settings()
     return CropFitReport(
