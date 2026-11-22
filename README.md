@@ -4,6 +4,19 @@ Browser-facing decision support for Polish farmers: for *this* cadastral plot an
 
 Integrated stack: Next.js UI (`apps/web`) → one FastAPI app (`apps/api`) → **live public data adapters** (ULDK, GUGiK NMT, OpenStreetMap, Open-Meteo/ERA5, SoilGrids, Sentinel-2, EDO) → deterministic Evidence engine → Polish template narrative.
 
+**Demo na żywo:** web `TODO: wpisz URL` · API `TODO: wpisz URL/health` (uzupełnij po deployu).
+
+## Co robi aplikacja (dla jury)
+
+Rolnik wpisuje identyfikator działki TERYT, wyszukuje ją po miejscowości i numerze albo klika na mapie. Potem wybiera uprawę i datę analizy (dziś lub dowolny dzień z ostatnich 10 lat). Aplikacja pobiera dane publiczne **na żywo** i w ok. 15–25 s (bez cache) układa raport w stałej kolejności:
+
+1. **Ocena wilgotności** – sytuacja w dniu analizy (bilans wodny 30 dni na tle 10 lat, dni bez deszczu, gleba, satelita) oraz osobno podatność wieloletnia (letni bilans wodny z 10 lat).
+2. **Przyczyny** – niedobór opadów, mała pojemność wodna gleby, spływ po spadku terenu, wrażliwość uprawy, goła gleba.
+3. **Retencja i agrotechnika** – działania ze stałego katalogu, każde z uzasadnieniem z danych działki: najniższe miejsce z NMT jako lokalizacja oczka, rów w pobliżu, spadek terenu, piasek i próchnica.
+4. **Nawadnianie (na końcu, opcjonalnie)** – tylko gdy jest sucho, uprawa jest wrażliwa i trwa jej sezon wzrostu. Zawiera termin (faza krytyczna uprawy), szacowany niedobór wody (ET0 × Kc wg FAO-56 minus opad) i orientacyjną dawkę jednorazową zależną od gleby.
+
+Każda liczba wskazuje źródło (`evidence[] → sources[]`). Raport zawsze pokazuje ograniczenia i brakujące dane. Wydruk lub PDF otwiera się z przeglądarki. Drugi raport (`/crop-fit`) porównuje, które uprawy najlepiej pasują do warunków wodnych działki.
+
 **Shared contract:** [`apps/web/lib/types.ts`](apps/web/lib/types.ts) ⇄ [`apps/api/app/schemas/evidence.py`](apps/api/app/schemas/evidence.py) (same field names). `apps/api/tests/test_contract_web.py` validates `fixtures/evidence_sample.json` against the API schema, so drift fails the tests.
 
 ---
@@ -32,6 +45,14 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 - Analyze: `POST http://127.0.0.1:8000/analyze`
 
 ```bash
+curl -X POST http://127.0.0.1:8000/analyze \
+  -H "Content-Type: application/json" \
+  -d '{"plotId":"040308_5.0004.17220","cropId":"kukurydza","analysisDate":"2026-07-15"}'
+```
+
+Windows (cmd):
+
+```bat
 curl -X POST http://127.0.0.1:8000/analyze ^
   -H "Content-Type: application/json" ^
   -d "{\"plotId\":\"040308_5.0004.17220\",\"cropId\":\"kukurydza\",\"analysisDate\":\"2026-07-15\"}"
@@ -70,7 +91,7 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza, 2026-07
 |----------|---------|---------|
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins (`*` = any) |
 | `ADAPTER_CACHE_DIR` | `apps/api/cache` | Disk cache for adapter responses |
-| `ENGINE_VERSION` | `0.2.0` | Report meta |
+| `ENGINE_VERSION` | `0.3.0` | Report meta |
 
 ---
 
@@ -78,22 +99,70 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza, 2026-07
 
 `POST /analyze` → `app/adapters/live.py`: ULDK resolves the plot, then in parallel: terrain + hydro (`plot/resolver.add_plot_context`), `fetch_meteo`, `fetch_soil`, `fetch_sentinel`, `fetch_drought_context`. Every adapter returns the `run_adapter` envelope (`values`, `sources`, `coverage`, `errors`, `fromCache`), is timeout-bounded and disk-cached.
 
-`app/engine/facts.py` copies adapter values into flat facts and builds `evidence[]`, `sources[]` (status ok/partial/failed, live/cached) and `missingData[]`. Rules in `assess.py` / `causes.py` / `rank.py` cite evidence ids only. Typical timing: ~10 s cold, <1 s warm.
+`app/engine/facts.py` copies adapter values into flat facts and builds `evidence[]`, `sources[]` (status ok/partial/failed, live/cached) and `missingData[]`. Rules in `assess.py` / `causes.py` / `rank.py` cite evidence ids only. Typical timing: ~15–22 s cold (measured 2026-11-22, all sources live), <1 s warm. All adapters share one 25 s data budget (`DATA_BUDGET_S`), so a slow source is cut off and reported in `missingData` instead of blocking the report.
+
+### Live vs precomputed data
+
+| Data | Mode | Range / date |
+|------|------|--------------|
+| Plot geometry (ULDK), land use (KIEG/EGiB), NMT heights, OSM water | live per request | current state of the public service |
+| Meteo (Open-Meteo ERA5 archive; NASA POWER fallback) | live | 10 years + 1 year back from the analysis date; the forecast model fills only the last ~10 days before *today* |
+| SoilGrids 2.0 | live | static global model (0–100 cm) |
+| Sentinel-2 L2A (Earth Search STAC) | live | clear scene within 21 days before the analysis date; same window in the 5 previous years for the baseline |
+| EDO CDI | live | latest 10-day map at the analysis date |
+| Village (obręb) search index `apps/api/plot/data/regions_pl.json.gz` | **precomputed** | PRG GUGiK WFS, built 2026-11-21 (`scripts/build_region_index.py`) |
+| Fallback index `apps/api/plot/data/obreby.json.gz` | **precomputed** | PRG GUGiK WFS, fetched 2026-11-21 (`plot/build_obreby_index.py`) |
+| Crop table (sensitivity, season months, critical months, Kc) | static table in code | `apps/api/app/crops/catalog.py` (FAO-33 Ky, FAO-56 Kc, IUNG crop groups) |
+
+Responses are disk-cached (`ADAPTER_CACHE_DIR`). The cache only speeds up repeated runs and never replaces live computation for a new plot or date. `warm_cache.py` pre-fetches the rehearsal plots.
 
 ---
 
 ## AI disclosure
 
-- No generative LLM in the runtime product path.
+- No generative LLM in the runtime product path. No ML model is trained or run.
 - Structured Report is authoritative; Polish narrative sections are template-filled from Evidence.
+- AI tools used while writing code: Claude Code (Anthropic) – code audit and engine changes. `TODO: zespół – dopisz pozostałe narzędzia (np. Cursor, Copilot, ChatGPT).`
+
+---
+
+## Libraries
+
+| Layer | Libraries |
+|-------|-----------|
+| Web (`apps/web`) | Next.js 16, React 19, Leaflet 1.9 + react-leaflet 5, TypeScript |
+| API (`apps/api`) | FastAPI, Uvicorn, Pydantic + pydantic-settings, httpx, Shapely, pyproj, rasterio (COG reads), NumPy, Pillow (EDO WMS colours), mapbox-vector-tile (OpenFreeMap hydro fallback), tzdata |
+| Tests | pytest, pytest-asyncio |
+
+Licenses of libraries and data sources: [`docs/licenses.md`](docs/licenses.md).
+
+---
+
+## Scalability and costs
+
+- **Stateless API:** no database and no accounts, so it scales horizontally by adding instances. The disk cache can be moved to a shared volume or object storage.
+- **Bottleneck = external APIs, not compute.** One analysis does about 10 HTTP calls and takes under 1 s of CPU. The free Open-Meteo tier is non-commercial and rate-limited. An 11-year daily request counts as many "calls", so production use (KOWR) needs a paid key (`OPEN_METEO_API_KEY`) or a self-hosted Open-Meteo instance (open source, ERA5 from Copernicus).
+- **Costs:** all other sources are free (GUGiK, Copernicus, ISRIC, NASA, OSM). Hosting: one small container (~1 vCPU / 1 GB RAM) plus a static frontend (Vercel/Netlify free tier).
+- **Nationwide coverage:** every source covers all of Poland. No per-plot precomputation, so a new plot works the same as a rehearsal plot.
+
+---
+
+## Security and privacy
+
+- No user accounts or personal data. Cadastral plot IDs are public register data. Reports live only in the browser (`sessionStorage`).
+- No secrets in the repo: only `.env.example` files are tracked, and `.env` is git-ignored. The optional `OPEN_METEO_API_KEY` is read from the environment.
+- External responses are size-capped and timeout-bounded. Plot IDs are regex-validated before calling ULDK.
+- Deploy: set `CORS_ORIGINS` to the web domain (never leave it empty = `*`). Put `/analyze` behind a reverse-proxy rate limit to protect upstream quotas.
 
 ---
 
 ## Limits (honest)
 
 - Thresholds are simple water-balance proxies, not a calibrated hydrological model.
-- NDVI is shown as context only (no multi-year NDVI baseline yet); EDO CDI is a regional indicator.
-- Water features come from OpenStreetMap (Overpass); when Overpass is unreachable, hydro is reported as missing.
+- Satellite (NDVI/NDMI) only corrects the weather-based score within −10/+6 points. It shows leaves, not soil moisture, and the multi-year baseline is used only with ≥ 3 clear years. EDO CDI is a regional indicator.
+- Water features come from OpenStreetMap (Overpass mirrors, fallback OpenFreeMap vector tiles – needs `mapbox-vector-tile`). When both fail, hydro is reported as missing. Unmapped ditches are not visible.
+- Crop season months, Kc and irrigation doses are group-level orientation values (FAO-56 / FAO-33 / IUNG groups), not variety-level agronomy. The irrigation dose is a guide, not an irrigation schedule.
+- Slope = least-squares plane through ~25–40 GUGiK NMT points inside the plot (mean slope). Local gullies are not modelled.
 - Irrigation is never first advice when retention applies.
 
 Verification notes for jury: [`docs/verify.md`](docs/verify.md). Licenses: [`docs/licenses.md`](docs/licenses.md).

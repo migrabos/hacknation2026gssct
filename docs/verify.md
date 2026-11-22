@@ -15,7 +15,7 @@ curl -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json
 Compare:
 
 - `moistureAssessment.current.score0to100`
-- `moistureAssessment.multiYearSusceptibility.score0to100`
+- `moistureAssessment.susceptibility.score0to100`
 - `causes[].id`
 - recommendation IDs
 
@@ -39,6 +39,21 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
 Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
+### Season, irrigation dose, slope, pond spot (engine 0.3.0)
+
+| Value | Rule | Where |
+|-------|------|-------|
+| Crop season / critical months / Kc | static table per IUNG crop group (`seasonMonths`, `criticalMonths`, `kcMid` from FAO-56 Table 12) | `apps/api/app/crops/catalog.py` |
+| `ev_crop_deficit` | `et0_30d × kcMid − precip_30d` (mm), shown only when > 0 | `facts.py` (`crop_deficit30`) |
+| Irrigation | only when current level is dry/very_dry, crop sensitivity ≥ 0.65, **analysis month in `seasonMonths`**, and retention was already offered. Outside the season: no recommendation and `irrigationNote` explains why | `rank.py` |
+| Irrigation timeframe | month in `criticalMonths` → "teraz"; otherwise "w okresie krytycznym (…)" | `rank.py` |
+| Single dose | AWC < 110 mm → 15–20 mm; otherwise 25–30 mm; AWC unknown → 20–25 mm (orientation ranges) | `rank.py` (`DOSE_*`) |
+| Interval between doses | daily use = `et0_30d × kcMid / 30`; interval = ⌊dose / daily use⌋ for both ends of the dose range, clamped to 2–14 days. Rain ≥ lower dose bound replaces one watering | `rank.py` (`irrigation_interval`) |
+| `slopePct` | least-squares plane z = a·x + b·y + c through all NMT samples inside the plot, slope = √(a²+b²)·100. Falls back to (max − min) / distance only for < 3 or collinear points (`slopeMethod`) | `plot/resolver.py` (`_plane_slope_pct`) |
+| `ev_low_spot` | elevation drop of the lowest NMT sample vs the highest one. Cited by `small_pond` | `plot/resolver.py` (`_retention_spot`) |
+
+Check: `et0_30d` and `precip_30d` are in the meteo adapter values; heights are reproducible with `GetHByPointList` on the GUGiK NMT service.
+
 All constants live at the top of `apps/api/app/engine/assess.py`. Raw inputs for recomputation are in the adapter values (e.g. `kbw_30d_prev_years`, `kbw_summer_by_year`, soil `layers`).
 
 ### Satellite (Sentinel-2 L2A, `apps/api/adapters/sentinel_stac.py`)

@@ -921,6 +921,26 @@ li[data-state="active"] .pipe-icon {
   font-weight: 600;
   overflow-wrap: anywhere;
 }
+.quick-summary {
+  border: 2px solid var(--c-accent-line);
+  border-radius: var(--radius);
+  background: var(--c-accent-soft);
+  padding: 16px 20px;
+  margin-bottom: 20px;
+}
+.quick-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px 24px;
+}
+.quick-summary-actions {
+  margin: 6px 0 0;
+  padding-left: 1.3em;
+}
+.quick-summary-actions li + li {
+  margin-top: 4px;
+}
+
 .report-overview {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
@@ -1109,6 +1129,7 @@ li[data-state="active"] .pipe-icon {
   margin: 0 0 8px;
 }
 .why {
+  white-space: pre-line; /* engine puts each step of a plan (ile / jak często / kiedy) on its own line */
   background: var(--c-accent-soft);
   border-radius: var(--radius);
   padding: 10px 14px;

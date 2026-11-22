@@ -321,6 +321,31 @@ def _runoff_class(slope_pct: float | None) -> str:
     return "high"
 
 
+def _plane_slope_pct(valid: list[tuple[Point, float]]) -> float | None:
+    """Mean slope of the least-squares plane z = a·x + b·y + c through all samples (EPSG:2180, m).
+
+    Robust to a single high/low sample (hump, pit, NMT artefact), unlike max−min / distance.
+    None when the points are (nearly) collinear – the plane is then undetermined.
+    """
+    n = len(valid)
+    if n < 3:
+        return None
+    mx = sum(p.x for p, _ in valid) / n
+    my = sum(p.y for p, _ in valid) / n
+    mz = sum(h for _, h in valid) / n
+    sxx = sum((p.x - mx) ** 2 for p, _ in valid)
+    syy = sum((p.y - my) ** 2 for p, _ in valid)
+    sxy = sum((p.x - mx) * (p.y - my) for p, _ in valid)
+    sxz = sum((p.x - mx) * (h - mz) for p, h in valid)
+    syz = sum((p.y - my) * (h - mz) for p, h in valid)
+    det = sxx * syy - sxy * sxy
+    if det <= 1e-9 * max(sxx * syy, 1.0):
+        return None
+    a = (sxz * syy - syz * sxy) / det
+    b = (syz * sxx - sxz * sxy) / det
+    return math.hypot(a, b) * 100
+
+
 def _slope_from_heights(pts: list[Point], heights: list[float]) -> dict[str, Any]:
     valid = [(p, h) for p, h in zip(pts, heights) if h is not None and math.isfinite(h)]
     if len(valid) < 2:
@@ -330,9 +355,14 @@ def _slope_from_heights(pts: list[Point], heights: list[float]) -> dict[str, Any
         # Both extrema otherwise select the same sample on a level surface.
         p_hi = max((p for p, _ in valid), key=p_lo.distance)
     dist_m = p_lo.distance(p_hi)
-    slope = None if dist_m == 0 else round((h_hi - h_lo) / dist_m * 100, 2)
+    plane = _plane_slope_pct(valid)
+    if plane is not None:
+        slope, method = round(plane, 2), "plane_fit"
+    else:  # 2 points or a straight line of samples: fall back to the two extremes
+        slope, method = (None if dist_m == 0 else round((h_hi - h_lo) / dist_m * 100, 2)), "two_points"
     return {
         "slopePct": slope,
+        "slopeMethod": method,
         "runoffRisk": _runoff_class(slope),
         "elevationMinM": round(h_lo, 1),
         "elevationMaxM": round(h_hi, 1),
@@ -395,10 +425,9 @@ def _retention_spot(pts: list[Point], heights: list[float], poly_2180: BaseGeome
 
 
 async def _terrain(client: httpx.AsyncClient, plot_id: str, poly_2180: BaseGeometry) -> dict[str, Any]:
-    pts = _sample_points_2180(poly_2180)
-    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts], "slopeVersion": 2}
     pts = _sample_points_2180(poly_2180, step_m=terrain_step_m(poly_2180))
-    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts], "v": 3}
+    # v4: slope = least-squares plane fit (older cache entries used max−min / distance)
+    key = {"plotId": plot_id, "points": [(round(p.x), round(p.y)) for p in pts], "v": 4}
 
     # 1) GUGiK NMT – national LIDAR DEM (~1 m grid), point list in "northing easting".
     nmt_list = ",".join(f"{p.y:.1f} {p.x:.1f}" for p in pts)
@@ -900,7 +929,7 @@ async def search_regions(query: str) -> dict[str, Any]:
     """Village (obręb) search – diacritic-insensitive, prefix-matching.
 
     `query` may carry a commune/county after a comma: "Zalesie, Ryki".
-    Returns {"regions": [...<=50], "total": n}. bbox is filled later by `region_details`.
+    Returns {"regions": [...<=50], "total": n} (bbox None – the map zooms after a plot is picked).
     Falls back to ULDK exact-name search when the offline index is missing.
     """
     name_part, _, where_part = (query or "").partition(",")
@@ -930,23 +959,6 @@ async def search_regions(query: str) -> dict[str, Any]:
         hits.append((rank, row))
     hits.sort(key=lambda h: (h[0], h[1]["_name"], h[1]["voivodeship"] or "", h[1]["county"] or "", h[1]["commune"] or ""))
     return {"regions": [_public(r) for _, r in hits[:REGION_SEARCH_LIMIT]], "total": len(hits)}
-
-
-async def region_details(region_id: str) -> dict[str, Any]:
-    """One obręb with its bbox (live from ULDK) – used to zoom the map to the chosen village."""
-    region_id = (region_id or "").strip()
-    if not _REGION_ID_RE.match(region_id):
-        raise InvalidPlotInput("Niepoprawny identyfikator obrębu.")
-    found = await _search_regions_uldk(region_id)
-    if not found:
-        raise PlotNotFound("Nie znaleziono takiej miejscowości (obrębu) w ULDK.")
-    out = found[0]
-    idx = _obreby_index()
-    if idx is not None:  # nicer casing / names from the index when ULDK returns UPPERCASE
-        row = next((r for r in idx["rows"] if r["regionId"] == region_id), None)
-        if row:
-            out = {**out, **{k: v for k, v in _public(row).items() if v and k != "bbox"}}
-    return out
 
 
 async def _search_regions_uldk(name: str) -> list[dict[str, Any]]:
