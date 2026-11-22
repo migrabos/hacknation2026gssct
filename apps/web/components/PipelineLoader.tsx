@@ -9,13 +9,29 @@ import { CheckIcon } from "./Icons";
  * the last step only completes when the report actually arrives.
  */
 const DEFAULT_STEPS = [
-  { title: "Pobieramy dane o działce", sub: "granice, pogoda z 10 lat, gleba, ukształtowanie terenu" },
-  { title: "Ocena wilgotności", sub: "jak sucho jest teraz i jak często bywa sucho" },
-  { title: "Przyczyny", sub: "brak deszczu, gleba, spływ wody, wymagania uprawy" },
-  { title: "Retencja i agrotechnika", sub: "jak zatrzymać wodę na polu" },
-  { title: "Nawadnianie", sub: "tylko jeśli naprawdę potrzebne" },
+  {
+    title: "Pobieramy dane o działce",
+    sub: "granice z GUGiK · pogoda z 10 lat · gleba · ukształtowanie terenu",
+  },
+  {
+    title: "Analiza zdjęć satelitarnych",
+    sub: "Sentinel-2 · kondycja roślinności · wilgotność",
+  },
+  {
+    title: "Ocena wilgotności",
+    sub: "jak sucho jest teraz i jak często bywa sucho",
+  },
+  {
+    title: "Przyczyny i rekomendacje",
+    sub: "brak deszczu · gleba · spływ wody · retencja · agrotechnika",
+  },
+  {
+    title: "Generowanie raportu",
+    sub: "tylko jeśli naprawdę potrzebne — nawadnianie na końcu",
+  },
 ];
-const STEP_MS = [2600, 1600, 1600, 1800];
+
+const STEP_MS = [3000, 2000, 1800, 2000];
 
 export default function PipelineLoader({
   plotLabel,
@@ -29,7 +45,7 @@ export default function PipelineLoader({
 
   useEffect(() => {
     if (active >= STEPS.length - 1) return;
-    const t = setTimeout(() => setActive((a) => a + 1), STEP_MS[active] ?? 1800);
+    const t = setTimeout(() => setActive((a) => a + 1), STEP_MS[active] ?? 2000);
     return () => clearTimeout(t);
   }, [active, STEPS.length]);
 
@@ -42,21 +58,55 @@ export default function PipelineLoader({
 
   return (
     <section className="panel pipeline" aria-live="polite" aria-busy="true">
-      <h2>Przygotowujemy raport</h2>
-      <p className="muted" style={{ marginBottom: 0 }}>
-        {plotLabel ? <>Działka {plotLabel}. </> : null}
-        Zwykle trwa to kilkanaście sekund.
-      </p>
-      <div className="progress" aria-hidden="true">
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+        <div>
+          <h2 style={{ marginBottom: 6 }}>Przygotowujemy Twój raport</h2>
+          <p className="muted" style={{ marginBottom: 0, fontSize: "0.9375rem" }}>
+            {plotLabel ? (
+              <>
+                <strong style={{ color: "var(--c-text)" }}>Działka {plotLabel}</strong>
+                {" · "}
+              </>
+            ) : null}
+            Zwykle trwa to kilkanaście sekund
+          </p>
+        </div>
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 10,
+          padding: "8px 16px",
+          borderRadius: "var(--radius-pill)",
+          border: "1px solid var(--c-border)",
+          background: "var(--c-bg-subtle)",
+          fontSize: "0.875rem",
+          color: "var(--c-text-muted)",
+          whiteSpace: "nowrap",
+        }}>
+          <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+          <span style={{ fontVariantNumeric: "tabular-nums" }}>{elapsed} s</span>
+        </div>
+      </div>
+
+      <div className="progress" aria-hidden="true" style={{ marginTop: 20 }}>
         <div style={{ width: `${pct}%` }} />
       </div>
-      <ol>
+      <p style={{ margin: "6px 0 0", fontSize: "0.8125rem", color: "var(--c-text-muted)", textAlign: "right" }}>
+        {pct}%
+        {elapsed > 30 && " — niektóre serwisy odpowiadają dziś wolniej, prosimy o cierpliwość"}
+      </p>
+
+      <ol aria-label="Postęp analizy">
         {STEPS.map((s, i) => {
           const state = i < active ? "done" : i === active ? "active" : "todo";
           return (
             <li key={s.title} data-state={state}>
-              <span className="pipe-icon">
-                {state === "done" ? <CheckIcon /> : state === "active" ? <span className="spinner" /> : null}
+              <span className="pipe-icon" aria-hidden="true">
+                {state === "done" ? (
+                  <CheckIcon size={14} />
+                ) : state === "active" ? (
+                  <span className="spinner" style={{ width: 14, height: 14, borderWidth: 2 }} />
+                ) : null}
               </span>
               <span>
                 {s.title}
@@ -66,10 +116,6 @@ export default function PipelineLoader({
           );
         })}
       </ol>
-      <p className="muted small" style={{ margin: "12px 0 0" }}>
-        Czas: {elapsed} s
-        {elapsed > 30 && " — niektóre serwisy z danymi odpowiadają dziś wolniej, prosimy o cierpliwość."}
-      </p>
     </section>
   );
 }

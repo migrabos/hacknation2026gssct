@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo } from "react";
-import type { Confidence, Evidence, NarrativeSectionId, Recommendation, Report, Source } from "@/lib/types";
+import type { Confidence, Evidence, MoistureLevel, NarrativeSectionId, Recommendation, Report, Source } from "@/lib/types";
 import {
   CONFIDENCE_LABEL,
   COST_LABEL,
@@ -46,6 +46,15 @@ const RISK_TONE: Record<string, string> = {
   high: "var(--c-m-very-dry)",
 };
 
+/** Emoji icon for moisture level — readable at any size, no extra assets */
+const MOISTURE_ICON: Record<string, string> = {
+  very_dry: "🔥",
+  dry: "⚠️",
+  normal: "✅",
+  wet: "💧",
+  insufficient_data: "❓",
+};
+
 const SECTIONS = [
   { id: "ocena", title: "Ocena wilgotności" },
   { id: "przyczyny", title: "Możliwe przyczyny" },
@@ -65,7 +74,10 @@ export default function ReportView({ report }: { report: Report }) {
 
   // Open every "Na jakiej podstawie?" block when printing.
   useEffect(() => {
-    const open = () => document.querySelectorAll<HTMLDetailsElement>("details.evidence, details.sources-more, details.rain").forEach((d) => (d.open = true));
+    const open = () =>
+      document.querySelectorAll<HTMLDetailsElement>("details.evidence, details.sources-more, details.rain").forEach(
+        (d) => (d.open = true),
+      );
     window.addEventListener("beforeprint", open);
     return () => window.removeEventListener("beforeprint", open);
   }, []);
@@ -109,8 +121,8 @@ export default function ReportView({ report }: { report: Report }) {
       {report.status === "partial" && (
         <Notice tone="warn" title="Raport niepełny — części danych nie udało się pobrać" role="status">
           <p>
-            Brakuje: {report.missingData.map((m) => m.what.charAt(0).toLowerCase() + m.what.slice(1)).join(", ")}. Wnioski opieramy na pozostałych
-            danych.{" "}
+            Brakuje: {report.missingData.map((m) => m.what.charAt(0).toLowerCase() + m.what.slice(1)).join(", ")}. Wnioski opieramy na
+            pozostałych danych.{" "}
             <a href="#braki" className="no-print">
               Zobacz, czego brakuje i co to zmienia
             </a>
@@ -137,9 +149,12 @@ export default function ReportView({ report }: { report: Report }) {
             {landUse.labelPl ? (
               <dd>
                 {landUse.labelPl.charAt(0).toUpperCase() + landUse.labelPl.slice(1)}
-                {landUse.soilClasses && landUse.soilClasses.length > 0 && <>, klasa gleby {landUse.soilClasses.join(", ")}</>}
+                {landUse.soilClasses && landUse.soilClasses.length > 0 && (
+                  <>, klasa gleby {landUse.soilClasses.join(", ")}</>
+                )}
                 <span className="muted small" style={{ display: "block" }}>
-                  z ewidencji gruntów (EGiB){landUse.codes && landUse.codes.length > 0 && <>: {landUse.codes.join(", ")}</>}
+                  z ewidencji gruntów (EGiB)
+                  {landUse.codes && landUse.codes.length > 0 && <>: {landUse.codes.join(", ")}</>}
                 </span>
               </dd>
             ) : (
@@ -162,7 +177,7 @@ export default function ReportView({ report }: { report: Report }) {
         </div>
         {plot.terrain?.slopePct != null && (
           <div>
-            <dt>Spadek terenu według modelu</dt>
+            <dt>Spadek terenu</dt>
             <dd>
               {formatNumber(plot.terrain.slopePct, 2)}%
               {sources.get("dem")?.dataPeriod && <> · {sources.get("dem")?.dataPeriod}</>}
@@ -195,9 +210,9 @@ export default function ReportView({ report }: { report: Report }) {
       </div>
 
       {/* ---------- 1. Assessment ---------- */}
-      <Section n={1} id="ocena" title="Ocena wilgotności" lead="Obecnie i w poprzednich latach">
+      <Section n={1} id="ocena" title="Ocena wilgotności" lead="Stan obecny i podatność w wieloleciu">
         <div className="assess-grid">
-          <div className="assess-card">
+          <div className="assess-card" data-level={ma.current.level}>
             <div className="assess-kicker">Teraz</div>
             <h3>{ma.current.headline}</h3>
             {ma.current.level !== "insufficient_data" && (
@@ -212,15 +227,17 @@ export default function ReportView({ report }: { report: Report }) {
             <ConfidenceBadge c={ma.current.confidence} />
             <EvidenceDetails refs={ma.current.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
-          <div className="assess-card">
+          <div className="assess-card" data-level={ma.susceptibility.level}>
             <div className="assess-kicker">Przez ostatnie lata</div>
             <h3>{ma.susceptibility.headline}</h3>
-            {ma.susceptibility.level !== "insufficient_data" && <Scale
-              steps={RISK_SCALE}
-              active={ma.susceptibility.level}
-              tone={RISK_TONE[ma.susceptibility.level]}
-              label="Podatność na suszę"
-            />}
+            {ma.susceptibility.level !== "insufficient_data" && (
+              <Scale
+                steps={RISK_SCALE}
+                active={ma.susceptibility.level}
+                tone={RISK_TONE[ma.susceptibility.level]}
+                label="Podatność na suszę"
+              />
+            )}
             <p>{ma.susceptibility.summary}</p>
             <ConfidenceBadge c={ma.susceptibility.confidence} />
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />
@@ -285,8 +302,12 @@ export default function ReportView({ report }: { report: Report }) {
           <RecList items={irrigation} evidence={evidence} sources={sources} />
         ) : (
           <div className="irrigation-note">
-            <strong>{ma.current.level === "insufficient_data" ? "Potrzeba nawadniania jest nieznana." : "Nawadnianie nie jest teraz potrzebne."}</strong>
-            <p style={{ margin: "6px 0 0" }}>
+            <strong>
+              {ma.current.level === "insufficient_data"
+                ? "Potrzeba nawadniania jest nieznana."
+                : "Nawadnianie nie jest teraz potrzebne."}
+            </strong>
+            <p style={{ margin: "8px 0 0" }}>
               {rec.irrigationNote ?? "Przy obecnych warunkach lepsze efekty dadzą działania z punktów 3 i 4."}
             </p>
           </div>
@@ -297,7 +318,7 @@ export default function ReportView({ report }: { report: Report }) {
       {/* ---------- Sources, gaps, limitations ---------- */}
       <section className="r-section sources-section" id="zrodla" aria-label="Źródła danych i ograniczenia">
         {report.missingData.length > 0 && (
-          <div id="braki" style={{ marginBottom: 20, scrollMarginTop: 16 }}>
+          <div id="braki" style={{ marginBottom: 24, scrollMarginTop: 16 }}>
             <h3>Czego brakuje w tym raporcie</h3>
             <ul className="missing-list">
               {report.missingData.map((m) => (
@@ -317,7 +338,7 @@ export default function ReportView({ report }: { report: Report }) {
           <summary>Źródła danych i ograniczenia</summary>
           <div className="sources-body">
             <p className="muted small">Każda liczba w raporcie pochodzi z jednego z tych źródeł.</p>
-            <div className="table-wrap" style={{ marginBottom: 20 }}>
+            <div className="table-wrap" style={{ marginBottom: 24 }}>
               <table className="data">
                 <thead>
                   <tr>
@@ -368,8 +389,8 @@ export default function ReportView({ report }: { report: Report }) {
 
             {report.narrative && (
               <p className="small muted">
-                Opisy słowne w raporcie powstały automatycznie z szablonu, wyłącznie na podstawie
-                powyższych danych. Oceny i zalecenia wylicza deterministyczny silnik reguł.
+                Opisy słowne w raporcie powstały automatycznie z szablonu, wyłącznie na podstawie powyższych danych.
+                Oceny i zalecenia wylicza deterministyczny silnik reguł.
               </p>
             )}
             <p className="small muted">Identyfikator raportu: {report.reportId}</p>
@@ -382,21 +403,29 @@ export default function ReportView({ report }: { report: Report }) {
 
 // ---------------------------------------------------------------------------
 
-/** "In 5 seconds" box: restates structured fields only (headlines, top actions) – no new numbers. */
+/** Hero "W 5 sekund" — restates structured fields only (headlines, top actions) – no new numbers. */
 function QuickSummary({ report }: { report: Report }) {
   const { moistureAssessment: ma, recommendations: rec } = report;
+  const level = ma.current.level;
   const top = [
     ...[...rec.retention].sort((a, b) => a.priority - b.priority).slice(0, 2).map((r) => ({ r, href: "#retencja" })),
     ...[...rec.agrotech].sort((a, b) => a.priority - b.priority).slice(0, 1).map((r) => ({ r, href: "#agrotechnika" })),
     ...(rec.irrigation ?? []).slice(0, 1).map((r) => ({ r, href: "#nawadnianie" })),
   ];
+
   return (
-    <section className="quick-summary" aria-label="Najważniejsze w skrócie">
-      <div className="quick-summary-grid">
+    <section className="quick-summary" data-level={level} aria-label="Najważniejsze w skrócie">
+      {/* Moisture hero */}
+      <div className="qs-header">
+        <div className="qs-icon" aria-hidden="true">{MOISTURE_ICON[level] ?? "💧"}</div>
         <div>
-          <div className="assess-kicker">Teraz</div>
-          <strong>{ma.current.headline}</strong>
+          <div className="qs-label">Stan wilgotności teraz</div>
+          <strong className="qs-headline">{ma.current.headline}</strong>
         </div>
+      </div>
+
+      {/* Susceptibility + risk window row */}
+      <div className="quick-summary-grid">
         <div>
           <div className="assess-kicker">Przez ostatnie lata</div>
           <strong>{ma.susceptibility.headline}</strong>
@@ -405,15 +434,21 @@ function QuickSummary({ report }: { report: Report }) {
           <div>
             <div className="assess-kicker">Najczęściej brakuje wody</div>
             <strong>{ma.susceptibility.riskWindow.peakLabel}</strong>
-            {ma.susceptibility.riskWindow.yearsHit != null && ma.susceptibility.riskWindow.yearsTotal != null && (
-              <span className="muted"> · w {ma.susceptibility.riskWindow.yearsHit} z {ma.susceptibility.riskWindow.yearsTotal} lat</span>
-            )}
+            {ma.susceptibility.riskWindow.yearsHit != null &&
+              ma.susceptibility.riskWindow.yearsTotal != null && (
+                <span className="muted">
+                  {" "}
+                  · w {ma.susceptibility.riskWindow.yearsHit} z {ma.susceptibility.riskWindow.yearsTotal} lat
+                </span>
+              )}
           </div>
         )}
       </div>
+
+      {/* Top actions */}
       {top.length > 0 ? (
-        <>
-          <div className="assess-kicker" style={{ marginTop: 14 }}>Co zrobić najpierw</div>
+        <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid color-mix(in srgb, var(--c-accent-line) 50%, transparent)" }}>
+          <div className="assess-kicker">Co zrobić najpierw</div>
           <ol className="quick-summary-actions">
             {top.map(({ r, href }) => (
               <li key={r.actionId}>
@@ -426,9 +461,9 @@ function QuickSummary({ report }: { report: Report }) {
               </li>
             ))}
           </ol>
-        </>
+        </div>
       ) : (
-        <p style={{ margin: "10px 0 0" }}>Nie widzimy potrzeby dodatkowych działań na tej działce.</p>
+        <p style={{ margin: "12px 0 0" }}>Nie widzimy potrzeby dodatkowych działań na tej działce.</p>
       )}
     </section>
   );
