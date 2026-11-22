@@ -198,7 +198,7 @@ Gdy grozi susza, a żadna reguła nie wskazała działania, raport zawsze propon
 ### 6. Druk, zapis i wygoda
 - **„Drukuj / zapisz PDF”** korzysta z dedykowanego stylu A4 ([`print.css`](apps/web/styles/print.css)): ukrywa menu i przyciski, rozwija wszystkie uzasadnienia, źródła i wykres opadów, a mapa drukuje się razem z raportem.
 - Raport przetrwa odświeżenie strony (jest zapisany w karcie przeglądarki), ale nie jest wysyłany na żaden serwer.
-- Motyw **jasny / ciemny** (domyślnie ciemny), przełączany w nagłówku i zapamiętywany w przeglądarce.
+- Motyw **jasny / ciemny** (domyślnie jasny), przełączany w nagłówku i zapamiętywany w przeglądarce.
 - Układ dostosowuje się do telefonu i tabletu.
 - Strona główna wyjaśnia, jak działa narzędzie, co zawiera raport i skąd pochodzą dane.
 - Wszystkie komunikaty błędów są po polsku i mówią, co zrobić (np. „Nie znaleźliśmy tej działki: sprawdź numer na wypisie albo wskaż ją na mapie”).

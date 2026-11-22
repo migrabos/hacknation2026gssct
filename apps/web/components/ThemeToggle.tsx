@@ -14,7 +14,7 @@ let fadeTimer: number | undefined;
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
 
-  // Dark by default — the OS light/dark setting is intentionally not followed.
+  // Light by default — the OS light/dark setting is intentionally not followed.
   useEffect(() => {
     const initial = resolveInitialTheme();
     setTheme(initial);

@@ -2,8 +2,8 @@ export const THEME_STORAGE_KEY = "retencja-theme";
 
 export type Theme = "light" | "dark";
 
-/** Dark is the default look; the farmer's own choice (toggle) is remembered and wins. */
-export const DEFAULT_THEME: Theme = "dark";
+/** Light is the default look; the farmer's own choice (toggle) is remembered and wins. */
+export const DEFAULT_THEME: Theme = "light";
 
 export function readStoredTheme(): Theme | null {
   try {

@@ -13,9 +13,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    // class="dark" already in the server HTML: dark is the default, so no light flash on load.
-    // instrumentation-client.ts switches to light before hydration if the farmer chose it.
-    <html lang="pl" className="dark" suppressHydrationWarning>
+    // No "dark" class in the server HTML: light is the default.
+    // instrumentation-client.ts switches to dark (or high contrast) before hydration if the farmer chose it.
+    <html lang="pl" suppressHydrationWarning>
       <body>
         <a href="#tresc" className="visually-hidden">
           Przejdź do treści
