@@ -296,6 +296,23 @@ export default function ReportView({ report }: { report: Report }) {
 
       {/* ---------- Sources, gaps, limitations ---------- */}
       <section className="r-section sources-section" id="zrodla" aria-label="Źródła danych i ograniczenia">
+        {report.sources.length > 0 && (
+          <div className="source-coverage">
+            <strong>Źródła z kompletem danych</strong>{" "}
+            <span>{report.sources.length - failedSources.length} z {report.sources.length}</span>
+            <div className="source-coverage-bar" aria-hidden="true">
+              {report.sources.map((source) => (
+                <span key={source.id} data-status={source.status} />
+              ))}
+            </div>
+            {failedSources.length > 0 && (
+              <small>
+                Częściowe dane: {failedSources.filter((s) => s.status === "partial").length}
+                {" · "}Brak danych: {failedSources.filter((s) => s.status === "failed").length}
+              </small>
+            )}
+          </div>
+        )}
         {report.missingData.length > 0 && (
           <div id="braki" style={{ marginBottom: 20, scrollMarginTop: 16 }}>
             <h3>Czego brakuje w tym raporcie</h3>
