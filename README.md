@@ -23,6 +23,35 @@ Każda liczba wskazuje źródło (`evidence[] → sources[]`). Raport zawsze pok
 
 ## Quick start
 
+Wymagania: **Python 3.11+** i **Node.js 20+** (z npm). Resztę skrypt instaluje sam.
+
+### Uruchomienie jednym poleceniem
+
+| System | Polecenie (z katalogu głównego repo) |
+|--------|--------------------------------------|
+| Linux / macOS / WSL | `./start.sh` |
+| Windows | dwuklik na `start.bat` (albo `start.bat` w CMD/PowerShell) |
+| Windows z Git Bash | `bash start.sh` |
+
+Skrypt:
+
+1. sprawdza wersje Pythona i Node.js,
+2. tworzy `apps/api/.env` i `apps/web/.env.local` z plików `.env.example`, jeśli ich nie ma,
+3. tworzy środowisko Python `apps/api/.venv` i instaluje zależności (pierwszy raz trwa kilka minut, potem tylko gdy zmieni się `requirements.txt`),
+4. uruchamia `npm install` przy pierwszym starcie albo po zmianie `package-lock.json`,
+5. startuje API (http://localhost:8000/docs) i frontend (http://localhost:3000), po czym otwiera przeglądarkę.
+
+Logi trafiają do `api.log` i `web.log` w katalogu głównym (na Windows dodatkowo `api.err.log`, `web.err.log`).
+Zatrzymanie: **Ctrl+C** (Linux/macOS) albo **Enter** w oknie skryptu (Windows).
+
+Najczęstsze problemy:
+
+- **„Port 8000 jest zajęty”** — działa poprzednie API. Linux/macOS: `pkill -f "uvicorn app.main"` (gdy nie pomaga: `ss -ltnp 'sport = :8000'` i `kill -9 <pid>`). Windows: `netstat -ano | findstr :8000`, potem `taskkill /PID <pid> /F`.
+- **„.venv pochodzi z innego systemu”** — repo było uruchamiane raz na Windows, raz w WSL. Usuń `apps/api/.venv` i uruchom ponownie.
+- **PowerShell blokuje skrypt** — uruchamiaj przez `start.bat`, który omija tę blokadę tylko dla tego uruchomienia.
+
+### Ręcznie (dwa terminale)
+
 ```bash
 cd apps/api
 python -m pip install -r requirements.txt
