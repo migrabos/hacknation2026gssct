@@ -7,8 +7,8 @@ Run from apps/api:
 
 Outputs:
     * summary table on stdout (coverage per source, timings)
-    * docs/data_sources_log.json – every API used, licence, example URL, fetchedAt range
-      (paste-ready for README "live vs cached data" section)
+    * apps/api/cache/data_sources_log.json – every API used, licence, example URL, fetchedAt range
+      (local only; cache/ is gitignored)
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ DEFAULT_POINTS = [
 ]
 DEFAULT_DATES = ["2019-07-15", "2026-07-15", "2026-11-21"]
 
-LOG_PATH = Path(__file__).resolve().parents[2] / "docs" / "data_sources_log.json"
+LOG_PATH = Path(__file__).resolve().parent / "cache" / "data_sources_log.json"
 
 def _license(name: str) -> str:
     return license_for(name) or "DO UZUPEŁNIENIA"

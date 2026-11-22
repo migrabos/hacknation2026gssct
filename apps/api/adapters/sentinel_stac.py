@@ -52,7 +52,7 @@ SCL_CLOUD = (0, 3, 8, 9, 10)  # no data, cloud shadow, cloud medium/high, cirrus
 SCL_UNUSABLE = SCL_CLOUD + (1, 11)  # + saturated/defective, snow – unusable for indices
 SCL_WATER = (6,)
 
-# Pixel-share thresholds (plain arithmetic on the plot's pixels, documented in docs/verify.md)
+# Pixel-share thresholds (plain arithmetic on the plot's pixels; see README: Weryfikacja wyników)
 BARE_NDVI = 0.2        # below: bare soil / stubble without green cover
 VEG_NDVI = 0.3         # above: green vegetation present
 WEAK_ZONE_DELTA = 0.15  # pixel NDVI this far below the plot median = visibly weaker part of the field
@@ -229,7 +229,7 @@ async def _process_scene(item: dict[str, Any], geom_4326, d: date,
         "ndvi_p10": round(float(np.percentile(ndvi, 10)), 3),
         "ndvi_p90": round(float(np.percentile(ndvi, 90)), 3),
         "ndmi_mean": round(float(ndmi.mean()), 3),
-        # Simple pixel shares (no ML): thresholds documented in docs/verify.md.
+        # Simple pixel shares (no ML): thresholds documented in README.
         "bare_soil_pct": pct((ndvi < BARE_NDVI) & ~water),
         "water_pct": pct(water),
         "weak_zone_pct": pct(ndvi < ndvi_median - WEAK_ZONE_DELTA) if ndvi_median >= VEG_NDVI else 0.0,

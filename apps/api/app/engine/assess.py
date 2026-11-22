@@ -16,7 +16,7 @@ from app.schemas.evidence import (
     confidence_label,
 )
 
-# --- tunable thresholds (documented in docs/verify.md) ---
+# --- tunable thresholds (documented in README: Weryfikacja wyników) ---
 PRECIP_RATIO_OK = 0.90       # ≥ 90 % of the 10-year median for the same 30 days
 PRECIP_RATIO_WATCH = 0.70
 PRECIP_RATIO_DEFICIT = 0.50

@@ -421,7 +421,7 @@ Podkłady mapy w przeglądarce (OpenFreeMap, ortofotomapa Geoportalu, granice dz
 Indeksy obrębów służą **tylko do wyszukiwania** miejscowości. Geometria działki i wszystkie dane analityczne zawsze pochodzą z ULDK i adapterów na żywo.
 
 ### Pamięć podręczna (cache)
-Udane odpowiedzi API są zapisywane w `apps/api/cache` (klucz = źródło + parametry + data analizy). Cache **przyspiesza ponowne zapytanie o tę samą działkę i datę** (poniżej 1 s zamiast kilkunastu sekund), ale nie zastępuje obliczeń dla nowej działki lub daty. Błędy i wyniki częściowe nigdy nie trafiają do cache. Skrypt [`apps/api/warm_cache.py`](apps/api/warm_cache.py) może wcześniej pobrać dane dla działek demonstracyjnych; dziennik pobrań z adresami i licencjami: [`docs/data_sources_log.json`](docs/data_sources_log.json) (pobrania z **2026-11-21**). Raport przy każdym źródle pokazuje, czy dane były pobrane na żywo, czy z cache, oraz kiedy.
+Udane odpowiedzi API są zapisywane w `apps/api/cache` (klucz = źródło + parametry + data analizy). Cache **przyspiesza ponowne zapytanie o tę samą działkę i datę** (poniżej 1 s zamiast kilkunastu sekund), ale nie zastępuje obliczeń dla nowej działki lub daty. Błędy i wyniki częściowe nigdy nie trafiają do cache. Skrypt [`apps/api/warm_cache.py`](apps/api/warm_cache.py) może wcześniej pobrać dane dla działek demonstracyjnych i zapisuje lokalny dziennik pobrań (`apps/api/cache/data_sources_log.json`, poza repozytorium). Raport przy każdym źródle pokazuje, czy dane były pobrane na żywo, czy z cache, oraz kiedy.
 
 ### Czego świadomie nie używamy
 - **IMGW-PIB:** dane stacyjne wymagałyby interpolacji do działki; ERA5 daje spójną siatkę dla całej Polski i pełne 10 lat.
@@ -450,7 +450,7 @@ Udane odpowiedzi API są zapisywane w `apps/api/cache` (klucz = źródło + para
 | **Tekst raportu dla rolnika** | **Nie** | Zdania po polsku sklejane z szablonu ([`templates_pl.py`](apps/api/app/narrative/templates_pl.py)) wyłącznie z pól raportu. Nie ma modelu, który mógłby wymyślić liczbę lub zabieg. |
 | **Analiza zdjęć satelitarnych** | **Nie** (bez ML) | Arytmetyka pasm (NDVI, NDMI) i maska chmur SCL dostarczona przez ESA. |
 | **Gleba (SoilGrids)** | pośrednio | SoilGrids to produkt ISRIC wytworzony modelami uczenia maszynowego. Używamy gotowych map, nie trenujemy ani nie uruchamiamy żadnego modelu. |
-| **Tworzenie kodu** | **Tak** | Asystenci programistyczni: **Cursor** (Composer / Agent) oraz **Claude Code** (Anthropic): szkielet projektu, adaptery, silnik, interfejs, dokumentacja, przeglądy kodu. Wszystkie progi i metody pochodzą ze źródeł wskazanych w kodzie i w [`docs/verify.md`](docs/verify.md). |
+| **Tworzenie kodu** | **Tak** | Asystenci programistyczni: **Cursor** (Composer / Agent) oraz **Claude Code** (Anthropic): szkielet projektu, adaptery, silnik, interfejs, dokumentacja, przeglądy kodu. Wszystkie progi i metody pochodzą ze źródeł wskazanych w kodzie i w sekcji [Weryfikacja wyników](#weryfikacja-wyników). |
 
 ---
 
@@ -525,16 +525,52 @@ Licencje odczytane z metadanych zainstalowanych pakietów (2026-11-22).
 ## Weryfikacja, skalowalność i bezpieczeństwo
 
 ### Weryfikacja wyników
-- **100 testów automatycznych** ([`apps/api/tests/`](apps/api/tests/)), uruchamianych offline. Obejmują:
-  - deterministyczność (ten sam pakiet danych wejściowych daje identyczne wyniki),
-  - kolejność rekomendacji (retencja → agrotechnika → nawadnianie, nawadnianie tylko przy spełnionych warunkach),
-  - progi SMSR i współczynniki FAO, regułę sezonu i nawadniania,
-  - glebę, ryzyko i spływ SCS-CN, spadek terenu z NMT, reguły satelitarne,
-  - luki w danych historycznych, budżet czasu, zgodność kontraktu API ↔ frontend, narrację z szablonu, wyszukiwarkę obrębów.
-- **Kontrola wiarygodności na 14 lokalizacjach w Polsce** (data 2025-07-15), opisana w [`docs/verify.md`](docs/verify.md): Kujawy i Wielkopolska wychodzą jako wysoka podatność, lessy i Żuławy jako niska–średnia, Podhale jako niska. Kontrola nie jest częścią testów automatycznych.
-- **Progi z rozporządzenia** przepisane do kodu i sprawdzone komórka po komórce z https://susza.iung.pulawy.pl/progi/ (2026-11-22).
-- **Odtwarzalność każdej liczby:** każda wartość w raporcie ma `evidenceRef` → `sourceId` → źródło z datą pobrania. Surowe dane wejściowe (np. KBW z poszczególnych lat, warstwy gleby) są w odpowiedzi API, więc juror może przeliczyć wynik ręcznie.
-- **Instrukcja kontroli dla jury** (progi, wzory, miejsca w kodzie): [`docs/verify.md`](docs/verify.md).
+
+**Testy automatyczne.** 100 testów offline ([`apps/api/tests/`](apps/api/tests/)): `python -m pytest -q`. Obejmują deterministyczność, kolejność rekomendacji (retencja → agrotechnika → nawadnianie), progi SMSR i FAO, sezon i nawadnianie, glebę, ryzyko, spływ SCS-CN, spadek z NMT, satelitę, luki historyczne, budżet czasu, kontrakt API ↔ frontend, narrację z szablonu i wyszukiwarkę obrębów.
+
+**Szybka kontrola ręczna (to samo zapytanie → te same wyniki):**
+```bash
+curl -s -X POST http://127.0.0.1:8000/analyze -H "Content-Type: application/json" \
+  -d "{\"plotId\":\"040308_5.0004.17220\",\"cropId\":\"kukurydza_ziarno\",\"analysisDate\":\"2026-07-15\"}" > a.json
+# powtórz do b.json i porównaj moistureAssessment.*.score0to100, causes[].id oraz ID zaleceń
+```
+Automatycznie: `pytest apps/api/tests/test_engine_deterministic.py`. Każda przyczyna i zalecenie w [`fixtures/evidence_sample.json`](fixtures/evidence_sample.json) ma `evidenceRefs`; surowe wejścia (KBW latami, warstwy gleby) są w odpowiedzi API.
+
+**Kontrola wiarygodności na 14 lokalizacjach** (data 2025-07-15; poza testami automatycznymi): Kujawy i Wielkopolska → wysoka podatność; lessy i Żuławy → niska–średnia; Podhale → niska. **Progi rozporządzenia** sprawdzone komórka po komórce z https://susza.iung.pulawy.pl/progi/ (2026-11-22).
+
+**Progi przyczyn** (stałe w [`assess.py`](apps/api/app/engine/assess.py) / [`causes.py`](apps/api/app/engine/causes.py)):
+
+| Sygnał | Kiedy się pojawia |
+|---|---|
+| Za mało deszczu | opad 30 dni / mediana 10-letnia poniżej 0,70 **lub** KBW 30 dni w najsuchszych 25 % z 10 lat **lub** ≥ 10 dni bez deszczu |
+| Gleba słabo trzyma wodę | AWC 0–100 cm poniżej 110 mm **lub** piasek ≥ 55 % |
+| Spływ z pola | spadek ≥ 3,5 % **lub** ryzyko spływu średnie/wysokie |
+| Uprawa wrażliwa | Ky FAO ≥ 0,65 i (sucho teraz lub wysoka podatność) **lub** KBW 60 dni poniżej progu IUNG SMSR |
+| Goła gleba | Sentinel-2: ≥ 50 % czystych pikseli z NDVI poniżej 0,2, scena VIII–III (z wyjątkami dla ozimin/rzepaku) |
+
+**Ocena „teraz”** (skala 0–100 → poziom): poniżej 32 bardzo sucho · poniżej 55 sucho · poniżej 80 w normie · mokro. Punkty z opadu, percentyla KBW, suszy bezdeszczowej, AWC, EDO CDI i progu SMSR; satelita może przesunąć wynik najwyżej o −10 / +6.
+
+**Podatność wieloletnia** = średnia ważona podpunktów (brakujące wypadają, wagi się przeskalowują, pewność spada): przekroczenie linii IUNG w najgorszym oknie SMSR (udział lat; 5/10 = 100) × 0,35 · letni KBW VI–VIII na skali PL × 0,25 · udział suchych lat × 0,15 · gleba × 0,25 · wrażliwość uprawy × 0,15 tylko gdy brak progów IUNG → niska poniżej 30 · średnia poniżej 55 · wysoka. Anomalia opadu z bieżącego roku **nie** wchodzi do podatności.
+
+**Wagi upraw nie są „ręcznie dostrojone”:** grupy = IUNG SMSR; `droughtSensitivity` = Ky z FAO-33 zmapowane liniowo `[0,85; 1,25] → [0,25; 1,00]` ([`fao.py`](apps/api/app/crops/fao.py)); flaga sytuacyjna = progi MRiRW/IUNG vs `kbw_60d`.
+
+**Sezon, nawadnianie, spadek, oczko** (silnik):
+
+| Wartość | Reguła | Gdzie |
+|---|---|---|
+| Sezon / faza krytyczna / Kc | tabela per uprawa SMSR (FAO-56 tab. 12) | [`catalog.py`](apps/api/app/crops/catalog.py) |
+| Deficyt uprawy 30 dni | `ET0 × Kc − opad` (mm), pokazywany gdy dodatni | [`facts.py`](apps/api/app/engine/facts.py) |
+| Nawadnianie | tylko gdy sucho/bardzo sucho **i** wrażliwość ≥ 0,65 **i** miesiąc w sezonie **i** jest już retencja; poza sezonem: brak zalecenia + wyjaśnienie | [`rank.py`](apps/api/app/engine/rank.py) |
+| Dawka / odstęp | AWC poniżej 110 mm → 15–20 mm, inaczej 25–30 mm; odstęp = dawka / zużycie dzienne, 2–14 dni | `rank.py` |
+| `slopePct` | płaszczyzna regresji przez punkty NMT; zapas: (max−min)/odległość | [`resolver.py`](apps/api/plot/resolver.py) |
+| Miejsce oczka | najniższy punkt NMT vs najwyższy (`ev_low_spot`) | `resolver.py` |
+| Objętość oczka | spływ z 5. największego deszczu w 10 latach (≈ raz na 2 lata) | [`runoff.py`](apps/api/app/engine/runoff.py) |
+
+**Satelita (Sentinel-2 L2A, bez ML):** NDVI = (B08−B04)/(B08+B04), NDMI = (B08−B11)/(B08+B11); goła gleba = % pikseli NDVI poniżej 0,2; woda = SCL = 6. Historia: to samo okno 21 dni w 5 poprzednich latach (≥ 3 czyste lata). Sygnał wilgotności: tylko przy NDVI ≥ 0,3; porównanie z historią tylko gdy historyczne NDVI ≥ 0,3 i w ±0,2 od dzisiejszego.
+
+**Gleba, SMSR, ryzyko, spływ:** wilgotność gleby ERA5-Land (średnia 7 dni, percentyl vs 10 lat); kategoria IUNG z WMS `Susza:katgl_landuse2024`; okno ryzyka = 14 okien SMSR × 10 lat, ryzyko gdy KBW &lt; próg w ≥ 3/10 lat; spływ SCS-CN (Q = (P−0,2S)²/(P+0,8S), S = 25400/CN−254) dla dni z opadem ≥ 3 mm i T &gt; 0 °C.
+
+**Kolejność zaleceń:** jeśli jest nawadnianie, retencja jest niepusta, ID nawadniania to tylko `irrigation_timing`, a kolejność w raporcie to retencja → agrotechnika → nawadnianie (`test_ranking_order.py`). Narracja PL wyłącznie z szablonu — bez modelu generatywnego.
 
 ### Skalowalność (pkt 5.5)
 
@@ -582,8 +618,5 @@ Licencje odczytane z metadanych zainstalowanych pakietów (2026-11-22).
 │       ├── app/raport/        # strona raportu
 │       ├── components/        # mapa, raport, wykresy, ekran postępu
 │       └── styles/print.css   # wydruk / PDF A4
-├── docs/
-│   ├── verify.md              # jak jury może sprawdzić liczby i reguły
-│   └── data_sources_log.json  # dziennik pobrań: adresy, licencje, daty
 └── fixtures/evidence_sample.json  # prawdziwy wynik /analyze
 ```
