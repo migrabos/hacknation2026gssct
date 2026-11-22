@@ -1,4 +1,5 @@
 import Link from "next/link";
+import StepIllustration from "@/components/StepIllustration";
 
 export default function HomePage() {
   return (
@@ -30,16 +31,19 @@ export default function HomePage() {
           <h2>Jak to działa</h2>
           <ol className="steps">
             <li>
+              <StepIllustration scene="parcel" />
               <span className="step-num">Krok 1</span>
               <h3>Wskaż działkę</h3>
               <p className="muted">Kliknij ją na mapie albo wpisz numer z wypisu z rejestru gruntów.</p>
             </li>
             <li>
+              <StepIllustration scene="crop" />
               <span className="step-num">Krok 2</span>
               <h3>Wybierz uprawę</h3>
               <p className="muted">Różne rośliny potrzebują wody w różnym czasie — uwzględniamy to w ocenie.</p>
             </li>
             <li>
+              <StepIllustration scene="report" />
               <span className="step-num">Krok 3</span>
               <h3>Odbierz raport</h3>
               <p className="muted">Ocena, przyczyny i konkretne działania, z wyjaśnieniem, skąd to wiemy.</p>
@@ -91,22 +95,28 @@ export default function HomePage() {
           </p>
           <ul className="source-list">
             <li>
-              <strong>Granice działek</strong> — GUGiK (ULDK, Geoportal)
+              <strong>Granice działek</strong>
+              <a href="https://www.geoportal.gov.pl/pl/dane/ewidencja-gruntow-i-budynkow-egib/">GUGiK (ULDK, Geoportal)<span aria-hidden="true"> ↗</span></a>
             </li>
             <li>
-              <strong>Pogoda z ostatnich 10 lat</strong> — Open-Meteo
+              <strong>Pogoda z ostatnich 10 lat</strong>
+              <a href="https://open-meteo.com/en/docs/historical-weather-api">Open-Meteo<span aria-hidden="true"> ↗</span></a>
             </li>
             <li>
-              <strong>Gleba</strong> — ISRIC SoilGrids
+              <strong>Gleba</strong>
+              <a href="https://isric.org/explore/soilgrids">ISRIC SoilGrids<span aria-hidden="true"> ↗</span></a>
             </li>
             <li>
-              <strong>Ukształtowanie terenu</strong> — GUGiK (model terenu)
+              <strong>Ukształtowanie terenu</strong>
+              <a href="https://www.geoportal.gov.pl/pl/dane/numeryczny-model-terenu-nmt/">GUGiK (model terenu)<span aria-hidden="true"> ↗</span></a>
             </li>
             <li>
-              <strong>Zdjęcia satelitarne</strong> — Copernicus Sentinel-2
+              <strong>Zdjęcia satelitarne</strong>
+              <a href="https://dataspace.copernicus.eu/data-collections/copernicus-sentinel-missions/sentinel-2">Copernicus Sentinel-2<span aria-hidden="true"> ↗</span></a>
             </li>
             <li>
-              <strong>Susza rolnicza</strong> — IUNG-PIB (gdy dostępne)
+              <strong>Susza rolnicza</strong>
+              <a href="https://susza.iung.pulawy.pl/">IUNG-PIB<span aria-hidden="true"> ↗</span></a> <small className="muted">(gdy dostępne)</small>
             </li>
           </ul>
           <p className="muted small" style={{ maxWidth: "65ch" }}>
