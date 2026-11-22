@@ -100,7 +100,7 @@ Inspect `causes[].evidenceRefs` and matching adapter `values` in the response.
 | SMSR thresholds | regulation table, checked cell-by-cell against https://susza.iung.pulawy.pl/progi/ on 2026-11-22. "-" (sugar beet, soil I) = crop not indicated → no threshold, warning in limitations | `app/crops/smsr.py` |
 | Current SMSR check | rolling 60-day KBW vs the window ending nearest the analysis date, only if it ends within ±10 days | `smsr.pick_period_index` |
 | `ev_risk_window` / `riskWindow` | KBW (P − ET0) summed over each of the 14 exact SMSR windows in the last 10 years in which the window had ended (`kbw_smsr_windows`); window is a risk period if KBW < threshold(crop, soil) in ≥ 3 of 10 years. Peak = most years (tie → earliest). Fallback for crops without thresholds: 3 months with the most negative median monthly KBW (`kbw_monthly_10y`) | `engine/risk_window.py` |
-| Susceptibility | + 16 × (years below threshold in the worst window / years compared) | `assess.py` (`SMSR_HIST_WEIGHT`) |
+| Susceptibility | sub-score = (years below threshold in the worst window / years compared) ÷ 0,5 × 100, capped at 100, weight 0,35 in the weighted mean described in section 3 | `assess.py` (`W_SMSR`, `SMSR_FULL_SHARE`) |
 | `ev_runoff_volume` | SCS-CN: Q = (P − 0,2S)² / (P + 0,8S), S = 25400/CN − 254, for each day with ≥ 3 mm rain and mean T > 0 °C in the last 10 years; CN from TR-55 tables 2-2b/2-2c (condition "good") by crop cover and soil group (NEH 630 ch. 7 texture rules on SoilGrids topsoil). Volume = mm × ha × 10 | `engine/runoff.py` |
 | `ev_pond_volume` | runoff of the 5th-largest daily rain in 10 years (≈ once in 2 years) over the whole plot; example area at 1,5 m depth | `engine/runoff.py` |
 

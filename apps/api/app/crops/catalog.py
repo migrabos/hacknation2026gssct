@@ -160,7 +160,6 @@ CROP_ALIASES: dict[str, str] = {
 }
 
 VALID_CROP_IDS = frozenset(CROPS.keys())
-SMSR_CROP_IDS = frozenset(id_ for id_ in VALID_CROP_IDS if id_ != "brak")
 NO_CROP_ID = "brak"
 
 # Crops typically on orchard / berry land (EGiB sad, plantacja).

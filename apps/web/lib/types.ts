@@ -1,7 +1,6 @@
 /**
  * Shared data contract for the web app.
  *
- * Mirrors the "Evidence / report shape" in AGENTS.md (owned by Person 3).
  * Backend twin: apps/api/app/schemas/evidence.py (Pydantic, 1:1 field names).
  * Change BOTH files together — apps/api/tests/test_contract_web.py validates a
  * sample report fixture against the backend schema and fails on drift.

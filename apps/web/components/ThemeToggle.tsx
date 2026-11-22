@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import {
+  DEFAULT_THEME,
   THEME_STORAGE_KEY,
   applyTheme,
   resolveInitialTheme,
@@ -9,26 +10,13 @@ import {
 } from "@/lib/theme";
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
 
+  // Dark by default — the OS light/dark setting is intentionally not followed.
   useEffect(() => {
     const initial = resolveInitialTheme();
     setTheme(initial);
     applyTheme(initial);
-
-    const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const onSystemChange = () => {
-      try {
-        if (localStorage.getItem(THEME_STORAGE_KEY)) return;
-      } catch {
-        return;
-      }
-      const next: Theme = mq.matches ? "dark" : "light";
-      setTheme(next);
-      applyTheme(next);
-    };
-    mq.addEventListener("change", onSystemChange);
-    return () => mq.removeEventListener("change", onSystemChange);
   }, []);
 
   function toggle() {

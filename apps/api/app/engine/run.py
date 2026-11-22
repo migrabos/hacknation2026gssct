@@ -71,9 +71,9 @@ def _crop_land_use_mismatch(crop_id: str, crop_name: str, land_use: dict) -> str
     if cat == "orchard" and crop_id not in ORCHARD_CROPS:
         return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Dla sadu / plantacji "
                 "lepiej wybrać drzewa owocowe, krzewy owocowe lub truskawki (kategorie SMSR).")
-    if cat == "arable" and crop_id in ORCHARD_CROPS:
-        return (f"UWAGA: wybrano „{crop_name}”, a działka {src} to {label}. Sprawdź, czy wybór uprawy "
-                "jest właściwy – zalecenia zależą od uprawy.")
+    # No warning for fruit trees / berries / strawberries on "grunt orny": plantations very often keep
+    # the R entry in EGiB, and the engine already follows the chosen crop (no ploughing / cover-crop
+    # advice, orchard runoff), so the warning only confused farmers without changing anything.
     return None
 
 

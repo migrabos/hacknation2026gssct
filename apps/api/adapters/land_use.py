@@ -60,7 +60,6 @@ LABEL_PL: dict[str, str] = {
 }
 # Uses on which a crop / grassland water report makes sense (pole, łąka, pastwisko, sad).
 AGRICULTURAL = {"arable", "meadow", "pasture", "orchard"}
-GRASS = {"meadow", "pasture"}
 
 # EGiB land-use symbols (rozporządzenie w sprawie EGiB, zał. 6) → category.
 EGIB_USE: dict[str, str] = {

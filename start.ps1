@@ -20,9 +20,14 @@ Write-Host "Retencja - start lokalny (Windows)" -ForegroundColor White
 $Py = $null
 foreach ($c in @("py", "python")) {
     if (Get-Command $c -ErrorAction SilentlyContinue) {
-        $args311 = if ($c -eq "py") { @("-3", "-c") } else { @("-c") }
-        & $c @args311 "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
-        if ($LASTEXITCODE -eq 0) { $Py = $c; break }
+        $pyArgs = if ($c -eq "py") { @("-3", "-c") } else { @("-c") }
+        # try/catch: atrapa "python" ze Sklepu MS pisze na stderr, co przy "Stop" przerwaloby skrypt
+        $good = $false
+        try {
+            & $c @pyArgs "import sys; sys.exit(0 if sys.version_info >= (3, 11) else 1)" 2>$null
+            $good = ($LASTEXITCODE -eq 0)
+        } catch {}
+        if ($good) { $Py = $c; break }
     }
 }
 if (-not $Py) { Die "Potrzebny Python 3.11+ z python.org (zaznacz 'Add python.exe to PATH')." }
@@ -30,12 +35,30 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) { Die "Potrzebny Node
 if (-not (Get-Command npm.cmd -ErrorAction SilentlyContinue)) { Die "Brak npm (instaluje sie razem z Node.js)." }
 Ok ("Python: " + (& $Py --version 2>&1) + " / Node: " + (node --version))
 
-# --- porty wolne? ---------------------------------------------
-foreach ($p in @($ApiPort, $WebPort)) {
-    if (Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue) {
-        Die "Port $p jest zajety - zamknij poprzednie uruchomienie (lub program na tym porcie)."
-    }
+# --- porty: probne zajecie portu (tak jak zrobi to serwer) ---------
+# Wykrywa tez porty zarezerwowane przez Hyper-V/WSL (netsh int ipv4 show excludedportrange protocol=tcp).
+function PortFree($p) {
+    try {
+        $l = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $p)
+        $l.Start(); $l.Stop(); return $true
+    } catch { return $false }
 }
+function PickPort($start) {
+    for ($p = $start; $p -le $start + 20; $p++) { if (PortFree $p) { return $p } }
+    return $null
+}
+$WantApi = $ApiPort; $WantWeb = $WebPort
+$ApiPort = PickPort $WantApi
+if (-not $ApiPort) { Die "Brak wolnego portu dla API w zakresie $WantApi-$($WantApi + 20)." }
+$WebPort = PickPort $WantWeb
+if (-not $WebPort) { Die "Brak wolnego portu dla frontendu w zakresie $WantWeb-$($WantWeb + 20)." }
+if ($ApiPort -ne $WantApi) { Warn "Port $WantApi niedostepny - API wystartuje na $ApiPort" }
+if ($WebPort -ne $WantWeb) { Warn "Port $WantWeb niedostepny - frontend wystartuje na $WebPort" }
+
+# Frontend musi znac port API, a API musi wpuscic frontend z jego portu (env ma pierwszenstwo przed .env).
+# Start-Process dziedziczy te zmienne.
+$env:NEXT_PUBLIC_API_URL = "http://localhost:$ApiPort"
+if ($WebPort -ne $WantWeb) { $env:CORS_ORIGINS = "http://localhost:$WebPort,http://127.0.0.1:$WebPort" }
 
 # --- pliki .env -----------------------------------------------
 if (-not (Test-Path "$ApiDir\.env"))       { Copy-Item "$ApiDir\.env.example" "$ApiDir\.env";       Warn "Utworzono apps\api\.env z przykladu" }
@@ -69,6 +92,11 @@ if (-not (Test-Path $NmLock) -or (Get-Item $Lock).LastWriteTime -gt (Get-Item $N
 }
 
 # --- start ----------------------------------------------------
+function StopTree($proc) {
+    # /T zamyka tez procesy potomne (uvicorn --reload, node); blad = proces juz nie zyje
+    try { & taskkill.exe /PID $proc.Id /T /F 2>&1 | Out-Null } catch {}
+}
+
 Log "Startuje API (port $ApiPort) - log: api.log / api.err.log"
 $Api = Start-Process -FilePath $VPy -WorkingDirectory $ApiDir -PassThru -WindowStyle Hidden `
     -ArgumentList "-m uvicorn app.main:app --host 127.0.0.1 --port $ApiPort --reload" `
@@ -78,7 +106,7 @@ $up = $false
 for ($i = 0; $i -lt 40; $i++) {
     try { Invoke-WebRequest "http://127.0.0.1:$ApiPort/health" -UseBasicParsing -TimeoutSec 2 | Out-Null; $up = $true; break } catch { Start-Sleep 1 }
 }
-if (-not $up) { taskkill /PID $Api.Id /T /F | Out-Null; Die "API nie wstalo w 40 s - zobacz api.err.log" }
+if (-not $up) { StopTree $Api; Die "API nie wstalo w 40 s - zobacz api.err.log" }
 Ok "API: http://localhost:$ApiPort/docs"
 
 Log "Startuje frontend (port $WebPort) - log: web.log / web.err.log"
@@ -99,6 +127,6 @@ Write-Host "Gotowe -> $Url" -ForegroundColor White
 Start-Process $Url
 Read-Host "Nacisnij Enter, aby zatrzymac API i frontend"
 
-taskkill /PID $Api.Id /T /F 2>$null | Out-Null
-taskkill /PID $Web.Id /T /F 2>$null | Out-Null
+StopTree $Api
+StopTree $Web
 Ok "Zatrzymano."

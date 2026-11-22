@@ -438,10 +438,6 @@ main {
   border-left-color: var(--c-danger);
   background: var(--c-danger-bg);
 }
-.notice-success {
-  border-left-color: var(--c-accent);
-  background: var(--c-accent-soft);
-}
 
 /* ---------- Landing ---------- */
 
@@ -1247,11 +1243,6 @@ li[data-state="active"] .pipe-icon {
   border-color: var(--c-accent);
   color: var(--c-accent);
 }
-.badge-solid {
-  background: var(--c-accent);
-  border-color: var(--c-accent);
-  color: var(--c-on-accent);
-}
 
 .cause-list,
 .rec-list {
@@ -1748,7 +1739,6 @@ html.dark {
 .btn:not(.btn-secondary):not(:disabled):hover,
 .panel-step .num,
 .r-section-num,
-.badge-solid,
 .seg button[aria-pressed="true"],
 .progress > div,
 li[data-state="done"] .pipe-icon {
@@ -1760,7 +1750,6 @@ li[data-state="done"] .pipe-icon {
 .plot-card,
 .region-chosen,
 .why,
-.notice-success,
 .btn-secondary:hover,
 .theme-toggle:hover,
 .map-btn:hover,
@@ -1774,8 +1763,8 @@ li[data-state="done"] .pipe-icon {
 }
 
 @media print {
-  .topbar, .brand-mark, .btn, .panel-step .num, .r-section-num, .badge-solid,
-  .progress > div, .pipe-icon, .plot-card, .region-chosen, .why, .notice-success {
+  .topbar, .brand-mark, .btn, .panel-step .num, .r-section-num,
+  .progress > div, .pipe-icon, .plot-card, .region-chosen, .why {
     background-image: none !important;
   }
 }

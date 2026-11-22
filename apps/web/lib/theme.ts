@@ -2,10 +2,8 @@ export const THEME_STORAGE_KEY = "retencja-theme";
 
 export type Theme = "light" | "dark";
 
-export function getSystemTheme(): Theme {
-  if (typeof window === "undefined") return "light";
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
+/** Dark is the default look; the farmer's own choice (toggle) is remembered and wins. */
+export const DEFAULT_THEME: Theme = "dark";
 
 export function readStoredTheme(): Theme | null {
   try {
@@ -23,6 +21,6 @@ export function applyTheme(theme: Theme) {
 }
 
 export function resolveInitialTheme(): Theme {
-  return readStoredTheme() ?? getSystemTheme();
+  return readStoredTheme() ?? DEFAULT_THEME;
 }
 

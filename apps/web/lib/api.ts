@@ -1,7 +1,7 @@
 /**
  * Single entry point for all backend calls — FastAPI at NEXT_PUBLIC_API_URL.
  *
- * Endpoints (see AGENTS.md + docs/roles/02-gis-data.md):
+ * Endpoints (see README.md, „Architektura”):
  *   GET  /health
  *   GET  /crops
  *   GET  /plot/by-id?id=...

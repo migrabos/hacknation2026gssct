@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-type Tone = "info" | "warn" | "error" | "success";
+type Tone = "info" | "warn" | "error";
 
 export default function Notice({
   tone = "info",
