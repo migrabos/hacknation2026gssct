@@ -20,7 +20,6 @@ SoilCatSource = Literal["iung_map", "awc"]
 
 SMSR_SOURCE_URL = "https://susza.iung.pulawy.pl/progi/"
 SMSR_SOURCE_NAME = "IUNG SMSR – progi KBW (MRiRW 2019)"
-SMSR_REGULATION = "Dz.U. 2019 poz. 739"
 
 # 14 fixed 6-dekad monitoring windows (start, end) — day-of-year style month/day.
 PERIODS: list[tuple[str, tuple[int, int], tuple[int, int]]] = [

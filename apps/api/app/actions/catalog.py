@@ -82,8 +82,6 @@ ACTIONS: dict[str, ActionEntry] = {
     },
 }
 
-VALID_ACTION_IDS = frozenset(ACTIONS.keys())
-
 
 def get_action(action_id: str) -> ActionEntry:
     if action_id not in ACTIONS:

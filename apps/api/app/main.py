@@ -1,6 +1,6 @@
 """FastAPI entrypoint (single app): /health, /crops, /plot/*, /analyze.
 
-Run from apps/api:  uvicorn app.main:app --reload   (or: uvicorn main:app --reload)
+Run from apps/api:  uvicorn app.main:app --reload
 """
 
 from __future__ import annotations
@@ -8,7 +8,6 @@ from __future__ import annotations
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from app import ENGINE_VERSION
 from app.config import get_settings
 from app.crops.catalog import list_crops
 from app.orchestrate import analyze
@@ -21,7 +20,7 @@ from plot.router import router as plot_router
 app = FastAPI(
     title="Retencja API",
     description="KOWR water retention DSS — live data adapters, deterministic Evidence engine, Polish template narrative",
-    version=ENGINE_VERSION,
+    version=get_settings().engine_version,
 )
 
 _origins = [o.strip() for o in get_settings().cors_origins.split(",") if o.strip()]

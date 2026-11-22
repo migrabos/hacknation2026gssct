@@ -52,3 +52,11 @@ Thumbs.db
 # Caches
 *.log
 .cache/
+
+# AI assistant files (next dev re-creates apps/web/AGENTS.md)
+AGENTS.md
+CLAUDE.md
+.claude/
+.cursor/
+.cursorrules
+.windsurfrules
