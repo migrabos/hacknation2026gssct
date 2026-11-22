@@ -30,6 +30,8 @@ AWC_LOW = 110.0              # mm / 1 m — same class limits as the soil adapte
 AWC_HIGH = 155.0
 SAND_HIGH = 55.0
 HIGH_SENSITIVITY = 0.65
+# Crop Ky is a small modifier — climate + soil dominate chronic water risk.
+CROP_SENS_SUS_WEIGHT = 5.0   # was 20; max ≈ +5 on the 0–100 susceptibility score
 SUMMER_KBW_VERY_DRY = -150.0
 SUMMER_KBW_DRY = -100.0
 SUMMER_KBW_WET = -50.0
@@ -286,7 +288,7 @@ def assess_moisture(f: Facts) -> MoistureAssessment:
     else:
         sus_conf -= 0.15
 
-    sus += f.crop_sens * 20
+    sus += f.crop_sens * CROP_SENS_SUS_WEIGHT
     sus_score = int(round(max(0, min(100, sus))))
     sus_level = _sus_level(sus_score)
     sus_summary = (sus_why[0][0].upper() + sus_why[0][1:] + (", a " + sus_why[1] if len(sus_why) > 1 else "") + "."

@@ -133,7 +133,8 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
             )
         elif high_ky:
             parts.append("Nawet krótki niedobór może obniżyć plon.")
-        conf = 0.4 + f.crop_sens * 0.25 + (0.15 if smsr_hit else 0)
+        # Keep crop below weather/soil causes unless SMSR also fires.
+        conf = 0.32 + f.crop_sens * 0.15 + (0.15 if smsr_hit else 0)
         causes.append(_cause("crop_sensitivity", conf, refs, " ".join(parts)))
 
     # bare_soil — satellite: most of the plot without green cover when it could be covered

@@ -38,7 +38,7 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI, SMSR 60-day threshold breach → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
-Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, FAO Ky–derived crop sensitivity → `low` < 40 ≤ `medium` < 62 ≤ `high`.
+Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, and a small FAO Ky crop modifier (`CROP_SENS_SUS_WEIGHT` = 5, max ≈ +5) → `low` < 40 ≤ `medium` < 62 ≤ `high`. Climate and soil dominate; crop is secondary.
 
 ### Crop weights are not hand-tuned
 
