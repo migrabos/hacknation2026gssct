@@ -1275,6 +1275,7 @@ li[data-state="active"] .pipe-icon {
 }
 
 .rec {
+  scroll-margin-top: 16px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
   padding: 18px 20px;
@@ -1282,6 +1283,12 @@ li[data-state="active"] .pipe-icon {
   grid-template-columns: 40px 1fr;
   gap: 14px;
   background: var(--c-surface);
+}
+@media screen {
+  .rec:target {
+    border-color: var(--c-accent);
+    box-shadow: inset 3px 0 var(--c-accent);
+  }
 }
 .rec-prio {
   width: 36px;
