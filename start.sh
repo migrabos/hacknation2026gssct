@@ -43,9 +43,24 @@ ok "Python: $($PY --version 2>&1) · Node: $(node --version)"
 
 # --- porty wolne? ---------------------------------------------
 for p in $API_PORT $WEB_PORT; do
-  # curl exit 7 = nikt nie nasłuchuje; każdy inny wynik (też timeout) = port zajęty
-  curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$p"
-  [ $? -eq 7 ] || die "Port $p jest zajęty — zamknij poprzednie uruchomienie (lub program na tym porcie)."
+  "$PY" - "$p" <<'PYPORT' || exit 1
+import errno
+import socket
+import sys
+
+port = int(sys.argv[1])
+with socket.socket() as sock:
+    if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+    else:
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    try:
+        sock.bind(("127.0.0.1", port))
+        sock.listen()
+    except OSError as exc:
+        message = "port jest zajęty" if exc.errno == errno.EADDRINUSE else str(exc)
+        sys.exit(f"[błąd] Port {port}: {message}")
+PYPORT
 done
 
 # --- pliki .env -----------------------------------------------
