@@ -49,13 +49,26 @@ export default function RainChart({ months, analysisDate, source }: { months: Pr
           <span><i className="rain-key-avg" /> średnia z {years} lat</span>
         </div>
 
-        <div className="rain-plot" aria-hidden="true">
-          <span className="rain-max">{max} mm</span>
+        {/* Each bar is a labelled image (screen readers, Tab); tapping or hovering shows the same text as a tip. */}
+        <div className="rain-plot" role="group" aria-label={`Opady w ostatnich 12 miesiącach i średnia z ${years} lat`}>
+          <span className="rain-max" aria-hidden="true">
+            {max} mm
+          </span>
           {rows.map((m, i) => {
             const { y, mo, long } = label(m);
-            const edge = i < 2 ? "start" : i > rows.length - 3 ? "end" : "mid";
+            // tip anchored to the bar's side of the chart, so it never sticks out of a narrow phone screen
+            const edge = i < rows.length / 3 ? "start" : i >= rows.length - rows.length / 3 ? "end" : "mid";
             return (
-              <div key={m.month} className="rain-col" tabIndex={0} data-edge={edge}>
+              <div
+                key={m.month}
+                className="rain-col"
+                tabIndex={0}
+                role="img"
+                aria-label={`${long}: ${m.precipMm != null ? `${formatNumber(m.precipMm, 0)} mm` : "brak danych"}${m.normalMm != null ? `, zwykle ${formatNumber(m.normalMm, 0)} mm` : ""}`}
+                data-edge={edge}
+                // iOS Safari does not focus a tapped <div> by itself — the tip is shown on :focus
+                onClick={(e) => e.currentTarget.focus()}
+              >
                 <div className="rain-track">
                   {m.precipMm != null && (
                     <span
@@ -66,11 +79,11 @@ export default function RainChart({ months, analysisDate, source }: { months: Pr
                   )}
                   {m.normalMm != null && <span className="rain-avg" style={{ bottom: `${(m.normalMm / max) * 100}%` }} />}
                 </div>
-                <span className="rain-month">
+                <span className="rain-month" aria-hidden="true">
                   {SHORT[mo - 1]}
                   {(i === 0 || mo === 1) && <span className="rain-year">{y}</span>}
                 </span>
-                <span className="rain-tip" role="tooltip">
+                <span className="rain-tip" aria-hidden="true">
                   <strong>{long}</strong>
                   <br />
                   {m.precipMm != null ? `${formatNumber(m.precipMm, 0)} mm` : "brak danych"}
@@ -80,26 +93,6 @@ export default function RainChart({ months, analysisDate, source }: { months: Pr
             );
           })}
         </div>
-
-        <table className="visually-hidden">
-          <caption>Opady w ostatnich 12 miesiącach i średnia z {years} lat</caption>
-          <thead>
-            <tr>
-              <th scope="col">Miesiąc</th>
-              <th scope="col">Opady (mm)</th>
-              <th scope="col">Średnia (mm)</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((m) => (
-              <tr key={m.month}>
-                <th scope="row">{label(m).long}</th>
-                <td>{m.precipMm != null ? formatNumber(m.precipMm, 0) : "brak"}</td>
-                <td>{m.normalMm != null ? formatNumber(m.normalMm, 0) : "brak"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
 
         <p className="rain-note">
           Kreska to średnia z tych samych dni w {years} poprzednich latach.

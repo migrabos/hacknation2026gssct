@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import ReportView from "@/components/ReportView";
+import { splitPlotId } from "@/lib/labels";
 import { loadReport } from "@/lib/report-store";
 import type { Report } from "@/lib/types";
 
@@ -18,7 +19,7 @@ export default function ReportPage() {
   useEffect(() => {
     if (!report) return;
     const previous = document.title;
-    const nr = report.plot.plotId.split(".").slice(2).join(".") || report.plot.plotId;
+    const { nr } = splitPlotId(report.plot.plotId);
     const where = report.plot.commune ? `, gm. ${report.plot.commune}` : "";
     document.title = `Raport wodny — działka ${nr}${where} · Retencja`;
     return () => {

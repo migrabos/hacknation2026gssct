@@ -90,3 +90,18 @@ export function formatDateTime(iso: string): string {
 export function formatNumber(n: number, digits = 1): string {
   return n.toLocaleString("pl-PL", { maximumFractionDigits: digits });
 }
+
+/** "powiat otwocki" / "otwocki" → "pow. otwocki" (the API sends both forms). */
+export function countyLabel(county: string): string {
+  return `pow. ${county.replace(/^powiat\s+/i, "")}`;
+}
+
+/**
+ * "141708_2.0024.328/1" → { nr: "328/1", obreb: "0024" } — farmers know the parcel number from
+ * the land-register extract, not the full TERYT identifier.
+ */
+export function splitPlotId(plotId: string): { nr: string; obreb: string | null } {
+  const parts = plotId.split(".");
+  if (parts.length < 3) return { nr: plotId, obreb: null };
+  return { nr: parts.slice(2).join("."), obreb: parts[1] || null };
+}

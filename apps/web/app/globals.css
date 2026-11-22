@@ -884,6 +884,7 @@ details.help > div {
   position: sticky;
   top: 0;
   height: min(100vh, 100%);
+  height: min(100dvh, 100%);
   min-height: 480px;
   display: flex;
   flex-direction: column;
@@ -1161,6 +1162,28 @@ path.plot-outline--pending {
   display: inline-flex;
   gap: 10px;
   align-items: center;
+}
+
+.map-placeholder {
+  display: grid;
+  place-items: center;
+}
+/* "Przesuwaj mapę dwoma palcami" — shown briefly after a one-finger swipe on a phone (MapPicker.tsx) */
+.map-gesture-hint {
+  position: absolute;
+  inset: 0;
+  z-index: 650;
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  background: rgba(0, 0, 0, 0.45);
+  pointer-events: none;
+  text-align: center;
+}
+.map-gesture-hint span {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1.05rem;
 }
 
 /* flat Leaflet controls */
@@ -1596,6 +1619,12 @@ li[data-state="active"] .pipe-icon {
   flex-wrap: wrap;
   margin: 0 0 8px;
 }
+/* timeframes can be a whole sentence ("teraz (…), co 3–4 dni, rano lub wieczorem") — let them wrap */
+.rec-tags .badge {
+  max-width: 100%;
+  white-space: normal;
+  border-radius: 12px;
+}
 .why {
   white-space: pre-line; /* engine puts each step of a plan (ile / jak często / kiedy) on its own line */
   background: var(--c-accent-soft);
@@ -1647,7 +1676,9 @@ details.evidence summary {
 }
 .ev-list li {
   display: grid;
-  grid-template-columns: 1fr auto;
+  /* minmax(0, …) + min-width: 0 — long text values must wrap, not push the page sideways on phones */
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-width: 0;
   gap: 4px 16px;
   padding: 8px 12px;
   border: 1px solid var(--c-border);
@@ -1657,7 +1688,8 @@ details.evidence summary {
 .ev-value {
   font-weight: 700;
   text-align: right;
-  white-space: nowrap;
+  max-width: 22ch;
+  overflow-wrap: anywhere;
 }
 .ev-meta {
   grid-column: 1 / -1;
@@ -1819,7 +1851,7 @@ details.rain[open] summary > span:first-child::before {
   transform: translateX(-50%);
   z-index: 2;
   width: max-content;
-  max-width: 220px;
+  max-width: min(220px, 60vw);
   padding: 6px 9px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
@@ -1829,8 +1861,8 @@ details.rain[open] summary > span:first-child::before {
   line-height: 1.35;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.12s;
+  /* display, not opacity: a hidden tip that is still laid out widens the page on narrow phones */
+  display: none;
 }
 .rain-col[data-edge="start"] .rain-tip {
   left: 0;
@@ -1841,9 +1873,10 @@ details.rain[open] summary > span:first-child::before {
   right: 0;
   transform: none;
 }
+/* :focus (not only :focus-visible) — a tap on a phone focuses the bar and shows its value */
 .rain-col:hover .rain-tip,
-.rain-col:focus-visible .rain-tip {
-  opacity: 1;
+.rain-col:focus .rain-tip {
+  display: block;
 }
 .rain-plot:hover .rain-col:not(:hover) .rain-bar {
   opacity: 0.45;
@@ -1921,17 +1954,21 @@ table.data tr:last-child td {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 860px) {
+  /* the village + number search is the main path — form first, map underneath */
   .workspace-panel {
+    order: -1;
     border-left: 0;
-    border-top: 1px solid var(--c-border);
+    border-bottom: 1px solid var(--c-border);
   }
   /* leave room for the zoom buttons; toolbar wraps instead of sliding under them */
   .map-tools {
     right: 60px;
   }
   .workspace-map {
-    height: 62vh;
-    min-height: 360px;
+    height: 55vh;
+    height: 55svh;
+    min-height: 300px;
+    scroll-margin-top: 8px;
   }
   .workspace-map .map-block {
     position: relative;
@@ -1973,7 +2010,21 @@ table.data tr:last-child td {
     padding: 18px;
   }
   .rec {
-    grid-template-columns: 1fr;
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 10px;
+    padding: 16px;
+  }
+  .rec-prio {
+    width: 28px;
+    height: 28px;
+    font-size: 0.9rem;
+  }
+  .ev-list li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .ev-value {
+    text-align: left;
+    max-width: none;
   }
   .input-row {
     flex-direction: column;
@@ -1986,6 +2037,159 @@ table.data tr:last-child td {
   }
 }
 
+/* "Pokaż na mapie ↓" — only where the map sits under the form */
+.narrow-only {
+  display: none;
+}
+@media (max-width: 860px) {
+  .narrow-only {
+    display: inline;
+  }
+}
+
+/* Phone held sideways: the map must not be taller than the screen. */
+@media (max-width: 860px) and (max-height: 500px) {
+  .workspace-map {
+    height: 80svh;
+    min-height: 0;
+  }
+}
+
+/* ---------- Report: phone section strip (ReportView SectionTabs) ---------- */
+.section-tabs {
+  display: none;
+}
+@media (max-width: 860px) {
+  .section-tabs {
+    display: flex;
+    gap: 6px;
+    position: sticky;
+    top: 0;
+    /* above Leaflet panes/controls (≤ 1000) of the report map scrolling underneath */
+    z-index: 1100;
+    margin: 0 -20px 20px;
+    padding: 8px 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    background: var(--c-bg);
+    border-bottom: 1px solid var(--c-border);
+  }
+  .section-tabs::-webkit-scrollbar {
+    display: none;
+  }
+  .section-tabs a {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 6px 12px;
+    border: 1px solid var(--c-border-strong);
+    border-radius: 999px;
+    background: var(--c-surface);
+    color: var(--c-text);
+    font-size: 0.9rem;
+    font-weight: 600;
+    text-decoration: none;
+    white-space: nowrap;
+  }
+  .section-tabs a[aria-current] {
+    background: var(--c-accent-fill);
+    border-color: var(--c-accent);
+    color: var(--c-on-accent);
+  }
+  .section-tabs a:focus-visible {
+    outline-offset: -3px;
+  }
+  /* anchored headings land below the sticky strip */
+  .r-section,
+  .toc,
+  #braki {
+    scroll-margin-top: 72px !important;
+  }
+}
+
+@media (max-width: 520px) {
+  .section-tabs {
+    margin-inline: -16px;
+    padding-inline: 16px;
+  }
+}
+
+/* ---------- Header on phones: logo + theme toggle in one row, menu in one scrollable row ---------- */
+@media (max-width: 600px) {
+  .site-header .container {
+    gap: 6px 12px;
+    padding-block: 10px 4px;
+  }
+  .site-header-actions {
+    display: contents;
+  }
+  .brand {
+    order: 1;
+  }
+  .theme-toggle {
+    order: 2;
+    margin-left: auto;
+  }
+  .site-nav {
+    order: 3;
+    flex: 1 0 100%;
+    gap: 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+    padding-block: 4px 6px;
+  }
+  .site-nav::-webkit-scrollbar {
+    display: none;
+  }
+  .site-nav a {
+    flex: none;
+    white-space: nowrap;
+  }
+}
+
+/* ---------- Sources table as cards on phones ---------- */
+@media screen and (max-width: 600px) {
+  .table-wrap:has(> table.stack) {
+    border: 0;
+    overflow: visible;
+  }
+  table.data.stack thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+  }
+  table.data.stack,
+  table.data.stack tbody,
+  table.data.stack tr,
+  table.data.stack td {
+    display: block;
+    width: 100%;
+  }
+  table.data.stack tr {
+    margin-bottom: 10px;
+    padding-block: 6px;
+    border: 1px solid var(--c-border);
+    border-radius: var(--radius);
+    background: var(--c-surface);
+  }
+  table.data.stack td {
+    padding: 6px 14px;
+    border-bottom: 0;
+  }
+  table.data.stack td[data-label]:not(:first-child)::before {
+    content: attr(data-label);
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--c-text-muted);
+  }
+}
+
 /* ---------- Village (obręb) picker ---------- */
 
 .region-list {
@@ -1994,8 +2198,10 @@ table.data tr:last-child td {
   padding: 0;
   display: grid;
   gap: 6px;
-  max-height: 320px;
-  overflow-y: auto;
+}
+.region-more {
+  width: 100%;
+  margin-top: 8px;
 }
 .region-option {
   display: grid;

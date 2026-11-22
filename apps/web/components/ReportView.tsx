@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Confidence, Evidence, NarrativeSectionId, Recommendation, Report, Source } from "@/lib/types";
 import {
   CONFIDENCE_LABEL,
@@ -10,10 +10,13 @@ import {
   RISK_SCALE,
   SOURCE_MODE_LABEL,
   SOURCE_STATUS_LABEL,
+  countyLabel,
   formatDate,
   formatDateTime,
   formatNumber,
+  splitPlotId,
 } from "@/lib/labels";
+import { clearForm } from "@/lib/report-store";
 import Map from "./Map";
 import Notice from "./Notice";
 import RainChart from "./RainChart";
@@ -76,7 +79,13 @@ export default function ReportView({ report }: { report: Report }) {
   const irrigation = rec.irrigation ?? [];
   const landUse = plot.landUse;
   const landUseWarnings = report.limitations.filter((l) => l.startsWith("UWAGA:"));
-  const place = [plot.commune, plot.county && `pow. ${plot.county}`, plot.voivodeship && `woj. ${plot.voivodeship}`]
+  const { nr, obreb } = splitPlotId(plot.plotId);
+  const place = [
+    obreb && `obręb ${obreb}`,
+    plot.commune && `gm. ${plot.commune}`,
+    plot.county && countyLabel(plot.county),
+    plot.voivodeship && `woj. ${plot.voivodeship}`,
+  ]
     .filter(Boolean)
     .join(", ");
 
@@ -86,15 +95,16 @@ export default function ReportView({ report }: { report: Report }) {
       <header className="report-head">
         <div>
           <p className="muted small no-print" style={{ margin: "0 0 6px" }}>
-            <Link href="/analizuj">‹ Nowa analiza</Link>
+            <Link href="/analizuj">‹ Wróć do formularza</Link>
           </p>
           <p className="print-only muted small" style={{ margin: 0 }}>
             Retencja — raport wodny
           </p>
-          <h1>Raport wodny dla działki</h1>
+          <h1>Raport wodny — działka {nr}</h1>
           <p className="muted" style={{ margin: 0, overflowWrap: "anywhere" }}>
-            {plot.plotId}
-            {place && <> · {place}</>}
+            {place}
+            {place && <br />}
+            <span className="small">Identyfikator: {plot.plotId}</span>
           </p>
         </div>
         <div className="report-actions no-print">
@@ -102,10 +112,15 @@ export default function ReportView({ report }: { report: Report }) {
             <PrintIcon /> Drukuj / zapisz PDF
           </button>
           <Link href="/analizuj" className="btn btn-secondary">
+            Zmień uprawę lub datę
+          </Link>
+          <Link href="/analizuj" className="btn btn-secondary" onClick={clearForm}>
             Sprawdź inną działkę
           </Link>
         </div>
       </header>
+
+      <SectionTabs />
 
       {report.status === "partial" && (
         <Notice tone="warn" title="Raport niepełny — części danych nie udało się pobrać" role="status">
@@ -182,7 +197,7 @@ export default function ReportView({ report }: { report: Report }) {
 
       <div className="report-overview">
         <Map plot={plot} height={300} />
-        <nav className="toc no-print" aria-label="Spis treści raportu">
+        <nav className="toc no-print" id="spis" aria-label="Spis treści raportu">
           <strong>W tym raporcie</strong>
           <ol>
             {SECTIONS.map((s) => (
@@ -338,26 +353,26 @@ export default function ReportView({ report }: { report: Report }) {
           <div className="sources-body">
             <p className="muted small">Każda liczba w raporcie pochodzi z jednego z tych źródeł.</p>
             <div className="table-wrap" style={{ marginBottom: 20 }}>
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th scope="col">Dane</th>
-                    <th scope="col">Źródło</th>
-                    <th scope="col">Stan</th>
-                    <th scope="col">Okres / pobrano</th>
+              <table className="data stack" role="table">
+                <thead role="rowgroup">
+                  <tr role="row">
+                    <th scope="col" role="columnheader">Dane</th>
+                    <th scope="col" role="columnheader">Źródło</th>
+                    <th scope="col" role="columnheader">Stan</th>
+                    <th scope="col" role="columnheader">Okres / pobrano</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody role="rowgroup">
                   {report.sources.map((s) => (
-                    <tr key={s.id}>
-                      <td>
+                    <tr key={s.id} role="row">
+                      <td role="cell" data-label="Dane">
                         <strong>{s.name}</strong>
                       </td>
-                      <td>
+                      <td role="cell" data-label="Źródło">
                         <SourceLink source={s} />
                         {s.license && <div className="small muted">Licencja: {s.license}</div>}
                       </td>
-                      <td>
+                      <td role="cell" data-label="Stan">
                         <span className={`badge ${s.status === "ok" ? "badge-ok" : "badge-fail"}`}>
                           {s.mode === "static" && s.status === "ok" ? "wbudowane" : SOURCE_STATUS_LABEL[s.status]}
                         </span>
@@ -366,7 +381,7 @@ export default function ReportView({ report }: { report: Report }) {
                         )}
                         {s.error && <div className="small muted">{s.error}</div>}
                       </td>
-                      <td className="small">
+                      <td className="small" role="cell" data-label="Okres / pobrano">
                         {s.dataPeriod && <div>{s.dataPeriod}</div>}
                         {s.fetchedAt && <div className="muted">pobrano {formatDateTime(s.fetchedAt)}</div>}
                       </td>
@@ -401,6 +416,51 @@ export default function ReportView({ report }: { report: Report }) {
 }
 
 // ---------------------------------------------------------------------------
+
+const TABS = [...SECTIONS.map((s, i) => ({ id: s.id, label: `${i + 1}. ${s.title}` })), { id: "zrodla", label: "Źródła" }];
+
+/**
+ * Phone-only sticky strip with the report sections — the report is ~8 screens long on a phone and the
+ * table of contents sits far up the page. The section in view is marked with aria-current.
+ */
+function SectionTabs() {
+  const [current, setCurrent] = useState<string | null>(null);
+
+  useEffect(() => {
+    const els = TABS.map((t) => document.getElementById(t.id)).filter((e): e is HTMLElement => Boolean(e));
+    if (!("IntersectionObserver" in window) || els.length === 0) return;
+    // a section counts as "current" while it crosses a line just under the strip
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) if (e.isIntersecting) setCurrent(e.target.id);
+      },
+      { rootMargin: "-70px 0px -70% 0px" },
+    );
+    els.forEach((el) => obs.observe(el));
+    return () => obs.disconnect();
+  }, []);
+
+  // keep the active tab visible inside the horizontally scrolling strip
+  useEffect(() => {
+    if (!current) return;
+    document
+      .querySelector<HTMLElement>(`.section-tabs a[href="#${current}"]`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [current]);
+
+  return (
+    <nav className="section-tabs no-print" aria-label="Sekcje raportu">
+      <a href="#spis" aria-label="Do góry — spis treści">
+        ↑
+      </a>
+      {TABS.map((t) => (
+        <a key={t.id} href={`#${t.id}`} aria-current={current === t.id ? "location" : undefined}>
+          {t.label}
+        </a>
+      ))}
+    </nav>
+  );
+}
 
 /** "In 5 seconds" box: restates structured fields only (headlines, top actions) – no new numbers. */
 function QuickSummary({ report }: { report: Report }) {

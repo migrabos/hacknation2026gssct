@@ -36,14 +36,22 @@ export default function RiskChart({ risk }: { risk?: RiskWindow | null }) {
         {anyCritical && <span><i className={s.keyCritical} /> najbardziej wrażliwa faza uprawy</span>}
       </div>
 
-      <div className={s.plot} aria-hidden="true">
-        <span className={s.max}>{smsr ? `${max} lat` : `−${max} mm`}</span>
+      {/* Each bar is a labelled image (screen readers, Tab); tapping or hovering shows the same text as a tip. */}
+      <div className={s.plot} role="group" aria-label={risk.unit}>
+        <span className={s.max} aria-hidden="true">
+          {smsr ? `${max} lat` : `−${max} mm`}
+        </span>
         {risk.bars.map((b, i) => (
           <div
             key={b.label}
             className={s.col}
             tabIndex={0}
-            data-edge={i < 2 ? "start" : i > risk.bars.length - 3 ? "end" : "mid"}
+            role="img"
+            aria-label={tip(b) + (b.critical ? " · najbardziej wrażliwa faza uprawy" : "")}
+            // iOS Safari does not focus a tapped <div> by itself — the tip is shown on :focus
+            onClick={(e) => e.currentTarget.focus()}
+            // tip anchored to the bar's side of the chart, so it never sticks out of a narrow phone screen
+            data-edge={i < risk.bars.length / 3 ? "start" : i >= risk.bars.length - risk.bars.length / 3 ? "end" : "mid"}
           >
             <div className={s.track}>
               <span
@@ -53,31 +61,13 @@ export default function RiskChart({ risk }: { risk?: RiskWindow | null }) {
               />
             </div>
             <span className={s.crit} data-on={b.critical} />
-            <span className={s.label}>{axisLabel(b.label, risk.method)}</span>
-            <span className={s.tip} role="tooltip">{tip(b)}</span>
+            <span className={s.label} aria-hidden="true">{axisLabel(b.label, risk.method)}</span>
+            <span className={s.tip} aria-hidden="true">
+              {tip(b)}
+            </span>
           </div>
         ))}
       </div>
-
-      <table className={s.hidden}>
-        <caption>{risk.unit}</caption>
-        <thead>
-          <tr>
-            <th scope="col">{smsr ? "Okres (60 dni)" : "Miesiąc"}</th>
-            <th scope="col">{smsr ? "Lata poniżej progu" : "Bilans wodny (mm)"}</th>
-            {smsr && <th scope="col">Próg IUNG (mm)</th>}
-          </tr>
-        </thead>
-        <tbody>
-          {risk.bars.map((b) => (
-            <tr key={b.label}>
-              <th scope="row">{b.label}</th>
-              <td>{smsr ? `${formatNumber(b.value ?? 0, 0)} z ${b.of}` : formatNumber(b.value ?? 0, 0)}</td>
-              {smsr && <td>{b.thresholdMm != null ? formatNumber(b.thresholdMm, 0) : "brak"}</td>}
-            </tr>
-          ))}
-        </tbody>
-      </table>
 
       <p className={s.note}>
         {smsr

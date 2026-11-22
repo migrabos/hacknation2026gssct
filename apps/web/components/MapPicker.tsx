@@ -85,6 +85,17 @@ function supportsVectorMap(): boolean {
 
 type Basemap = "orto" | "map";
 
+/**
+ * Phones: one finger scrolls the PAGE, two fingers move / zoom the map (Leaflet's pinch also pans).
+ * Otherwise a map that fills most of the screen traps the farmer — every swipe pans the map instead
+ * of reaching the form. Decided once per mount.
+ */
+const useTwoFingerMap = () =>
+  useState(
+    () =>
+      typeof window !== "undefined" && window.matchMedia("(pointer: coarse) and (max-width: 860px)").matches,
+  )[0];
+
 export interface MapPickerProps {
   plot?: Plot | null;
   /** Called with the clicked point. Omit for a read-only map. */
@@ -113,6 +124,8 @@ export default function MapPicker({
   }, []);
   const [locateMsg, setLocateMsg] = useState<string | null>(null);
   const interactive = Boolean(onPick);
+  const twoFinger = useTwoFingerMap();
+  const [gestureHint, setGestureHint] = useState(false);
 
   let hint: string | null = null;
   if (locateMsg) hint = locateMsg;
@@ -134,6 +147,7 @@ export default function MapPicker({
         minZoom={5}
         maxZoom={19}
         scrollWheelZoom={interactive}
+        dragging={!twoFinger}
         className={interactive ? "picking" : undefined}
         attributionControl
         zoomControl={false}
@@ -186,10 +200,16 @@ export default function MapPicker({
         <ZoomWatcher onZoom={setZoom} />
         {interactive && <ClickHandler onPick={onPick!} disabled={busy} />}
         <LocateEvents onMsg={setLocateMsg} />
+        {twoFinger && <OneFingerWatcher onSwipe={setGestureHint} />}
         <MapTools basemap={basemap} setBasemap={setBasemap} interactive={interactive} onLocateStart={() => setLocateMsg("Szukam Twojej lokalizacji…")} />
       </MapContainer>
 
-      {hint && !busy && <div className="map-hint">{hint}</div>}
+      {hint && !busy && !gestureHint && <div className="map-hint">{hint}</div>}
+      {gestureHint && (
+        <div className="map-gesture-hint" aria-hidden="true">
+          <span>Przesuwaj mapę dwoma palcami</span>
+        </div>
+      )}
       {busy && (
         <div className="map-loading" role="status">
           <span>
@@ -507,6 +527,37 @@ function ClickHandler({ onPick, disabled }: { onPick: (lat: number, lng: number)
       onPick(e.latlng.lat, e.latlng.lng);
     },
   });
+  return null;
+}
+
+/** A one-finger swipe over the map scrolls the page — say once how to move the map instead. */
+function OneFingerWatcher({ onSwipe }: { onSwipe: (show: boolean) => void }) {
+  const map = useMap();
+  useEffect(() => {
+    const el = map.getContainer();
+    let start: { x: number; y: number } | null = null;
+    let timer: number | undefined;
+    const down = (e: TouchEvent) => {
+      start = e.touches.length === 1 ? { x: e.touches[0].clientX, y: e.touches[0].clientY } : null;
+      if (e.touches.length > 1) onSwipe(false);
+    };
+    const move = (e: TouchEvent) => {
+      if (!start || e.touches.length !== 1) return;
+      const t = e.touches[0];
+      if (Math.hypot(t.clientX - start.x, t.clientY - start.y) < 12) return; // a tap, not a swipe
+      start = null;
+      onSwipe(true);
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => onSwipe(false), 1600);
+    };
+    el.addEventListener("touchstart", down, { passive: true });
+    el.addEventListener("touchmove", move, { passive: true });
+    return () => {
+      el.removeEventListener("touchstart", down);
+      el.removeEventListener("touchmove", move);
+      window.clearTimeout(timer);
+    };
+  }, [map, onSwipe]);
   return null;
 }
 

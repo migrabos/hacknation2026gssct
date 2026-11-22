@@ -150,7 +150,7 @@
   transform: translateX(-50%);
   z-index: 2;
   width: max-content;
-  max-width: 220px;
+  max-width: min(220px, 60vw);
   padding: 6px 9px;
   border: 1px solid var(--c-border);
   border-radius: var(--radius);
@@ -160,13 +160,19 @@
   line-height: 1.35;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
   pointer-events: none;
-  opacity: 0;
-  transition: opacity 0.12s;
+  /* display, not opacity: a hidden tip that is still laid out widens the page on narrow phones */
+  display: none;
 }
 
+/* :focus (not only :focus-visible) — a tap on a phone focuses the bar and shows its value */
 .col:hover .tip,
-.col:focus-visible .tip {
-  opacity: 1;
+.col:focus .tip {
+  display: block;
+}
+
+.col:focus-visible .track {
+  outline: 2px solid var(--c-focus);
+  outline-offset: 1px;
 }
 
 .col[data-edge="start"] .tip {
@@ -184,15 +190,6 @@
   margin: 10px 0 0;
   font-size: 0.82rem;
   color: var(--c-text-muted);
-}
-
-.hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
 }
 
 @media (max-width: 480px) {

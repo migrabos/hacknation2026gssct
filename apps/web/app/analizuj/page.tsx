@@ -7,8 +7,8 @@ import Map from "@/components/Map";
 import Notice from "@/components/Notice";
 import PipelineLoader from "@/components/PipelineLoader";
 import { ApiError, api } from "@/lib/api";
-import { ERROR_MESSAGE, formatNumber } from "@/lib/labels";
-import { saveReport } from "@/lib/report-store";
+import { ERROR_MESSAGE, countyLabel, formatNumber } from "@/lib/labels";
+import { loadForm, saveForm, saveReport } from "@/lib/report-store";
 import type { ApiErrorKind, Crop, Plot, Region } from "@/lib/types";
 
 function isoDay(d: Date): string {
@@ -24,6 +24,11 @@ function errorKind(err: unknown): ApiErrorKind {
 const REGION_FILTER_HINT_AT = 6;
 /** The API returns at most this many matches (best first). */
 const REGION_MAX_RESULTS = 100;
+/** Matches shown before "Pokaż wszystkie" — a long list of buttons is hard to scan on a phone. */
+const REGION_SHOWN_AT_FIRST = 8;
+
+const reducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 /**
  * Show which city an obręb belongs to: "Kraków – obręb K-1" (numbered city obręby),
@@ -42,7 +47,7 @@ function regionName(r: Region): string {
 function regionLabel(r: Region): string {
   return [
     r.commune && `gm. ${r.commune}`,
-    r.county && (r.county.startsWith("powiat") ? r.county.replace(/^powiat\s+/, "pow. ") : `pow. ${r.county}`),
+    r.county && countyLabel(r.county),
     r.voivodeship && `woj. ${r.voivodeship}`,
   ]
     .filter(Boolean)
@@ -70,6 +75,10 @@ export default function AnalyzePage() {
   const [regionsError, setRegionsError] = useState<ApiErrorKind | null>(null);
   const [region, setRegion] = useState<Region | null>(null);
   const [parcelNr, setParcelNr] = useState("");
+  const [showAllRegions, setShowAllRegions] = useState(false);
+  // Focus the parcel-number field only when the farmer picked the village themselves — not when an
+  // exact match was chosen automatically (they may still be typing, the keys would land in the wrong field).
+  const [focusParcel, setFocusParcel] = useState(false);
   const [nrBusy, setNrBusy] = useState(false);
   const [nrError, setNrError] = useState<string | null>(null);
   const searchSeq = useRef(0);
@@ -86,6 +95,9 @@ export default function AnalyzePage() {
   const [running, setRunning] = useState(false);
   const [analyzeError, setAnalyzeError] = useState<ApiErrorKind | null>(null);
   const [showErrors, setShowErrors] = useState(false);
+  // Becomes true once the saved form has been restored — saving before that would wipe it.
+  const [hydrated, setHydrated] = useState(false);
+  const mapRef = useRef<HTMLElement>(null);
 
   const loadCrops = useCallback(() => {
     setCropsError(false);
@@ -99,12 +111,27 @@ export default function AnalyzePage() {
     const today = new Date();
     const min = new Date(today);
     min.setFullYear(today.getFullYear() - 10);
-    setDate(isoDay(today));
-    setDateMax(isoDay(today));
-    setDateMin(isoDay(min));
+    const minIso = isoDay(min);
+    const maxIso = isoDay(today);
+    setDateMax(maxIso);
+    setDateMin(minIso);
+    // Back from the report ("Zmień uprawę lub datę" / browser back): keep the plot, crop and date.
+    const saved = loadForm();
+    setDate(saved?.date && saved.date >= minIso && saved.date <= maxIso ? saved.date : maxIso);
+    if (saved) {
+      setPlot(saved.plot);
+      setRegion(saved.region);
+      setCropId(saved.cropId ?? "");
+      if (saved.region) setVillageQuery(saved.region.region ?? "");
+    }
+    setHydrated(true);
     loadCrops();
     api.health().catch(() => setApiDown(true));
   }, [loadCrops]);
+
+  useEffect(() => {
+    if (hydrated) saveForm({ plot, region, cropId, date });
+  }, [hydrated, plot, region, cropId, date]);
 
   const villageName = splitVillageQuery(villageQuery).name;
   const villageSearch = villageQuery.trim();
@@ -130,6 +157,7 @@ export default function AnalyzePage() {
         const found = await api.searchRegions(q);
         if (seq !== searchSeq.current) return;
         setRegions(found);
+        setShowAllRegions(false);
       } catch (err) {
         if (seq !== searchSeq.current) return;
         setRegions(null);
@@ -144,7 +172,8 @@ export default function AnalyzePage() {
   const villageFilter = splitVillageQuery(villageQuery).filter;
   const shownRegions = regions;
 
-  function chooseRegion(r: Region) {
+  function chooseRegion(r: Region, byUser = true) {
+    setFocusParcel(byUser);
     setRegion(r);
     setNrError(null);
     setPlotError(null);
@@ -173,7 +202,7 @@ export default function AnalyzePage() {
       !villageFilter &&
       regions[0].region?.toLowerCase() === villageName.toLowerCase()
     )
-      chooseRegion(regions[0]);
+      chooseRegion(regions[0], false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [regions, region, villageFilter, villageName]);
 
@@ -241,9 +270,35 @@ export default function AnalyzePage() {
     void runAnalysis();
   }
 
+  /** Bring the first missing answer into view — on a phone the error can be a screen above the button. */
+  function focusFirstProblem() {
+    const id = !plot
+      ? region
+        ? "parcelNr"
+        : document.getElementById("village")
+          ? "village"
+          : "plotId"
+      : !cropId
+        ? "crop"
+        : "date";
+    requestAnimationFrame(() => {
+      const el = document.getElementById(id) ?? document.querySelector<HTMLElement>(".workspace-panel .field-error");
+      if (!el) return;
+      el.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    });
+  }
+
+  function showMap() {
+    mapRef.current?.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" });
+  }
+
   async function runAnalysis() {
     setShowErrors(true);
-    if (!plot || !canSubmit) return;
+    if (!plot || !canSubmit) {
+      focusFirstProblem();
+      return;
+    }
     setAnalyzeError(null);
     setRunning(true);
     window.scrollTo({ top: 0 });
@@ -265,6 +320,8 @@ export default function AnalyzePage() {
     );
   }
 
+  // "Najpierw wskaż działkę" sits right under the field the farmer is sent back to (village or number)
+  const plotMissing = showErrors && !plot && !plotError;
   const plotErrMsg =
     plotError === "bad_request"
       ? { title: "Wpisz identyfikator działki", text: "Na przykład 141201_1.0001.123 — znajdziesz go na wypisie z rejestru gruntów." }
@@ -300,7 +357,7 @@ export default function AnalyzePage() {
       )}
 
       <div className="analyze-grid workspace">
-        <section aria-labelledby="map-h" className="workspace-map">
+        <section aria-labelledby="map-h" className="workspace-map" ref={mapRef}>
           <h2 id="map-h" className="visually-hidden">
             Mapa
           </h2>
@@ -333,6 +390,9 @@ export default function AnalyzePage() {
                   Zmień
                 </button>
               </div>
+              <button type="button" className="btn-link small narrow-only" onClick={showMap}>
+                Pokaż na mapie ↓
+              </button>
               <dl>
                 <dt>Numer</dt>
                 <dd>{plot.plotId}</dd>
@@ -353,64 +413,87 @@ export default function AnalyzePage() {
               {!region ? (
                 <div className="field" style={{ marginBottom: 12 }}>
                   <label htmlFor="village">Miejscowość, w której leży działka</label>
-                  <p className="hint">
+                  <p className="hint" id="village-hint">
                     Zacznij pisać nazwę wsi albo gminy — polskie litery nie są konieczne (np. Zdziłowice, Godziszów).
                   </p>
                   <div className="input-row">
                     <input
                       id="village"
                       className="input"
+                      type="search"
+                      enterKeyHint="search"
                       value={villageQuery}
                       onChange={(e) => setVillageQuery(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Enter / "Szukaj" on a phone keyboard must not submit the whole form.
+                        if (e.key !== "Enter") return;
+                        e.preventDefault();
+                        if (shownRegions?.length === 1) chooseRegion(shownRegions[0]);
+                      }}
                       placeholder="np. Krzewina"
                       autoComplete="off"
-                      aria-describedby="village-results"
+                      aria-describedby={`village-hint village-status${showErrors && !plot ? " plot-err" : ""}`}
+                      aria-invalid={showErrors && !plot ? true : undefined}
                     />
                     {regionsBusy && <span className="spinner" style={{ alignSelf: "center" }} aria-label="Szukam" />}
                   </div>
+                  {plotMissing && (
+                    <p className="field-error" id="plot-err">
+                      Najpierw wskaż działkę — wpisz miejscowość i numer albo kliknij ją na mapie.
+                    </p>
+                  )}
 
-                  <div id="village-results" aria-live="polite">
+                  {/* Only the short status is a live region — not the list of buttons, which would be read out whole. */}
+                  <div id="village-status" aria-live="polite">
                     {regionsError && <p className="field-error">{ERROR_MESSAGE[regionsError].text}</p>}
                     {shownRegions && shownRegions.length === 0 && !regionsBusy && (
                       <p className="hint">
-                        {regions && regions.length > 0
-                          ? "Żadna z tych miejscowości nie pasuje do dopisanej gminy. Usuń tekst po przecinku."
-                          : villageFilter
-                            ? `Nie znaleźliśmy „${villageName}” w „${villageFilter}”. Sprawdź nazwę gminy albo usuń tekst po przecinku.`
-                            : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają numery zamiast nazw dzielnic — wpisz miasto i numer obrębu z wypisu (np. Warszawa 1-01-01, Kraków K-12) albo kliknij działkę na mapie.`}
+                        {villageFilter
+                          ? `Nie znaleźliśmy „${villageName}” w „${villageFilter}”. Sprawdź nazwę gminy albo usuń tekst po przecinku.`
+                          : `Nie znaleźliśmy miejscowości „${villageName}”. Sprawdź pisownię albo wpisz nazwę gminy. W miastach obręby mają numery zamiast nazw dzielnic — wpisz miasto i numer obrębu z wypisu (np. Warszawa 1-01-01, Kraków K-12) albo kliknij działkę na mapie.`}
                       </p>
                     )}
                     {shownRegions && shownRegions.length > 0 && (
-                      <>
-                        <p className="hint" style={{ marginTop: 6 }}>
-                          {shownRegions.length === 1
-                            ? "Znaleziono:"
-                            : shownRegions.length >= REGION_MAX_RESULTS
-                              ? `Pokazujemy pierwsze ${REGION_MAX_RESULTS} wyników — wybierz swoją albo zawęź wyszukiwanie:`
-                              : `Pasujące miejscowości (${shownRegions.length}) — wybierz swoją:`}
-                        </p>
-                        {regions && regions.length > REGION_FILTER_HINT_AT && !villageFilter && (
-                          <p className="hint">
-                            Dużo wyników? Dopisz po przecinku gminę lub powiat, np.{" "}
+                      <p className="hint" style={{ marginTop: 6 }}>
+                        {shownRegions.length === 1
+                          ? "Znaleziono:"
+                          : shownRegions.length >= REGION_MAX_RESULTS
+                            ? `Ponad ${REGION_MAX_RESULTS - 1} pasujących miejscowości`
+                            : `Pasujące miejscowości: ${shownRegions.length}`}
+                        {shownRegions.length > REGION_FILTER_HINT_AT && !villageFilter ? (
+                          <>
+                            {" "}
+                            — dopisz po przecinku gminę lub powiat, np.{" "}
                             <em>
-                              {villageName}, {regions[0].commune ?? regions[0].county}
+                              {villageName}, {shownRegions[0].commune ?? shownRegions[0].county}
                             </em>
-                            .
-                          </p>
-                        )}
-                        <ul className="region-list">
-                          {shownRegions.map((r) => (
-                            <li key={r.regionId}>
-                              <button type="button" className="region-option" onClick={() => chooseRegion(r)}>
-                                <strong>{regionName(r)}</strong>
-                                <span>{regionLabel(r)}</span>
-                              </button>
-                            </li>
-                          ))}
-                        </ul>
-                      </>
+                            , albo wybierz z listy:
+                          </>
+                        ) : shownRegions.length > 1 ? (
+                          " — wybierz swoją:"
+                        ) : null}
+                      </p>
                     )}
                   </div>
+                  {shownRegions && shownRegions.length > 0 && (
+                    <>
+                      <ul className="region-list">
+                        {(showAllRegions ? shownRegions : shownRegions.slice(0, REGION_SHOWN_AT_FIRST)).map((r) => (
+                          <li key={r.regionId}>
+                            <button type="button" className="region-option" onClick={() => chooseRegion(r)}>
+                              <strong>{regionName(r)}</strong>
+                              <span>{regionLabel(r)}</span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                      {!showAllRegions && shownRegions.length > REGION_SHOWN_AT_FIRST && (
+                        <button type="button" className="btn btn-secondary region-more" onClick={() => setShowAllRegions(true)}>
+                          Pokaż wszystkie ({shownRegions.length})
+                        </button>
+                      )}
+                    </>
+                  )}
                 </div>
               ) : (
                 <>
@@ -439,20 +522,31 @@ export default function AnalyzePage() {
                         inputMode="text"
                         autoComplete="off"
                         spellCheck={false}
-                        autoFocus
+                        autoFocus={focusParcel}
+                        aria-invalid={(showErrors && !plot) || nrError ? true : undefined}
+                        aria-describedby={nrError ? "nr-err" : showErrors && !plot ? "plot-err" : undefined}
                       />
                       <button type="button" className="btn btn-secondary" onClick={() => findByRegion()} disabled={nrBusy}>
                         {nrBusy ? <span className="spinner" /> : "Znajdź"}
                       </button>
                     </div>
-                    {nrError && (
-                      <p className="field-error" role="alert">
+                    {nrError ? (
+                      <p className="field-error" role="alert" id="nr-err">
                         {nrError}
                       </p>
+                    ) : (
+                      plotMissing && (
+                        <p className="field-error" id="plot-err">
+                          Najpierw wskaż działkę — wpisz miejscowość i numer albo kliknij ją na mapie.
+                        </p>
+                      )
                     )}
                   </div>
                   <p className="muted small" style={{ marginTop: 0 }}>
-                    Nie znasz numeru? Mapa pokazuje już Twoją miejscowość — przybliż i kliknij swoje pole.
+                    Nie znasz numeru? Mapa pokazuje już Twoją miejscowość — przybliż ją i kliknij swoje pole.{" "}
+                    <button type="button" className="btn-link narrow-only" onClick={showMap}>
+                      Pokaż mapę ↓
+                    </button>
                   </p>
                 </>
               )}
@@ -499,7 +593,7 @@ export default function AnalyzePage() {
               <p>{plotErrMsg.text}</p>
             </Notice>
           )}
-          {showErrors && !plot && !plotErrMsg && <p className="field-error">Najpierw wskaż działkę.</p>}
+
 
           <hr className="panel-divider" />
 
@@ -522,6 +616,8 @@ export default function AnalyzePage() {
                 value={cropId}
                 onChange={(e) => setCropId(e.target.value)}
                 disabled={!crops}
+                aria-invalid={showErrors && !cropId ? true : undefined}
+                aria-describedby={showErrors && !cropId ? "crop-err" : undefined}
               >
                 <option value="">{crops ? "Wybierz uprawę…" : "Ładowanie…"}</option>
                 {crops?.map((c) => (
@@ -531,12 +627,16 @@ export default function AnalyzePage() {
                 ))}
               </select>
             )}
-            {showErrors && !cropId && <p className="field-error">Wybierz uprawę.</p>}
+            {showErrors && !cropId && (
+              <p className="field-error" id="crop-err">
+                Wybierz uprawę.
+              </p>
+            )}
           </div>
 
           <div className="field">
             <label htmlFor="date">Na jaki dzień przygotować ocenę?</label>
-            <p className="hint">
+            <p className="hint" id="date-hint">
               Domyślnie dzisiaj. Możesz wybrać dowolny dzień z ostatnich 10 lat.
             </p>
             <input
@@ -547,11 +647,17 @@ export default function AnalyzePage() {
               min={dateMin}
               max={dateMax}
               onChange={(e) => setDate(e.target.value)}
+              aria-invalid={showErrors && !dateValid ? true : undefined}
+              aria-describedby={`date-hint${showErrors && !dateValid ? " date-err" : ""}`}
             />
-            {showErrors && !dateValid && <p className="field-error">Wybierz datę z ostatnich 10 lat.</p>}
+            {showErrors && !dateValid && (
+              <p className="field-error" id="date-err">
+                Wybierz datę z ostatnich 10 lat.
+              </p>
+            )}
           </div>
 
-          <button type="submit" className="btn btn-lg" style={{ width: "100%" }} disabled={showErrors && !canSubmit}>
+          <button type="submit" className="btn btn-lg" style={{ width: "100%" }}>
             Przygotuj raport wodny
           </button>
           <p className="muted small" style={{ margin: "10px 0 0", textAlign: "center" }}>
