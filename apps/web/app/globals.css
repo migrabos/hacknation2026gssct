@@ -78,6 +78,63 @@ html.dark {
   color-scheme: dark;
 }
 
+/* High-contrast mode (A11yBar): black / white / yellow, every text pair ≥ 7:1 (WCAG AAA, so AA
+   is met with a margin). Declared after html.dark so it wins over both themes. */
+html.contrast {
+  --c-bg: #000000;
+  --c-bg-subtle: #000000;
+  --c-surface: #000000;
+  --c-text: #ffffff;
+  --c-text-muted: #ffffff;
+  --c-border: #ffffff;
+  --c-border-strong: #ffffff;
+
+  --c-accent: #ffff00;
+  --c-accent-hover: #ffff80;
+  --c-accent-soft: #1f1f00;
+  --c-accent-line: #ffff00;
+  --c-on-accent: #000000;
+
+  --c-warn-bg: #000000;
+  --c-warn-line: #ffff00;
+  --c-danger: #ff8080;
+  --c-danger-bg: #000000;
+  --c-info-bg: #000000;
+  --c-info-line: #ffffff;
+
+  --c-disabled: #8a8a8a;
+  --c-map-bg: #000000;
+  --c-overlay: rgba(0, 0, 0, 0.7);
+  --c-overlay-solid: rgba(0, 0, 0, 0.92);
+  --c-focus: #00ffff;
+
+  --c-m-very-dry: #ff8080;
+  --c-m-dry: #ffb84d;
+  --c-m-normal: #66ff99;
+  --c-m-wet: #80b3ff;
+
+  color-scheme: dark;
+}
+html.contrast a {
+  text-decoration: underline;
+}
+html.contrast :focus-visible {
+  outline-width: 4px;
+}
+/* Theme choice is meaningless while high contrast is on. */
+html.contrast .theme-toggle {
+  display: none;
+}
+
+/* Text size (A11yBar). Everything sized in rem scales with it; 150% stays below the
+   200% zoom WCAG 1.4.4 requires layouts to survive. */
+html[data-font-scale="1"] {
+  font-size: 125%;
+}
+html[data-font-scale="2"] {
+  font-size: 150%;
+}
+
 *,
 *::before,
 *::after {
@@ -93,7 +150,8 @@ body {
   background: var(--c-bg);
   color: var(--c-text);
   font-family: var(--font);
-  font-size: 17px;
+  /* 17px at the default 16px root; rem (not px) so the A / A+ / A++ switch scales it */
+  font-size: 1.0625rem;
   line-height: 1.55;
 }
 
@@ -181,10 +239,72 @@ a.visually-hidden:focus {
   font-size: 0.85rem;
 }
 .topbar .container {
-  padding-block: 6px;
-  /* keep the bar's height now that it carries no text */
-  min-height: calc(0.85rem * 1.55 + 12px);
+  padding-block: 5px;
   box-sizing: border-box;
+}
+
+/* ---------- Accessibility bar (text size + high contrast) ---------- */
+.a11y-bar {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+}
+.a11y-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.a11y-label {
+  margin-right: 4px;
+  font-size: 13px;
+}
+.a11y-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-width: 32px;
+  min-height: 30px;
+  padding: 2px 8px;
+  font: inherit;
+  font-weight: 700;
+  line-height: 1;
+  color: inherit;
+  background: transparent;
+  border: 1.5px solid currentColor;
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.a11y-btn:hover {
+  background: color-mix(in srgb, currentColor 18%, transparent);
+}
+/* active option is shown inverted, not by colour alone */
+.a11y-btn[aria-pressed="true"] {
+  background: var(--c-on-accent);
+  color: var(--c-accent);
+  border-color: var(--c-on-accent);
+}
+.a11y-btn:focus-visible {
+  outline-color: var(--c-on-accent);
+  outline-offset: 2px;
+}
+/* sizes in px on purpose: the buttons show what each step looks like and must not grow themselves */
+.a11y-font-0 {
+  font-size: 13px;
+}
+.a11y-font-1 {
+  font-size: 16px;
+}
+.a11y-font-2 {
+  font-size: 19px;
+}
+.a11y-contrast {
+  font-size: 13px;
+}
+html.contrast .topbar {
+  background-image: none;
 }
 
 .site-header {
@@ -1647,7 +1767,11 @@ table.data tr:last-child td {
 }
 @media (max-width: 520px) {
   body {
-    font-size: 16px;
+    font-size: 1rem;
+  }
+  .a11y-label,
+  .a11y-contrast span {
+    display: none;
   }
   .container {
     padding-inline: 16px;
@@ -1730,6 +1854,11 @@ table.data tr:last-child td {
 html.dark {
   /* soft green is dark in dark mode — use the subtle variant there too */
   --tri-soft: var(--tri-strong);
+}
+/* no decorative texture behind text in high contrast */
+html.contrast {
+  --tri-strong: none;
+  --tri-soft: none;
 }
 
 /* strong green (accent fill) */
