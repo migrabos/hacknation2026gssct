@@ -16,7 +16,7 @@
  *
  * Load via components/Map.tsx (dynamic, ssr:false) — Leaflet needs `window`.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   GeoJSON,
   MapContainer,
@@ -179,7 +179,7 @@ export default function MapPicker({
         />
 
         {plot && <PlotShape plot={plot} onOrto={basemap === "orto"} />}
-        {plot?.retentionSpot && <RetentionSpotMarker spot={plot.retentionSpot} />}
+        {plot?.retentionSpot && <RetentionSpotMarker key={plot.plotId} spot={plot.retentionSpot} />}
         {!plot && focusBbox && <FocusBounds bbox={focusBbox} />}
 
         <ScaleControl position="bottomleft" imperial={false} />
@@ -208,9 +208,13 @@ export default function MapPicker({
 
 const fmtPl = (x: number, digits = 1) => x.toFixed(digits).replace(".", ",");
 
+// Dot + two "ripple on water" rings (CSS-animated after the outline is drawn; static with reduced motion).
 const RETENTION_ICON = L.divIcon({
   className: "retention-dot-icon",
-  html: '<span class="retention-dot" aria-hidden="true"></span>',
+  html:
+    '<span class="retention-ripple" aria-hidden="true"></span>' +
+    '<span class="retention-ripple retention-ripple-2" aria-hidden="true"></span>' +
+    '<span class="retention-dot" aria-hidden="true"></span>',
   iconSize: [16, 16],
   iconAnchor: [8, 8],
 });
@@ -350,8 +354,69 @@ function FocusBounds({ bbox }: { bbox: [number, number, number, number] }) {
   return null;
 }
 
+const prefersReducedMotion = () =>
+  typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+/** SVG <path> elements of a GeoJSON layer (one per polygon / multipolygon). */
+function pathsOf(layer: L.GeoJSON | null): SVGPathElement[] {
+  const out: SVGPathElement[] = [];
+  layer?.eachLayer((l) => {
+    const el = (l as L.Path).getElement?.();
+    if (el instanceof SVGPathElement) out.push(el);
+  });
+  return out;
+}
+
+const DRAW_MS = 600;
+const FLY_S = 0.8;
+
+/**
+ * "Draw" the outline around the plot: dash the stroke to its own length and slide it in,
+ * then fade the fill in. Styles are cleared afterwards, so later zoom / pan (which changes
+ * the path length) renders a normal solid outline.
+ */
+function drawOutline(paths: SVGPathElement[]) {
+  const restore: (() => void)[] = [];
+  for (const p of paths) {
+    const len = p.getTotalLength();
+    p.style.transition = "none";
+    p.style.strokeLinecap = "butt"; // round caps would show a dot at the start of the hidden dash
+    p.style.strokeDasharray = `${len} ${len}`;
+    p.style.strokeDashoffset = `${len}`;
+    p.style.fillOpacity = "0";
+    // stroke is now hidden by the dash offset → safe to drop the "born hidden" class (same frame, no flash)
+    p.classList.remove(PENDING_CLASS);
+    p.getBoundingClientRect(); // commit the start state before transitioning
+    p.style.transition = `stroke-dashoffset ${DRAW_MS}ms ease-in-out, fill-opacity 400ms ease ${DRAW_MS - 200}ms`;
+    p.style.strokeDashoffset = "0";
+    p.style.fillOpacity = "";
+    restore.push(() => {
+      p.style.transition = p.style.strokeDasharray = p.style.strokeDashoffset = p.style.strokeLinecap = "";
+      p.style.fillOpacity = "";
+    });
+  }
+  const t = window.setTimeout(() => restore.forEach((r) => r()), DRAW_MS + 300);
+  return () => {
+    window.clearTimeout(t);
+    restore.forEach((r) => r());
+  };
+}
+
+/**
+ * Paths are created with this class (Leaflet `className` option), so the outline is invisible from
+ * its very first paint until the map has flown to the plot — no flash of the full outline, even when
+ * React (dev / StrictMode) re-adds the layer and Leaflet creates new <path> elements.
+ */
+const PENDING_CLASS = "plot-outline--pending";
+
 function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
   const map = useMap();
+  const haloRef = useRef<L.GeoJSON | null>(null);
+  const lineRef = useRef<L.GeoJSON | null>(null);
+  // Plot whose outline has finished drawing: later re-mounts (basemap toggle) are born visible.
+  const [drawnFor, setDrawnFor] = useState<string | null>(null);
+  const pending = drawnFor !== plot.plotId && !prefersReducedMotion();
+  const outlineClass = pending ? `plot-outline ${PENDING_CLASS}` : "plot-outline";
   const bounds: LatLngBoundsExpression = useMemo(
     () => [
       [plot.bbox[1], plot.bbox[0]],
@@ -360,25 +425,65 @@ function PlotShape({ plot, onOrto }: { plot: Plot; onOrto: boolean }) {
     [plot.bbox],
   );
 
+  // Fly to the plot, then draw its outline (only when a new plot is shown — not on basemap toggle).
   useEffect(() => {
-    map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17, animate: true });
-  }, [map, bounds]);
+    const opts = { padding: [48, 48] as [number, number], maxZoom: 17 };
+    if (prefersReducedMotion()) {
+      map.fitBounds(bounds, { ...opts, animate: false });
+      return;
+    }
+    const plotId = plot.plotId;
+    const paths = () => [...pathsOf(haloRef.current), ...pathsOf(lineRef.current)];
+    let undoDraw: (() => void) | null = null;
+    let done: number | undefined;
+    let started = false;
+    const start = () => {
+      if (started) return;
+      started = true;
+      undoDraw = drawOutline(paths());
+      done = window.setTimeout(() => {
+        // Leaflet sets className only when a path is created — make sure nothing stays hidden
+        paths().forEach((p) => p.classList.remove(PENDING_CLASS));
+        setDrawnFor(plotId);
+      }, DRAW_MS + 300);
+    };
+    map.once("moveend", start);
+    // Normally drawing starts on "moveend". Fallback only for "already there, nothing to fly"
+    // (no moveend) — long enough not to start mid-flight on slow devices.
+    const fallback = window.setTimeout(start, 2500);
+    map.flyToBounds(bounds, { ...opts, duration: FLY_S });
+    return () => {
+      map.off("moveend", start);
+      window.clearTimeout(fallback);
+      window.clearTimeout(done);
+      undoDraw?.();
+    };
+  }, [map, bounds, plot.plotId]);
 
   const stroke = onOrto ? "#3fe07f" : "#0f6b3a";
   return (
     <>
       {/* white halo underneath keeps the outline readable on any photo */}
       <GeoJSON
+        ref={haloRef}
         key={`${plot.plotId}-halo`}
         data={plot.geometry}
         interactive={false}
-        style={{ color: "#ffffff", weight: 7, opacity: 0.9, fill: false }}
+        style={{ color: "#ffffff", weight: 7, opacity: 0.9, fill: false, className: outlineClass }}
       />
       <GeoJSON
+        ref={lineRef}
         key={`${plot.plotId}-${onOrto}`}
         data={plot.geometry}
         interactive={false}
-        style={{ color: stroke, weight: 3.5, opacity: 1, fillColor: stroke, fillOpacity: onOrto ? 0.22 : 0.16 }}
+        style={{
+          color: stroke,
+          weight: 3.5,
+          opacity: 1,
+          fillColor: stroke,
+          fillOpacity: onOrto ? 0.22 : 0.16,
+          className: outlineClass,
+        }}
       />
     </>
   );
