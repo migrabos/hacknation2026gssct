@@ -60,6 +60,7 @@ class Facts:
     kbw_pct: float | None = None
     dry_spell: float | None = None
     temp30: float | None = None
+    et0_30d: float | None = None        # reference evapotranspiration, 30 days (FAO-56)
     precip365: float | None = None
     precip365_normal: float | None = None
     kbw_summer_mean: float | None = None
@@ -70,9 +71,15 @@ class Facts:
     soc: float | None = None
     awc: float | None = None
     awc_class: str | None = None
+    awc_depth_cm: float | None = None
     # terrain / hydro
     slope: float | None = None
+    slope_method: str | None = None     # "plane_fit" | "two_points"
+    slope_points: int | None = None
     runoff: str | None = None
+    # lowest NMT point of the plot (natural spot for a pond); drop is None when no spot suggested
+    spot_drop: float | None = None
+    spot_near_edge: bool | None = None
     nearby_water: bool | None = None
     water_dist: float | None = None
     water_type: str | None = None
@@ -100,6 +107,39 @@ class Facts:
     # crop
     crop_sens: float = 0.5
     crop_id: str | None = None
+    crop_kc: float | None = None
+    crop_season: tuple[int, ...] = ()
+    crop_critical: tuple[int, ...] = ()
+    crop_phase_pl: str | None = None
+    month: int | None = None            # month of the analysis date (set by run_engine)
+    area_ha: float | None = None
+
+    @property
+    def in_season(self) -> bool | None:
+        if self.month is None or not self.crop_season:
+            return None
+        return self.month in self.crop_season
+
+    @property
+    def in_critical_phase(self) -> bool | None:
+        if self.month is None or not self.crop_critical:
+            return None
+        return self.month in self.crop_critical
+
+    @property
+    def crop_water_need30(self) -> float | None:
+        """Crop water need for the last 30 days ≈ ET0 × Kc (FAO-56)."""
+        if self.et0_30d is None or self.crop_kc is None:
+            return None
+        return self.et0_30d * self.crop_kc
+
+    @property
+    def crop_deficit30(self) -> float | None:
+        """Water the crop needed minus rain that fell, last 30 days (> 0 = shortage)."""
+        need = self.crop_water_need30
+        if need is None or self.precip30 is None:
+            return None
+        return need - self.precip30
 
     @property
     def scene_month(self) -> int | None:
@@ -182,6 +222,7 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
     hist = (bundle.sat_history or {}).get("values") or {}
     terrain = bundle.plot.get("terrain") or {}
     hydro = bundle.plot.get("hydro") or {}
+    spot = terrain.get("retentionSpot") or {}
     lu = bundle.plot.get("landUse") or {}
 
     runoff = terrain.get("runoffRisk")
@@ -193,6 +234,7 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
         kbw_pct=_num(m.get("kbw_10y_percentile")),
         dry_spell=_num(m.get("dry_spell_days")),
         temp30=_num(m.get("temp_mean_30d")),
+        et0_30d=_num(m.get("et0_30d")),
         precip365=_num(m.get("precip_365d")),
         precip365_normal=_num(m.get("precip_365d_median_prev")),
         kbw_summer_mean=_num(m.get("kbw_summer_mean_10y")),
@@ -202,7 +244,12 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
         soc=_num(s.get("soc_pct")),
         awc=_num(s.get("awc_mm")),
         awc_class=s.get("retention_class"),
+        awc_depth_cm=_num(s.get("awc_depth_cm")),
         slope=_num(terrain.get("slopePct")),
+        slope_method=terrain.get("slopeMethod"),
+        slope_points=terrain.get("pointsSampled"),
+        spot_drop=_num(spot.get("elevationDropM")) if spot.get("lat") is not None else None,
+        spot_near_edge=spot.get("nearEdge") if spot.get("lat") is not None else None,
         runoff=runoff if runoff in ("low", "medium", "high") else None,
         nearby_water=hydro.get("nearbyWater") if not hydro.get("missing") else None,
         water_dist=_num(hydro.get("nearestDistanceM")),
@@ -228,6 +275,11 @@ def extract_facts(bundle: AdapterBundle, crop: CropEntry | None) -> Facts:
         cdi_label=dr.get("cdi_label"),
         crop_sens=float(crop["droughtSensitivity"]) if crop else 0.5,
         crop_id=crop["id"] if crop else None,
+        crop_kc=float(crop["kcMid"]) if crop else None,
+        crop_season=tuple(crop["seasonMonths"]) if crop else (),
+        crop_critical=tuple(crop["criticalMonths"]) if crop else (),
+        crop_phase_pl=crop["criticalPhasePl"] if crop else None,
+        area_ha=_num(bundle.plot.get("areaHa")),
     )
 
 
@@ -267,11 +319,20 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
     add("ev_soil_sand", "Udział piasku w glebie (0–30 cm)", f.sand, SRC_SOIL, "%")
     add("ev_soil_clay", "Udział iłu w glebie (0–30 cm)", f.clay, SRC_SOIL, "%")
     add("ev_soil_soc", "Węgiel organiczny (próchnica, 0–30 cm)", f.soc, SRC_SOIL, "%")
-    add("ev_soil_awc", "Ile wody gleba może zatrzymać", f.awc, SRC_SOIL, "mm na 1 m gleby",
+    depth = f.awc_depth_cm
+    awc_unit = ("mm na 1 m gleby" if depth is None or depth >= 100
+                else f"mm na {fmt(depth, 0)} cm gleby")
+    add("ev_soil_awc", "Ile wody gleba może zatrzymać", f.awc, SRC_SOIL, awc_unit,
         f"{RETENTION_CLASS_PL.get(f.awc_class or '', 'szacunek')} (szacunek z tekstury gleby)")
 
-    add("ev_slope", "Spadek terenu na działce", f.slope, SRC_DEM, "%",
-        f"ryzyko spływu: {RUNOFF_PL[f.runoff]}" if f.runoff else None)
+    slope_cmp = [f"ryzyko spływu: {RUNOFF_PL[f.runoff]}"] if f.runoff else []
+    if f.slope_method == "plane_fit" and f.slope_points:
+        slope_cmp.append(f"średni spadek całej działki z {f.slope_points} punktów wysokości")
+    add("ev_slope", "Spadek terenu na działce", f.slope, SRC_DEM, "%", "; ".join(slope_cmp) or None)
+    if f.spot_drop is not None:
+        add("ev_low_spot", "Najniższe miejsce działki (zbiera wodę)", f.spot_drop, SRC_DEM, "m niżej",
+            "niż najwyższy punkt działki; zaznaczone na mapie" + ("; leży przy granicy działki"
+                                                                 if f.spot_near_edge else ""))
     if f.nearby_water is not None:
         if f.nearby_water:
             what = WATER_TYPE_PL.get(f.water_type or "", "ciek lub zbiornik")
@@ -298,8 +359,12 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
         return out
 
     scene = f"zdjęcie z {f.ndvi_date}" if f.ndvi_date else "zdjęcie satelitarne"
+    off_season = ""
+    if f.crop_season and f.scene_month is not None and f.scene_month not in f.crop_season:
+        off_season = ("; zdjęcie poza sezonem wzrostu wybranej uprawy – zieleń może pochodzić z innej rośliny "
+                      "(np. międzyplonu lub oziminy), a jej brak jest wtedy normalny")
     add("ev_ndvi", "Kondycja roślin z satelity (NDVI)", f.ndvi, SRC_SAT,
-        comparison=f"{scene}; 0 = goła gleba, >0,6 = gęsta zieleń{typical(f.hist_ndvi)}")
+        comparison=f"{scene}; 0 = goła gleba, >0,6 = gęsta zieleń{typical(f.hist_ndvi)}{off_season}")
     add("ev_ndmi", "Woda w roślinach z satelity (NDMI)", f.ndmi, SRC_SAT,
         comparison=f"{scene}; poniżej 0 = rośliny mają mało wody, powyżej 0,3 = dobrze nawodnione"
                    f"{typical(f.hist_ndmi, check=True)}")
@@ -320,6 +385,13 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
         add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
             {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
             SRC_CROPS, comparison=crop["criticalPhasePl"])
+        deficit, need = f.crop_deficit30, f.crop_water_need30
+        if deficit is not None and need is not None and deficit > 0:
+            add("ev_crop_deficit", "Niedobór wody dla uprawy (30 dni)", round(deficit), SRC_METEO,
+                "l/m² (= mm)",
+                f"uprawa potrzebowała ok. {fmt(need, 0)} mm (parowanie {fmt(f.et0_30d, 0)} mm × współczynnik "
+                f"uprawy {fmt(f.crop_kc, 2)} wg FAO-56, czyli ok. {fmt(need / 30)} mm dziennie), "
+                f"a spadło {fmt(f.precip30, 0)} mm")
     return ev
 
 

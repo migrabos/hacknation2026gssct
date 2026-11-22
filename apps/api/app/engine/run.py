@@ -84,6 +84,7 @@ def run_engine(
 
     crop = get_crop(crop_id)
     f = extract_facts(bundle, crop)
+    f.month = analysis_date.month
 
     assessment = assess_moisture(f)  # raises without meteo
     causes = detect_causes(assessment=assessment, f=f)

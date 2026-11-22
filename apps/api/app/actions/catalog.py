@@ -75,8 +75,8 @@ ACTIONS: dict[str, ActionEntry] = {
     "irrigation_timing": {
         "id": "irrigation_timing", "kind": "irrigation",
         "titlePl": "Podlewanie tylko w kluczowym momencie",
-        "descriptionPl": "Jeśli masz dostęp do wody, podlej uprawę w jej najbardziej wrażliwej fazie. "
-                         "Podlewaj rano lub wieczorem, mniejszymi dawkami.",
+        "descriptionPl": "Jeśli masz dostęp do wody, podlewaj w najbardziej wrażliwej fazie uprawy – "
+                         "rzadziej, ale pełną dawką. Ile litrów i co ile dni – niżej.",
         "costLevel": "high", "timeframePl": "w najbliższych 2–3 tygodniach",
         "triggers": ["precip_deficit", "crop_sensitivity"], "basePriority": 1,
     },

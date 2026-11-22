@@ -5,6 +5,7 @@ import { useEffect, useMemo } from "react";
 import type { Confidence, Evidence, NarrativeSectionId, Recommendation, Report, Source } from "@/lib/types";
 import {
   CONFIDENCE_LABEL,
+  COST_LABEL,
   MOISTURE_SCALE,
   RISK_SCALE,
   SOURCE_MODE_LABEL,
@@ -172,6 +173,8 @@ export default function ReportView({ report }: { report: Report }) {
           <dd>{formatDateTime(report.generatedAt)}</dd>
         </div>
       </dl>
+
+      <QuickSummary report={report} />
 
       <div className="report-overview">
         <Map plot={plot} height={300} />
@@ -377,6 +380,49 @@ export default function ReportView({ report }: { report: Report }) {
 
 // ---------------------------------------------------------------------------
 
+/** "In 5 seconds" box: restates structured fields only (headlines, top actions) – no new numbers. */
+function QuickSummary({ report }: { report: Report }) {
+  const { moistureAssessment: ma, recommendations: rec } = report;
+  const top = [
+    ...[...rec.retention].sort((a, b) => a.priority - b.priority).slice(0, 2).map((r) => ({ r, href: "#retencja" })),
+    ...[...rec.agrotech].sort((a, b) => a.priority - b.priority).slice(0, 1).map((r) => ({ r, href: "#agrotechnika" })),
+    ...(rec.irrigation ?? []).slice(0, 1).map((r) => ({ r, href: "#nawadnianie" })),
+  ];
+  return (
+    <section className="quick-summary" aria-label="Najważniejsze w skrócie">
+      <div className="quick-summary-grid">
+        <div>
+          <div className="assess-kicker">Teraz</div>
+          <strong>{ma.current.headline}</strong>
+        </div>
+        <div>
+          <div className="assess-kicker">Przez ostatnie lata</div>
+          <strong>{ma.susceptibility.headline}</strong>
+        </div>
+      </div>
+      {top.length > 0 ? (
+        <>
+          <div className="assess-kicker" style={{ marginTop: 14 }}>Co zrobić najpierw</div>
+          <ol className="quick-summary-actions">
+            {top.map(({ r, href }) => (
+              <li key={r.actionId}>
+                <a href={href}>{r.title}</a>
+                <span className="muted">
+                  {" "}
+                  {r.costLevel ? `· ${COST_LABEL[r.costLevel]}` : ""}
+                  {r.timeframe ? ` · ${r.timeframe}` : ""}
+                </span>
+              </li>
+            ))}
+          </ol>
+        </>
+      ) : (
+        <p style={{ margin: "10px 0 0" }}>Nie widzimy potrzeby dodatkowych działań na tej działce.</p>
+      )}
+    </section>
+  );
+}
+
 function Section({
   n,
   id,
@@ -453,11 +499,10 @@ function RecList({
             <div className="rec-head">
               <h3>{r.title}</h3>
             </div>
-            {r.timeframe && (
-              <div className="rec-tags">
-                <span className="badge">kiedy: {r.timeframe}</span>
-              </div>
-            )}
+            <div className="rec-tags">
+              {r.timeframe && <span className="badge">kiedy: {r.timeframe}</span>}
+              {r.costLevel && <span className="badge">{COST_LABEL[r.costLevel]}</span>}
+            </div>
             <p style={{ marginBottom: 0 }}>{r.description}</p>
             <p className="why">{r.why}</p>
             <EvidenceDetails refs={r.evidenceRefs} evidence={evidence} sources={sources} />
