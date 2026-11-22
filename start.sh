@@ -41,12 +41,36 @@ command -v npm  >/dev/null 2>&1 || die "Brak npm (instaluje się razem z Node.js
 command -v curl >/dev/null 2>&1 || die "Brak curl."
 ok "Python: $($PY --version 2>&1) · Node: $(node --version)"
 
-# --- porty wolne? ---------------------------------------------
-for p in $API_PORT $WEB_PORT; do
-  # curl exit 7 = nikt nie nasłuchuje; każdy inny wynik (też timeout) = port zajęty
-  curl -s -o /dev/null --max-time 2 "http://127.0.0.1:$p"
-  [ $? -eq 7 ] || die "Port $p jest zajęty — zamknij poprzednie uruchomienie (lub program na tym porcie)."
-done
+# --- porty: próbne zajęcie portu (tak jak zrobi to serwer) ---------
+# Wykrywa też porty zarezerwowane przez Windows (Hyper-V/WSL), których nie widać jako "zajęte".
+port_free() {
+  "$PY" -c '
+import os, socket, sys
+s = socket.socket()
+if os.name != "nt":
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+try:
+    s.bind(("127.0.0.1", int(sys.argv[1])))
+except OSError:
+    sys.exit(1)
+' "$1" 2>/dev/null
+}
+pick_port() {
+  local p
+  for p in $(seq "$1" $(( $1 + 20 ))); do
+    port_free "$p" && { echo "$p"; return 0; }
+  done
+  return 1
+}
+WANT_API=$API_PORT; WANT_WEB=$WEB_PORT
+API_PORT=$(pick_port $WANT_API) || die "Brak wolnego portu dla API w zakresie $WANT_API–$((WANT_API + 20))."
+WEB_PORT=$(pick_port $WANT_WEB) || die "Brak wolnego portu dla frontendu w zakresie $WANT_WEB–$((WANT_WEB + 20))."
+[ "$API_PORT" = "$WANT_API" ] || warn "Port $WANT_API niedostępny — API wystartuje na $API_PORT"
+[ "$WEB_PORT" = "$WANT_WEB" ] || warn "Port $WANT_WEB niedostępny — frontend wystartuje na $WEB_PORT"
+
+# Frontend musi znać port API, a API musi wpuścić frontend z jego portu (env ma pierwszeństwo przed plikami .env).
+export NEXT_PUBLIC_API_URL="http://localhost:$API_PORT"
+[ "$WEB_PORT" = "$WANT_WEB" ] || export CORS_ORIGINS="http://localhost:$WEB_PORT,http://127.0.0.1:$WEB_PORT"
 
 # --- pliki .env -----------------------------------------------
 [ -f "$API_DIR/.env" ]       || { cp "$API_DIR/.env.example" "$API_DIR/.env"; warn "Utworzono apps/api/.env z przykładu"; }

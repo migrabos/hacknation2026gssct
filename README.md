@@ -46,7 +46,7 @@ Zatrzymanie: **Ctrl+C** (Linux/macOS) albo **Enter** w oknie skryptu (Windows).
 
 Najczęstsze problemy:
 
-- **„Port 8000 jest zajęty”** — działa poprzednie API. Linux/macOS: `pkill -f "uvicorn app.main"` (gdy nie pomaga: `ss -ltnp 'sport = :8000'` i `kill -9 <pid>`). Windows: `netstat -ano | findstr :8000`, potem `taskkill /PID <pid> /F`.
+- **„Port 8000 niedostępny — API wystartuje na 8001”** — to nie błąd. Skrypt sam wybiera wolny port i przekazuje go frontendowi. Na Windowsie port 8000 często blokuje Hyper-V/WSL (lista zablokowanych: `netsh int ipv4 show excludedportrange protocol=tcp`). Jeśli to poprzednie API, zamknij je: Linux/macOS `pkill -f "uvicorn app.main"`, Windows `netstat -ano | findstr :8000`, potem `taskkill /PID <pid> /F`.
 - **„.venv pochodzi z innego systemu”** — repo było uruchamiane raz na Windows, raz w WSL. Usuń `apps/api/.venv` i uruchom ponownie.
 - **PowerShell blokuje skrypt** — uruchamiaj przez `start.bat`, który omija tę blokadę tylko dla tego uruchomienia.
 
