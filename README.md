@@ -16,9 +16,7 @@
 
 | | |
 |---|---|
-| **Zespół** | [UZUPEŁNIJ: Nazwa Zespołu] |
-| **Film prezentacyjny (≤ 3 min)** | [UZUPEŁNIJ: Link do wideo do 3 min] |
-| **Prezentacja PDF (≤ 10 slajdów)** | [UZUPEŁNIJ: Link lub ścieżka do prezentacji PDF] |
+| **Zespół** | Sąsieci |
 | **Przykładowy raport z prototypu** | surowy wynik `/analyze` z prawdziwego uruchomienia: [`fixtures/evidence_sample.json`](fixtures/evidence_sample.json) |
 
 > [!IMPORTANT]
