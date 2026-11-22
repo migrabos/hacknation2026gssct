@@ -151,8 +151,35 @@ class CurrentBlock(AssessmentBlock):
     level: MoistureLevel
 
 
+class RiskBar(BaseModel):
+    """One bar of the "when does this plot run short of water" chart."""
+
+    label: str                       # SMSR window "21.V–20.VII" or month name
+    value: float | None = None       # years below the IUNG threshold (smsr) / median KBW mm (kbw_monthly)
+    of: int = 0                      # years compared
+    thresholdMm: float | None = None  # IUNG KBW threshold for crop × soil (smsr only)
+    risky: bool = False              # counted into the risk period
+    critical: bool = False           # overlaps the crop's most water-sensitive months
+
+
+class RiskWindow(BaseModel):
+    """When in the season water shortage is most likely on this plot (last 10 years)."""
+
+    method: Literal["smsr", "kbw_monthly"]
+    text: str                        # farmer-language sentence, restates the numbers below
+    months: list[int] = Field(default_factory=list)          # months (1–12) inside the risk period
+    criticalOverlap: list[int] = Field(default_factory=list)  # ∩ crop critical months
+    yearsHit: int | None = None      # peak: years below the threshold in the worst window
+    yearsTotal: int | None = None
+    peakLabel: str | None = None
+    unit: str                        # meaning of RiskBar.value
+    bars: list[RiskBar] = Field(default_factory=list)
+    evidenceRefs: list[str] = Field(default_factory=list)
+
+
 class SusceptibilityBlock(AssessmentBlock):
     level: RiskLevel | Literal["insufficient_data"]
+    riskWindow: RiskWindow | None = None
 
 
 class MoistureAssessment(BaseModel):

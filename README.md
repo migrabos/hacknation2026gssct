@@ -91,7 +91,7 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza_ziarno, 
 |----------|---------|---------|
 | `CORS_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Allowed browser origins (`*` = any) |
 | `ADAPTER_CACHE_DIR` | `apps/api/cache` | Disk cache for adapter responses |
-| `ENGINE_VERSION` | `0.3.0` | Report meta |
+| `ENGINE_VERSION` | `0.4.0` | Report meta |
 
 ---
 
@@ -110,6 +110,9 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza_ziarno, 
 | SoilGrids 2.0 | live | static global model (0–100 cm) |
 | Sentinel-2 L2A (Earth Search STAC) | live | clear scene within 21 days before the analysis date; same window in the 5 previous years for the baseline |
 | EDO CDI | live | latest 10-day map at the analysis date |
+| Soil moisture (ERA5-Land via Open-Meteo archive, 0–100 cm) | live, same request as meteo | 7-day mean at the analysis date (latest day with data, ≤ 10 days lag) vs the same days in 10 previous years |
+| IUNG soil drought category (WMS `Susza:katgl_landuse2024`) | live per plot | IUNG-PIB SMSR map, layer 2024; pixels inside the parcel, ~10 m |
+| IUNG SMSR KBW thresholds | static table in code | `apps/api/app/crops/smsr.py`, MRiRW regulation of 11.04.2019 (Dz.U. 2019 poz. 739) |
 | Village (obręb) search index `apps/api/plot/data/regions_pl.json.gz` | **precomputed** | PRG GUGiK WFS, built 2026-11-21 (`scripts/build_region_index.py`) |
 | Fallback index `apps/api/plot/data/obreby.json.gz` | **precomputed** | PRG GUGiK WFS, fetched 2026-11-21 (`plot/build_obreby_index.py`) |
 | Crop table (sensitivity, season months, critical months, Kc) | static table in code | `apps/api/app/crops/catalog.py` (FAO-33 Ky, FAO-56 Kc, IUNG crop groups) |

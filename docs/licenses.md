@@ -35,6 +35,9 @@ No generative LLM and no ML model in the runtime. Polish narrative sections are 
 | OpenFreeMap vector tiles | Hydro fallback (OSM-derived) | OSM data ODbL 1.0; OpenFreeMap free, no key |
 | OpenStreetMap tiles | Basemap in the web map | ODbL 1.0 data, OSM Tile Usage Policy (light use only; self-host or use a provider for production) |
 | IUNG SMSR / MRiRW 2019 (Dz.U. 2019 poz. 739) | Crop×soil KBW drought thresholds | Regulation tables; https://susza.iung.pulawy.pl/progi/ |
+| IUNG-PIB SMSR soil category map (WMS `sgeo.iung.pl/geoserver/Susza/wms`, layer `katgl_landuse2024`) | Soil drought category I–IV per plot | Public WMS of IUNG-PIB (prepared for MRiRW); no explicit licence published – used with attribution, https://susza.iung.pulawy.pl/mapa-kategorii/ |
+| ERA5-Land soil moisture (Copernicus C3S) via Open-Meteo | Root-zone soil water vs 10 years | CC BY 4.0 (Open-Meteo / Copernicus) |
+| USDA NRCS TR-55 (1986), NEH 630 ch. 7 & 10 | SCS Curve Number runoff, hydrologic soil groups | US Government work, public domain |
 | FAO Irrigation & Drainage Paper 33 | Seasonal crop Ky (yield response) | FAO open publication; cite Doorenbos & Kassam 1979 |
 | FAO-56 (Allen et al. 1998) | Mid-season Kc for crop water need | FAO open publication |
 

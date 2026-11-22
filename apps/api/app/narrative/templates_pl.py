@@ -13,12 +13,15 @@ def build_template_narrative(report: Report) -> Narrative:
     ma = report.moistureAssessment
     recs = report.recommendations
 
+    rw = ma.susceptibility.riskWindow
     sections = [
         NarrativeSection(
             id="assessment",
             text=f"{ma.current.headline}. {ma.susceptibility.headline}. "
-                 f"Pierwsza ocena dotyczy dnia {report.analysisDate}, druga – ostatnich lat.",
-            evidenceRefs=_refs(ma.current.evidenceRefs, ma.susceptibility.evidenceRefs),
+                 f"Pierwsza ocena dotyczy dnia {report.analysisDate}, druga – ostatnich lat."
+                 + (f" {rw.text}" if rw else ""),
+            evidenceRefs=_refs(ma.current.evidenceRefs, ma.susceptibility.evidenceRefs,
+                               rw.evidenceRefs if rw else []),
         ),
         NarrativeSection(
             id="causes",

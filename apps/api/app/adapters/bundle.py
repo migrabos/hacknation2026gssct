@@ -19,6 +19,9 @@ Value keys the engine reads (all nullable):
     sat_history (optional): years[{year, scene_date, ndvi_mean, ndmi_mean}], n_years,
              ndvi_median, ndmi_median  (same 21-day window, previous years)
     drought: cdi_class (0–3), cdi_label, dekad_start
+    meteo (extra): soil_moisture_* (ERA5-Land, % vol.), kbw_monthly_10y, kbw_smsr_windows,
+             rain_events_10y {years, days[mm], precip_mean_year}
+    iung_soil (optional): category (1–4), category_share_pct, dominant_code, dominant_label
 """
 
 from __future__ import annotations
@@ -37,3 +40,5 @@ class AdapterBundle:
     mode: Literal["live"] = "live"
     # None = not fetched (tests / old callers) -> no source row, no missingData
     sat_history: dict[str, Any] | None = field(default=None)
+    # IUNG soil drought category map (adapters/iung_soil.py); None = not fetched
+    iung_soil: dict[str, Any] | None = field(default=None)

@@ -16,6 +16,7 @@ from datetime import date
 from typing import Literal
 
 SoilCat = Literal[1, 2, 3, 4]
+SoilCatSource = Literal["iung_map", "awc"]
 
 SMSR_SOURCE_URL = "https://susza.iung.pulawy.pl/progi/"
 SMSR_SOURCE_NAME = "IUNG SMSR – progi KBW (MRiRW 2019)"
@@ -135,6 +136,13 @@ AWC_CAT_I_MAX = 127.5
 AWC_CAT_II_MAX = 169.9
 AWC_CAT_III_MAX = 202.5
 
+# Rolling 60-day KBW is compared with the SMSR window that ends nearest to the analysis date,
+# but only if that window ends within this many days – otherwise the two periods differ too much.
+MAX_PERIOD_GAP_DAYS = 10
+# A SMSR window is a "risk period" for this plot when the drought line was crossed in at least
+# this many of the last 10 years (3/10 = roughly one year in three).
+RISK_MIN_YEARS = 3
+
 
 @dataclass(frozen=True)
 class SmsrMatch:
@@ -146,6 +154,21 @@ class SmsrMatch:
     kbw_60d_mm: float
     below_threshold: bool
     margin_mm: float  # kbw − threshold; negative ⇒ drier than SMSR drought line
+    soil_source: SoilCatSource = "awc"
+
+
+@dataclass(frozen=True)
+class SmsrWindowStat:
+    """One SMSR window over the last 10 years: how often KBW fell below the crop×soil threshold."""
+    index: int
+    label: str
+    start_md: tuple[int, int]
+    end_md: tuple[int, int]
+    threshold_mm: float | None
+    years_below: int
+    years_total: int
+    below_years: tuple[int, ...]
+    median_kbw_mm: float | None
 
 
 def soil_category_from_awc(awc_mm: float | None) -> SoilCat | None:
@@ -182,18 +205,15 @@ def pick_period_index(analysis_date: date) -> int | None:
         dist = abs((analysis_date - end).days)
         if dist < best_dist:
             best_i, best_dist = i, dist
-    return best_i
+    return best_i if best_dist <= MAX_PERIOD_GAP_DAYS else None
 
 
 def lookup_threshold(crop_row: str, soil_cat: SoilCat, period_index: int) -> float | None:
     row = _THRESHOLDS.get(crop_row)
     if not row:
         return None
-    # Sugar beet: soil I not indicated → fall back to II (same calendar thresholds scale).
-    cat = soil_cat
-    if crop_row == "burak" and cat == 1:
-        cat = 2
-    vals = row.get(cat)
+    # "-" in the regulation (sugar beet on soil I) = crop not indicated → no threshold, never borrowed.
+    vals = row.get(soil_cat)
     if not vals or period_index < 0 or period_index >= len(vals):
         return None
     return vals[period_index]
@@ -205,11 +225,16 @@ def evaluate_smsr(
     analysis_date: date,
     kbw_60d: float | None,
     awc_mm: float | None,
+    soil_cat: SoilCat | None = None,
 ) -> SmsrMatch | None:
-    """Compare 60-day KBW to the MRiRW/IUNG threshold for this crop, soil, and period."""
+    """Compare 60-day KBW to the MRiRW/IUNG threshold for this crop, soil, and period.
+
+    `soil_cat` from the IUNG category map wins; the SoilGrids AWC proxy is only a fallback.
+    """
     if crop_id not in _THRESHOLDS or kbw_60d is None:
         return None
-    soil = soil_category_from_awc(awc_mm)
+    soil = soil_cat or soil_category_from_awc(awc_mm)
+    source: SoilCatSource = "iung_map" if soil_cat else "awc"
     if soil is None:
         return None
     period_i = pick_period_index(analysis_date)
@@ -228,7 +253,42 @@ def evaluate_smsr(
         kbw_60d_mm=kbw_60d,
         below_threshold=kbw_60d < thr,
         margin_mm=round(margin, 1),
+        soil_source=source,
     )
+
+
+def crop_not_indicated(crop_id: str, soil_cat: SoilCat | None) -> bool:
+    """True when the regulation marks the crop as not indicated on this soil ("-": sugar beet, soil I)."""
+    row = _THRESHOLDS.get(crop_id)
+    return bool(row and soil_cat and all(v is None for v in row.get(soil_cat, [])))
+
+
+def smsr_history(crop_id: str, soil_cat: SoilCat | None, windows: list[dict]) -> list[SmsrWindowStat]:
+    """Per SMSR window: in how many of the last 10 years KBW fell below this crop×soil threshold.
+
+    `windows` = meteo adapter `kbw_smsr_windows` ([{index, by_year: [{year, kbw}]}]).
+    Windows without a threshold ("x": no yield loss expected then) are kept with threshold None.
+    """
+    if crop_id not in _THRESHOLDS or soil_cat is None:
+        return []
+    out: list[SmsrWindowStat] = []
+    for w in windows:
+        i = int(w.get("index", -1))
+        if not 0 <= i < len(PERIODS):
+            continue
+        rows = [r for r in w.get("by_year") or [] if r.get("kbw") is not None]
+        thr = lookup_threshold(crop_id, soil_cat, i)
+        below = tuple(sorted(int(r["year"]) for r in rows if thr is not None and r["kbw"] < thr))
+        vals = sorted(float(r["kbw"]) for r in rows)
+        med = None
+        if vals:
+            n = len(vals)
+            med = round(vals[n // 2] if n % 2 else (vals[n // 2 - 1] + vals[n // 2]) / 2, 1)
+        label, start_md, end_md = PERIODS[i]
+        out.append(SmsrWindowStat(index=i, label=label, start_md=start_md, end_md=end_md, threshold_mm=thr,
+                                  years_below=len(below), years_total=len(rows), below_years=below,
+                                  median_kbw_mm=med))
+    return out
 
 
 def soil_cat_label(cat: SoilCat) -> str:

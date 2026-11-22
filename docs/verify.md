@@ -38,7 +38,11 @@ In `apps/api/app/engine/assess.py` / `causes.py`:
 | `bare_soil` | Sentinel-2: ≥ 50 % of clear plot pixels with NDVI < 0.2, scene in VIII–III (not for winter cereals / rapeseed in VIII–XI = fresh sowing), agricultural land |
 
 Moisture level (now): point score from precip ratio, KBW percentile, dry spell, AWC, EDO CDI, SMSR 60-day threshold breach → `very_dry` < 32 ≤ `dry` < 55 ≤ `normal` < 80 ≤ `wet`.
+<<<<<<< Updated upstream
 Susceptibility (multi-year): mean summer (VI–VIII) KBW, share of summers with KBW < −150 mm, 12-month precip anomaly, soil storage, and a small FAO Ky crop modifier (`CROP_SENS_SUS_WEIGHT` = 5, max ≈ +5) → `low` < 40 ≤ `medium` < 62 ≤ `high`. Climate and soil dominate; crop is secondary.
+=======
+Susceptibility (multi-year) = weighted mean of 0–100 sub-scores (missing parts drop out, weights rescaled, confidence lowered): IUNG drought line crossed in the worst SMSR window (share of 10 years; 5/10 = 100) × 0,35 · summer (VI–VIII) KBW on the Polish range (−50 mm = 0, −200 mm = 100) × 0,25 · share of dry summers (KBW < −150 mm) × 0,15 · soil (100 − storage score) × 0,25 · crop sensitivity × 0,15 only when the crop has no IUNG thresholds → `low` < 30 ≤ `medium` < 55 ≤ `high`. Calibration check on 14 locations across Poland (2025-07-15): Kujawy/Wielkopolska high, loess and Żuławy low–medium, Podhale low. The 12-month precipitation anomaly is not part of it (it is the current year, not a property of the plot).
+>>>>>>> Stashed changes
 
 ### Crop weights are not hand-tuned
 
@@ -89,6 +93,20 @@ Effect on the current moisture score (`satellite_moisture_signal` in `assess.py`
 A negative satellite signal also raises `precip_deficit` confidence by 0.1 and adds `ev_ndmi` to it.
 
 Inspect `causes[].evidenceRefs` and matching adapter `values` in the response.
+
+### Soil moisture, IUNG soil category, risk period, runoff (engine 0.4)
+
+| Value | Rule | Where |
+|-------|------|-------|
+| `ev_soil_moisture` | ERA5-Land daily soil water (Open-Meteo archive `soil_moisture_0_to_7cm_mean`, `7_to_28cm`, `28_to_100cm`), thickness-weighted 0–100 cm, 7-day mean ending at the latest day with data (≤ 10 days before the analysis date). Percentile = % of the same 7 days in the 10 previous years that were ≤ now (raw list: `soil_moisture_prev_years`) | `adapters/open_meteo.py` (`soil_moisture_metrics`) |
+| Current score | percentile ≤ 10 → −12, ≤ 25 → −6, ≥ 75 → +6; ≤ 25 also triggers / confirms `precip_deficit` | `assess.py` (`SM_PCT_*`), `causes.py` |
+| `ev_soil_category` | IUNG map `Susza:katgl_landuse2024` (GetMap PNG over the parcel, colours = official legend; dominant category 1–4 among pixels inside the parcel). Fallback only if the map gives no category: AWC with IUNG WOD limits (127,5 / 170 / 202,5 mm). Organic soils: no SMSR threshold, no fallback | `adapters/iung_soil.py`, `facts.py` |
+| SMSR thresholds | regulation table, checked cell-by-cell against https://susza.iung.pulawy.pl/progi/ on 2026-11-22. "-" (sugar beet, soil I) = crop not indicated → no threshold, warning in limitations | `app/crops/smsr.py` |
+| Current SMSR check | rolling 60-day KBW vs the window ending nearest the analysis date, only if it ends within ±10 days | `smsr.pick_period_index` |
+| `ev_risk_window` / `riskWindow` | KBW (P − ET0) summed over each of the 14 exact SMSR windows in the last 10 years in which the window had ended (`kbw_smsr_windows`); window is a risk period if KBW < threshold(crop, soil) in ≥ 3 of 10 years. Peak = most years (tie → earliest). Fallback for crops without thresholds: 3 months with the most negative median monthly KBW (`kbw_monthly_10y`) | `engine/risk_window.py` |
+| Susceptibility | + 16 × (years below threshold in the worst window / years compared) | `assess.py` (`SMSR_HIST_WEIGHT`) |
+| `ev_runoff_volume` | SCS-CN: Q = (P − 0,2S)² / (P + 0,8S), S = 25400/CN − 254, for each day with ≥ 3 mm rain and mean T > 0 °C in the last 10 years; CN from TR-55 tables 2-2b/2-2c (condition "good") by crop cover and soil group (NEH 630 ch. 7 texture rules on SoilGrids topsoil). Volume = mm × ha × 10 | `engine/runoff.py` |
+| `ev_pond_volume` | runoff of the 5th-largest daily rain in 10 years (≈ once in 2 years) over the whole plot; example area at 1,5 m depth | `engine/runoff.py` |
 
 ## 4. Evidence IDs on the fixture
 

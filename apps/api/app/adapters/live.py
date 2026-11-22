@@ -1,4 +1,5 @@
-"""Live adapters: ULDK plot → (terrain+hydro ‖ meteo ‖ soil ‖ Sentinel-2 now + previous years ‖ EDO) in parallel.
+"""Live adapters: ULDK plot → (terrain+hydro ‖ meteo ‖ soil ‖ Sentinel-2 now + previous years ‖ EDO ‖ IUNG soil
+category) in parallel.
 
 Raises plot.resolver.PlotError subclasses when the plot itself cannot be resolved
 (no plot = no report). Every other source fails soft inside `run_adapter`.
@@ -12,11 +13,12 @@ from datetime import date
 from typing import Any
 
 from adapters.drought_edo import fetch_drought_context
+from adapters.iung_soil import fetch_iung_soil_category
 from adapters.open_meteo import fetch_meteo
 from adapters.sentinel_stac import fetch_sentinel, fetch_sentinel_history
 from adapters.soilgrids import fetch_soil
 from app.adapters.bundle import AdapterBundle
-from plot.resolver import add_plot_context, resolve_plot, resolve_point
+from plot.resolver import add_plot_context, resolve_plot, resolve_point, to_2180
 
 
 # The multi-year satellite baseline is a bonus, never worth a slow report: it runs as a
@@ -63,12 +65,13 @@ async def fetch_live(
         now = await fetch_sentinel(base["bbox"], d, base["geometry"])
         return now, await history_or_pending(base["bbox"], d, base["geometry"])
 
-    plot, meteo, soil, (sat, sat_history), drought = await asyncio.gather(
+    plot, meteo, soil, (sat, sat_history), drought, iung_soil = await asyncio.gather(
         add_plot_context(base),
         fetch_meteo(base["centroid"], d),
         fetch_soil(base["centroid"]),
         satellite(),
         fetch_drought_context(base["centroid"], d),
+        fetch_iung_soil_category(base["plotId"], to_2180(base["geometry"])),
     )
     return AdapterBundle(plot=plot, meteo=meteo, soil=soil, sat=sat, drought=drought, mode="live",
-                         sat_history=sat_history)
+                         sat_history=sat_history, iung_soil=iung_soil)

@@ -12,7 +12,7 @@ class Settings(BaseSettings):
         extra="ignore",
     )
 
-    engine_version: str = "0.3.0"
+    engine_version: str = "0.4.0"
 
     # Comma-separated list of allowed browser origins ("*" = any)
     cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"

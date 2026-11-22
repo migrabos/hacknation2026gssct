@@ -10,9 +10,10 @@ from app.engine.assess import (
     NDMI_ANOM,
     PRECIP_RATIO_WATCH,
     SAND_HIGH,
+    SM_PCT_LOW,
     satellite_moisture_signal,
 )
-from app.engine.facts import RUNOFF_PL, SHOW_WEAK_PCT, Facts, fmt
+from app.engine.facts import RUNOFF_PL, SHOW_WEAK_PCT, Facts, fmt, sm_rank_pl
 from app.schemas.evidence import Cause, MoistureAssessment, confidence_label
 
 CAUSE_TITLES = {
@@ -40,6 +41,14 @@ def bare_soil_off_season(f: Facts) -> bool:
     return f.land_agri is not False
 
 
+def _runoff_sentence(f: Facts) -> str:
+    ro = f.runoff_est
+    if ro is None:
+        return ""
+    return (f" Szacujemy, że średnio ok. {fmt(ro.volume_year_m3, 0)} m³ wody rocznie ({fmt(ro.runoff_year_mm)} mm) "
+            "ucieka z działki po ulewach.")
+
+
 def _cause(id_: str, conf: float, refs: list[str], text: str) -> Cause:
     conf = round(min(0.95, conf), 2)
     return Cause(id=id_, title=CAUSE_TITLES[id_], explanation=text, confidence=confidence_label(conf),  # type: ignore[arg-type]
@@ -55,7 +64,8 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
     low_ratio = ratio is not None and ratio < PRECIP_RATIO_WATCH
     low_kbw = f.kbw_pct is not None and f.kbw_pct <= KBW_PCT_LOW
     long_dry = f.dry_spell is not None and f.dry_spell >= 10
-    if low_ratio or low_kbw or long_dry:
+    dry_soil = f.sm_pct is not None and f.sm_root is not None and f.sm_pct <= SM_PCT_LOW
+    if low_ratio or low_kbw or long_dry or dry_soil:
         conf = 0.5 + (0.25 if ratio is not None and ratio < 0.5 else 0.15 if low_ratio else 0)
         conf += 0.1 if low_kbw else 0
         conf += 0.1 if f.dry_spell is not None and f.dry_spell >= DRY_SPELL_DEFICIT else 0
@@ -68,6 +78,13 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
         if long_dry:
             parts.append(f"Od {fmt(f.dry_spell, 0)} dni nie było deszczu.")
         refs = ["ev_precip_30d", "ev_kbw_30d", "ev_dry_spell"]
+        if dry_soil:
+            conf += 0.1
+            refs.append("ev_soil_moisture")
+            lead = ("Model wilgotności gleby to potwierdza" if low_ratio or low_kbw or long_dry
+                    else "Ostatnie deszcze nie odbudowały zapasu wody w glebie")
+            parts.append(f"{lead}: w warstwie korzeni jest ok. {fmt(f.sm_root)}% wody "
+                         f"(zwykle o tej porze {fmt(f.sm_median)}%) – {sm_rank_pl(f.sm_pct)}.")
         sat_delta, _ = satellite_moisture_signal(f)
         if sat_delta < 0:  # independent confirmation from the satellite image
             conf += 0.1
@@ -103,9 +120,9 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
     if f.slope is not None and (f.slope >= 3.5 or f.runoff in ("medium", "high")):
         conf = 0.45 + (0.2 if f.slope >= 5 else 0.1) + (0.15 if f.runoff == "high" else 0.05)
         causes.append(_cause(
-            "runoff", conf, ["ev_slope"],
+            "runoff", conf, ["ev_slope", "ev_runoff_volume"],
             f"Działka ma spadek ok. {fmt(f.slope)}% (ryzyko spływu: {RUNOFF_PL.get(f.runoff or '', 'nieznane')}). "
-            "Przy ulewach część wody spływa po powierzchni, zamiast wsiąkać.",
+            "Przy ulewach część wody spływa po powierzchni, zamiast wsiąkać." + _runoff_sentence(f),
         ))
 
     # crop_sensitivity — FAO Ky (structural) and/or SMSR threshold breach (situational)

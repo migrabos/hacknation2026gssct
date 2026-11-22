@@ -162,7 +162,36 @@ export interface MoistureAssessment {
     summary: string;
     confidence: Confidence;
     evidenceRefs: string[];
+    /** When in the season water shortage is most likely here (last 10 years). */
+    riskWindow?: RiskWindow | null;
   };
+}
+
+/** One bar of the "when does this plot run short of water" chart. */
+export interface RiskBar {
+  /** SMSR window "21.V–20.VII" or short month name */
+  label: string;
+  /** smsr: years below the IUNG threshold · kbw_monthly: median monthly water balance (mm) */
+  value?: number | null;
+  /** years compared */
+  of: number;
+  thresholdMm?: number | null;
+  risky: boolean;
+  /** overlaps the crop's most water-sensitive months */
+  critical: boolean;
+}
+
+export interface RiskWindow {
+  method: "smsr" | "kbw_monthly";
+  text: string;
+  months: number[];
+  criticalOverlap: number[];
+  yearsHit?: number | null;
+  yearsTotal?: number | null;
+  peakLabel?: string | null;
+  unit: string;
+  bars: RiskBar[];
+  evidenceRefs: string[];
 }
 
 export interface Cause {

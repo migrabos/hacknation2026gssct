@@ -17,6 +17,8 @@ LICENSES: dict[str, str] = {
     "ISRIC SoilGrids": "ISRIC SoilGrids 2.0 – CC BY 4.0",
     "Sentinel-2": "Copernicus Sentinel data – licencja pełna, otwarta i bezpłatna (Rozp. UE 1159/2013); katalog STAC Element84 Earth Search",
     "OpenStreetMap": "© OpenStreetMap contributors – ODbL 1.0",
+    "IUNG-PIB": "IUNG-PIB, System Monitoringu Suszy Rolniczej (opracowanie na zlecenie MRiRW) – publiczna usługa WMS; "
+                "brak jawnej licencji, wykorzystanie z podaniem źródła",
     "EDO": "Copernicus Emergency Management Service – EDO, CC BY 4.0",
 }
 

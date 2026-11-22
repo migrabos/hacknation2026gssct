@@ -101,32 +101,48 @@ NO_IRRIGATION_NOTE = (
 )
 
 
+def _pond_where(f: Facts) -> tuple[str, list[str]]:
+    """Where on the plot a pond makes sense (lowest NMT spot, standing water, or why at all)."""
+    if f.spot_drop is not None:
+        where = " Leży ono przy granicy działki – sprawdź, czy woda nie ucieka do sąsiada lub rowu." \
+            if f.spot_near_edge else ""
+        return (f"Według modelu terenu najniższe miejsce działki leży {fmt(f.spot_drop)} m niżej niż najwyższe "
+                "(zaznaczone na mapie). Tam naturalnie spływa deszczówka – to najlepsze miejsce na oczko "
+                f"lub zagłębienie retencyjne.{where}", ["ev_low_spot"])
+    if _standing_water(f):
+        return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.water_pct, 0)}% działki pokrywa stojąca "
+                "woda. To naturalne najniższe miejsce – oczko zbierze tam wodę bez dużych prac ziemnych, "
+                "a reszta pola przestanie być podtapiana.", ["ev_standing_water"])
+    ds = f.dry_summers
+    if ds and ds[0]:
+        return (f"Suche lata powtarzają się tu często ({ds[0]} z {ds[1]}). Oczko zatrzyma wodę na miejscu "
+                "i poprawi wilgotność wokół.", ["ev_dry_summers"])
+    return "Oczko zatrzymuje wodę z ulew i roztopów, zamiast pozwolić jej spłynąć z działki.", ["ev_precip_30d"]
+
+
 def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]:
     """Plot-specific justification built only from facts. Returns (text, evidence refs)."""
+    ro = f.runoff_est
     if action_id == "buffer_strips":
+        vol = (f" Z działki ucieka średnio ok. {fmt(ro.volume_year_m3, 0)} m³ wody rocznie – pas zieleni "
+               "zatrzyma część z niej w polu." if ro is not None else "")
+        refs = ["ev_runoff_volume"] if ro is not None else []
         if f.slope is not None:
             return (f"Działka ma spadek {fmt(f.slope)}%, więc przy ulewach woda spływa. "
-                    "Pas zieleni ją spowalnia i pozwala wsiąknąć.", ["ev_slope"])
-        return "Pas zieleni zatrzymuje wodę spływającą po ulewach i chroni glebę przed erozją.", []
+                    "Pas zieleni ją spowalnia i pozwala wsiąknąć." + vol, ["ev_slope", *refs])
+        return "Pas zieleni zatrzymuje wodę spływającą po ulewach i chroni glebę przed erozją." + vol, refs
     if action_id == "ditch_retention":
         return (f"Mapa wskazuje {WATER_TYPE_PL[f.water_type]} w odległości ok. {fmt(f.water_dist, 0)} m "
                 "od działki. Sprawdź w terenie, czy odprowadza wodę z tego pola.", ["ev_water"])
     if action_id == "small_pond":
-        if f.spot_drop is not None:
-            where = " Leży ono przy granicy działki – sprawdź, czy woda nie ucieka do sąsiada lub rowu." \
-                if f.spot_near_edge else ""
-            return (f"Według modelu terenu najniższe miejsce działki leży {fmt(f.spot_drop)} m niżej niż najwyższe "
-                    "(zaznaczone na mapie). Tam naturalnie spływa deszczówka – to najlepsze miejsce na oczko "
-                    f"lub zagłębienie retencyjne.{where}", ["ev_low_spot"])
-        if _standing_water(f):
-            return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.water_pct, 0)}% działki pokrywa stojąca "
-                    "woda. To naturalne najniższe miejsce – oczko zbierze tam wodę bez dużych prac ziemnych, "
-                    "a reszta pola przestanie być podtapiana.", ["ev_standing_water"])
-        ds = f.dry_summers
-        if ds and ds[0]:
-            return (f"Suche lata powtarzają się tu często ({ds[0]} z {ds[1]}). Oczko zatrzyma wodę na miejscu "
-                    "i poprawi wilgotność wokół.", ["ev_dry_summers"])
-        return "Oczko zatrzymuje wodę z ulew i roztopów, zamiast pozwolić jej spłynąć z działki.", ["ev_precip_30d"]
+        why, refs = _pond_where(f)
+        if ro is not None and ro.pond_m3:
+            size = (f" (np. ok. {fmt(ro.pond_area_m2, 0)} m² przy głębokości 1,5 m)" if ro.pond_area_m2 else "")
+            why += (f" Żeby zatrzymać wodę z ulewy, która zdarza się tu średnio raz na 2 lata "
+                    f"({fmt(ro.storm_rain_mm, 0)} mm deszczu), oczko powinno mieć ok. {fmt(ro.pond_m3, 0)} m³ "
+                    f"pojemności{size}. Mniejsze też pomoże – zatrzyma część tej wody.")
+            refs = [*refs, "ev_pond_volume"]
+        return why, refs
     if action_id == "cover_crops":
         if "bare_soil" in cause_ids:
             return (f"Na zdjęciu satelitarnym z {f.ndvi_date} ok. {fmt(f.bare_pct, 0)}% działki to goła gleba. "

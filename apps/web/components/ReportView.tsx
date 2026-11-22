@@ -17,6 +17,7 @@ import {
 import Map from "./Map";
 import Notice from "./Notice";
 import RainChart from "./RainChart";
+import RiskChart from "./RiskChart";
 import { PrintIcon } from "./Icons";
 import { sourcePage, weatherProviders } from "@/lib/source-page";
 
@@ -225,6 +226,7 @@ export default function ReportView({ report }: { report: Report }) {
             <EvidenceDetails refs={ma.susceptibility.evidenceRefs} evidence={evidence} sources={sources} />
           </div>
         </div>
+        <RiskChart risk={ma.susceptibility.riskWindow} />
         <RainChart months={report.precipMonthly ?? []} analysisDate={report.analysisDate} source={sources.get("open_meteo")} />
         <NarrativeNote text={narrative.get("assessment")} />
       </Section>
@@ -399,6 +401,15 @@ function QuickSummary({ report }: { report: Report }) {
           <div className="assess-kicker">Przez ostatnie lata</div>
           <strong>{ma.susceptibility.headline}</strong>
         </div>
+        {ma.susceptibility.riskWindow?.peakLabel && (
+          <div>
+            <div className="assess-kicker">Najczęściej brakuje wody</div>
+            <strong>{ma.susceptibility.riskWindow.peakLabel}</strong>
+            {ma.susceptibility.riskWindow.yearsHit != null && ma.susceptibility.riskWindow.yearsTotal != null && (
+              <span className="muted"> · w {ma.susceptibility.riskWindow.yearsHit} z {ma.susceptibility.riskWindow.yearsTotal} lat</span>
+            )}
+          </div>
+        )}
       </div>
       {top.length > 0 ? (
         <>

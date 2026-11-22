@@ -39,6 +39,9 @@ if _API_KEY:  # paid tier: separate hosts, no shared daily limit
     FORECAST_URL = "https://customer-api.open-meteo.com/v1/forecast"
 
 DAILY_VARS = "precipitation_sum,et0_fao_evapotranspiration,temperature_2m_mean"
+# Volumetric soil water (m³/m³) of the reanalysis land model, daily means of three layers.
+SOIL_VARS = "soil_moisture_0_to_7cm_mean,soil_moisture_7_to_28cm_mean,soil_moisture_28_to_100cm_mean"
+SOIL_LAYERS_CM = (7.0, 21.0, 72.0)  # thickness of 0–7, 7–28, 28–100 cm
 POWER_PARAMS = "PRECTOTCORR,T2M,T2M_MAX,T2M_MIN,ALLSKY_SFC_SW_DWN,RH2M,WS2M"
 TZ = ZoneInfo("Europe/Warsaw")
 
@@ -49,10 +52,24 @@ DRY_DAY_MM = 1.0
 RECENT_DAYS = 7  # analysis dates this close to today get a short cache TTL
 FORECAST_PAST_DAYS = 10
 
+SOIL_WINDOW = 7          # days averaged for the soil-moisture reading (smooths single rain days)
+SOIL_MAX_LAG = 10        # reanalysis lag: use the latest day up to this many days before the analysis date
+RAIN_EVENT_MIN_MM = 3.0  # daily rain listed for the runoff (SCS-CN) estimate – smaller never runs off
+
+# IUNG SMSR six-dekad windows (start, end) as (month, day) – same as app/crops/smsr.PERIODS.
+SMSR_WINDOWS: tuple[tuple[tuple[int, int], tuple[int, int]], ...] = (
+    ((3, 21), (5, 20)), ((4, 1), (5, 31)), ((4, 11), (6, 10)), ((4, 21), (6, 20)),
+    ((5, 1), (6, 30)), ((5, 11), (7, 10)), ((5, 21), (7, 20)), ((6, 1), (7, 31)),
+    ((6, 11), (8, 10)), ((6, 21), (8, 20)), ((7, 1), (8, 31)), ((7, 11), (9, 10)),
+    ((7, 21), (9, 20)), ((8, 1), (9, 30)),
+)
+
 HTTP_TIMEOUT = httpx.Timeout(15.0, connect=5.0)
 
 # One day of data: (precipitation mm, ET0 mm, mean temperature °C); None = missing.
 Day = list  # [p, et0, t]
+# One day of soil water: (0–28 cm, 0–100 cm) volumetric m³/m³; None = missing.
+SoilDay = tuple
 
 
 # --------------------------------------------------------------------------- dates
@@ -125,17 +142,38 @@ def _parse_om_daily(body: dict[str, Any]) -> dict[date, Day]:
     }
 
 
-async def _fetch_archive(client: httpx.AsyncClient, lat: float, lng: float, start: date, end: date) -> dict[date, Day]:
+def _layer_mean(vals: tuple[float | None, ...], thick: tuple[float, ...]) -> float | None:
+    if any(v is None for v in vals):
+        return None
+    return sum(v * t for v, t in zip(vals, thick)) / sum(thick)
+
+
+def _parse_om_soil(body: dict[str, Any]) -> dict[date, SoilDay]:
+    """Thickness-weighted soil water of 0–28 cm (topsoil) and 0–100 cm (root zone)."""
+    d = body.get("daily") or {}
+    cols = [d.get(v) for v in SOIL_VARS.split(",")]
+    if not d.get("time") or any(c is None for c in cols):
+        return {}
+    out: dict[date, SoilDay] = {}
+    for t, a, b, c in zip(d["time"], *cols):
+        out[date.fromisoformat(t)] = (_layer_mean((a, b), SOIL_LAYERS_CM[:2]),
+                                      _layer_mean((a, b, c), SOIL_LAYERS_CM))
+    return out
+
+
+async def _fetch_archive(client: httpx.AsyncClient, lat: float, lng: float, start: date, end: date
+                         ) -> tuple[dict[date, Day], dict[date, SoilDay]]:
     params: dict[str, Any] = {
         "latitude": lat, "longitude": lng, "start_date": start.isoformat(), "end_date": end.isoformat(),
-        "daily": DAILY_VARS, "timezone": "Europe/Warsaw",
+        "daily": f"{DAILY_VARS},{SOIL_VARS}", "timezone": "Europe/Warsaw",
     }
     if _API_KEY:
         params["apikey"] = _API_KEY
     r = await client.get(ARCHIVE_URL, params=params)
     if r.status_code != 200:
         raise RuntimeError(f"Open-Meteo Archive {_om_error(r)}")
-    return _parse_om_daily(r.json())
+    body = r.json()
+    return _parse_om_daily(body), _parse_om_soil(body)
 
 
 async def _fetch_forecast_recent(client: httpx.AsyncClient, lat: float, lng: float) -> dict[date, Day]:
@@ -197,8 +235,9 @@ def _kbw(series: dict[date, Day], end: date, days: int) -> float | None:
     return None if p is None or e is None else round(p - e, 1)
 
 
-def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], list[str]]:
-    """Pure function: daily series + analysis date -> metrics and honest warnings."""
+def compute_metrics(series: dict[date, Day], d: date,
+                    soil: dict[date, SoilDay] | None = None) -> tuple[dict[str, Any], list[str]]:
+    """Pure function: daily series (+ soil water) + analysis date -> metrics and honest warnings."""
     errors: list[str] = []
     w30 = _window(series, d, WINDOW_30)
 
@@ -282,8 +321,122 @@ def compute_metrics(series: dict[date, Day], d: date) -> tuple[dict[str, Any], l
         "kbw_summer_mean_10y": round(sum(s["kbw"] for s in summers) / len(summers), 1) if summers else None,
         "dry_spell_days": dry,
         "temp_mean_30d": t30,
+        "kbw_monthly_10y": monthly_kbw_climatology(series, d),
+        "kbw_smsr_windows": smsr_window_kbw(series, d),
+        "rain_events_10y": rain_events(series, d),
     }
+    # Soil water is an extra signal: its absence is reported by the engine, not as a meteo error.
+    sm, sm_err = soil_moisture_metrics(soil or {}, d)
+    values.update(sm)
+    values["soil_moisture_note"] = " ".join(sm_err) or None
     return values, errors
+
+
+# --------------------------------------------------------------------------- soil water
+
+
+def _mean_window(soil: dict[date, SoilDay], end: date, idx: int, days: int = SOIL_WINDOW) -> float | None:
+    vals = [v[idx] for i in range(days) if (v := soil.get(end - timedelta(days=i))) and v[idx] is not None]
+    return sum(vals) / len(vals) if len(vals) >= days - 2 else None
+
+
+def soil_moisture_metrics(soil: dict[date, SoilDay], d: date) -> tuple[dict[str, Any], list[str]]:
+    """Root-zone soil water (0–100 cm, 7-day mean) at the analysis date vs the same days in 10 years.
+
+    Reanalysis output (model), published with a few days' delay: the latest day with data
+    up to SOIL_MAX_LAG days before `d` is used and its date is reported.
+    """
+    if not soil:
+        return {}, ["Brak wilgotności gleby z reanalizy (Open-Meteo nie zwróciło tych zmiennych "
+                    "lub użyto zapasowego źródła NASA POWER)."]
+    # Latest day that actually has data (so the reported date is a real reading, not a gap).
+    end = next((day for i in range(SOIL_MAX_LAG + 1)
+                if (v := soil.get(day := d - timedelta(days=i))) and v[1] is not None), None)
+    if end is None or _mean_window(soil, end, 1) is None:
+        return {}, [f"Brak wilgotności gleby z ostatnich {SOIL_MAX_LAG} dni przed dniem oceny."]
+    root, top = _mean_window(soil, end, 1), _mean_window(soil, end, 0)
+    prev = []
+    for k in range(1, YEARS_BACK + 1):
+        e = shift_years(end, -k)
+        v = _mean_window(soil, e, 1)
+        if v is not None:
+            prev.append({"year": e.year, "root_pct": round(v * 100, 1)})
+    vals = [p["root_pct"] for p in prev]
+    now = round(root * 100, 1)
+    pct = round(100.0 * sum(v <= now for v in vals) / len(vals), 1) if len(vals) >= 5 else None
+    errs = [] if pct is not None else ["Za mało lat (<5) do porównania wilgotności gleby."]
+    return {
+        "soil_moisture_date": end.isoformat(),
+        "soil_moisture_root_pct": now,            # % objętości, 0–100 cm, średnia 7 dni
+        "soil_moisture_top_pct": None if top is None else round(top * 100, 1),  # 0–28 cm
+        "soil_moisture_root_median_10y": round(median(vals), 1) if vals else None,
+        "soil_moisture_root_min_10y": min(vals) if vals else None,
+        "soil_moisture_root_max_10y": max(vals) if vals else None,
+        "soil_moisture_percentile_10y": pct,
+        "soil_moisture_prev_years": prev,
+    }, errs
+
+
+# --------------------------------------------------------------------------- multi-year windows
+
+
+def _kbw_range(series: dict[date, Day], first: date, last: date) -> float | None:
+    return _kbw(series, last, (last - first).days + 1)
+
+
+def monthly_kbw_climatology(series: dict[date, Day], d: date) -> list[dict[str, Any]]:
+    """KBW (P − ET0) of each calendar month in its last YEARS_BACK complete occurrences before `d`."""
+    out = []
+    for month in range(1, 13):
+        rows = []
+        year = d.year if date(d.year, month, monthrange(d.year, month)[1]) <= d else d.year - 1
+        for y in range(year, year - YEARS_BACK, -1):
+            v = _kbw_range(series, date(y, month, 1), date(y, month, monthrange(y, month)[1]))
+            if v is not None:
+                rows.append({"year": y, "kbw": v})
+        vals = [r["kbw"] for r in rows]
+        out.append({
+            "month": month,
+            "kbw_median": round(median(vals), 1) if vals else None,
+            "kbw_mean": round(sum(vals) / len(vals), 1) if vals else None,
+            "years": len(vals),
+            "by_year": rows,
+        })
+    return out
+
+
+def smsr_window_kbw(series: dict[date, Day], d: date) -> list[dict[str, Any]]:
+    """KBW of each IUNG SMSR 60-day window in its last YEARS_BACK occurrences that ended by `d`."""
+    out = []
+    for i, (start_md, end_md) in enumerate(SMSR_WINDOWS):
+        year = d.year if date(d.year, *end_md) <= d else d.year - 1
+        rows = []
+        for y in range(year, year - YEARS_BACK, -1):
+            v = _kbw_range(series, date(y, *start_md), date(y, *end_md))
+            if v is not None:
+                rows.append({"year": y, "kbw": v})
+        out.append({"index": i, "by_year": rows})
+    return out
+
+
+def rain_events(series: dict[date, Day], d: date) -> dict[str, Any]:
+    """Daily rain ≥ RAIN_EVENT_MIN_MM on non-frozen days in the last 10 years (input for SCS-CN runoff).
+
+    Days with mean temperature ≤ 0 °C are left out: precipitation is then mostly snow and
+    its runoff comes later with the thaw, which this simple estimate does not model.
+    """
+    first = shift_years(d, -YEARS_BACK) + timedelta(days=1)
+    days = [series.get(first + timedelta(days=i)) for i in range((d - first).days + 1)]
+    known = [r for r in days if r and r[0] is not None]
+    if len(known) < 0.9 * len(days):
+        return {}
+    return {
+        "years": YEARS_BACK,
+        "min_mm": RAIN_EVENT_MIN_MM,
+        "precip_mean_year": round(sum(r[0] for r in known) / YEARS_BACK, 1),
+        "days": [round(r[0], 1) for r in known
+                 if r[0] >= RAIN_EVENT_MIN_MM and (r[2] is None or r[2] > 0.0)],
+    }
 
 
 def _month_start(d: date, back: int) -> date:
@@ -349,9 +502,11 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
         notes: list[str] = []
         used: list[dict[str, str]] = []
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
+            soil: dict[date, SoilDay] = {}
             try:
-                series = await _fetch_archive(client, lat, lng, start, end)
-                used.append({"name": "Open-Meteo Historical Weather API (ERA5)", "url": ARCHIVE_URL})
+                series, soil = await _fetch_archive(client, lat, lng, start, end)
+                used.append({"name": "Open-Meteo Historical Weather API (ERA5, ERA5-Land – opady, parowanie, "
+                                     "wilgotność gleby)", "url": ARCHIVE_URL})
             except Exception as exc:
                 series = await _fetch_power(client, lat, lng, start, end)  # raises -> coverage none
                 used.append({"name": "NASA POWER Daily API (MERRA-2/CERES; ET0 wg FAO-56 liczone lokalnie)",
@@ -385,7 +540,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
         if d == today:
             notes.append("Analiza na dziś: opad z bieżącego dnia jest częściowo prognozą.")
 
-        values, errors = compute_metrics(series, d)
+        values, errors = compute_metrics(series, d, soil)
         values["location"] = [lat, lng]
         values["notes"] = notes
         values["data_sources"] = used
@@ -396,7 +551,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     res = await run_adapter(
         "Open-Meteo",
         ARCHIVE_URL,
-        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 4},
+        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 5},
         fetch,
         cache_ttl_sec=3600 if recent else None,
     )

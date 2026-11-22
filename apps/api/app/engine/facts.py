@@ -20,8 +20,12 @@ from app.crops.smsr import (
     SMSR_SOURCE_NAME,
     SMSR_SOURCE_URL,
     SmsrMatch,
+    SmsrWindowStat,
+    crop_not_indicated,
     evaluate_smsr,
+    smsr_history,
     soil_cat_label,
+    soil_category_from_awc,
 )
 from app.schemas.evidence import Evidence, MissingData, Source
 
@@ -39,6 +43,7 @@ SRC_ENGINE = "engine"
 SRC_CROPS = "crop_table"
 SRC_FAO = "fao_ky"
 SRC_SMSR = "smsr_kbw"
+SRC_IUNG_SOIL = "iung_soil"
 
 RUNOFF_PL = {"low": "niskie", "medium": "umiarkowane", "high": "wysokie"}
 WATER_TYPE_PL = {
@@ -53,6 +58,15 @@ def _num(v: Any) -> float | None:
         return None if v is None else float(v)
     except (TypeError, ValueError):
         return None
+
+
+def sm_rank_pl(pct: float) -> str:
+    """How unusual the soil water is vs the last 10 years, in farmer language."""
+    if pct <= 0:
+        return "tak sucho nie było w żadnym z ostatnich 10 lat"
+    if pct >= 100:
+        return "tak mokro nie było w żadnym z ostatnich 10 lat"
+    return f"bardziej sucho było w {fmt(pct, 0)}% z ostatnich 10 lat"
 
 
 def fmt(x: float, digits: int = 1) -> str:
@@ -128,6 +142,30 @@ class Facts:
     smsr: SmsrMatch | None = None
     month: int | None = None            # month of the analysis date (set by run_engine)
     area_ha: float | None = None
+    # soil water from the reanalysis land model (Open-Meteo / ERA5-Land), 0–100 cm, % of volume
+    sm_root: float | None = None
+    sm_top: float | None = None
+    sm_date: str | None = None
+    sm_median: float | None = None
+    sm_pct: float | None = None         # % of the last 10 years that were drier on the same days
+    sm_note: str | None = None
+    # IUNG SMSR soil category (map) + 10-year history of the SMSR windows
+    iung_cat: int | None = None         # 1–4 from the IUNG map (None = not agricultural / no map)
+    iung_cat_share: float | None = None
+    iung_label: str | None = None       # what the map shows when there is no category (forest, organic…)
+    iung_organic: bool = False
+    soil_cat: int | None = None         # category actually used (IUNG map, else AWC proxy)
+    soil_cat_source: str | None = None  # "iung_map" | "awc"
+    crop_not_on_soil: bool = False      # regulation: crop not indicated on this soil category
+    smsr_hist: list[SmsrWindowStat] = field(default_factory=list)
+    kbw_monthly: list[dict[str, Any]] = field(default_factory=list)
+    # runoff estimate inputs: daily rain ≥ 3 mm on non-frozen days, last 10 years
+    rain_days: list[float] = field(default_factory=list)
+    rain_years: int = 0
+    precip_year: float | None = None
+    # set by run_engine (derived, deterministic): risk period + runoff estimate
+    risk: Any = None
+    runoff_est: Any = None
 
     @property
     def in_season(self) -> bool | None:
@@ -243,6 +281,7 @@ def extract_facts(
     hydro = bundle.plot.get("hydro") or {}
     spot = terrain.get("retentionSpot") or {}
     lu = bundle.plot.get("landUse") or {}
+    iung = (bundle.iung_soil or {}).get("values") or {}
 
     runoff = terrain.get("runoffRisk")
     cdi = dr.get("cdi_class")
@@ -254,10 +293,16 @@ def extract_facts(
             ad = date.fromisoformat(str(m["analysis_date"]))
         except ValueError:
             ad = None
+    iung_cat = iung.get("category") if iung.get("category") in (1, 2, 3, 4) else None
+    iung_organic = iung_cat is None and iung.get("dominant_code") == 5
+    # Organic soils have no SMSR thresholds → never replaced by the AWC proxy.
+    soil_cat = iung_cat or (None if iung_organic else soil_category_from_awc(awc))
+    soil_src = "iung_map" if iung_cat else ("awc" if soil_cat else None)
     smsr = (
-        evaluate_smsr(crop_id=crop["id"], analysis_date=ad, kbw_60d=kbw60, awc_mm=awc)
-        if crop and ad else None
+        evaluate_smsr(crop_id=crop["id"], analysis_date=ad, kbw_60d=kbw60, awc_mm=awc, soil_cat=iung_cat)
+        if crop and ad and not iung_organic else None
     )
+    rain = m.get("rain_events_10y") or {}
     return Facts(
         precip30=_num(m.get("precip_30d")),
         precip30_normal=_num(m.get("precip_30d_median_10y")),
@@ -316,6 +361,24 @@ def extract_facts(
         analysis_date=ad,
         smsr=smsr,
         area_ha=_num(bundle.plot.get("areaHa")),
+        sm_root=_num(m.get("soil_moisture_root_pct")),
+        sm_top=_num(m.get("soil_moisture_top_pct")),
+        sm_date=m.get("soil_moisture_date"),
+        sm_median=_num(m.get("soil_moisture_root_median_10y")),
+        sm_pct=_num(m.get("soil_moisture_percentile_10y")),
+        sm_note=m.get("soil_moisture_note"),
+        iung_cat=iung_cat,
+        iung_cat_share=_num(iung.get("category_share_pct")),
+        iung_label=iung.get("dominant_label"),
+        iung_organic=iung_organic,
+        soil_cat=soil_cat,
+        soil_cat_source=soil_src,
+        crop_not_on_soil=bool(crop and crop_not_indicated(crop["id"], soil_cat)),  # type: ignore[arg-type]
+        smsr_hist=smsr_history(crop["id"], soil_cat, m.get("kbw_smsr_windows") or []) if crop else [],  # type: ignore[arg-type]
+        kbw_monthly=list(m.get("kbw_monthly_10y") or []),
+        rain_days=[float(x) for x in rain.get("days") or []],
+        rain_years=int(rain.get("years") or 0),
+        precip_year=_num(rain.get("precip_mean_year")),
     )
 
 
@@ -362,6 +425,30 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
                 else f"mm na {fmt(depth, 0)} cm gleby")
     add("ev_soil_awc", "Ile wody gleba może zatrzymać", f.awc, SRC_SOIL, awc_unit,
         f"{RETENTION_CLASS_PL.get(f.awc_class or '', 'szacunek')} (szacunek z tekstury gleby)")
+    if f.soil_cat is not None:
+        if f.soil_cat_source == "iung_map":
+            share = f" (ok. {fmt(f.iung_cat_share, 0)}% powierzchni działki)" if f.iung_cat_share is not None \
+                and f.iung_cat_share < 95 else ""
+            add("ev_soil_category", "Kategoria gleby wg IUNG (podatność na suszę)",
+                f"kat. {soil_cat_label(f.soil_cat)}", SRC_IUNG_SOIL,  # type: ignore[arg-type]
+                comparison=f"mapa kategorii glebowych IUNG-PIB użyta w monitoringu suszy{share}; "
+                           "I = bardzo podatna, IV = mało podatna")
+        else:
+            add("ev_soil_category", "Kategoria gleby (podatność na suszę) – oszacowana",
+                f"kat. {soil_cat_label(f.soil_cat)}", SRC_SOIL,  # type: ignore[arg-type]
+                comparison="brak mapy IUNG dla działki – przypisana z pojemności wodnej gleby wg granic IUNG "
+                           "(I < 127,5 mm, II do 170 mm, III do 202,5 mm, IV więcej)")
+    elif f.iung_organic:
+        add("ev_soil_category", "Kategoria gleby wg IUNG", "gleba organiczna", SRC_IUNG_SOIL,
+            comparison="torfy i gleby murszowe – IUNG nie podaje dla nich progów suszy")
+    if f.sm_root is not None:
+        parts = [f"stan na {f.sm_date} (średnia 7 dni, warstwa korzeni 0–100 cm)"]
+        if f.sm_median is not None:
+            parts.append(f"zwykle o tej porze: {fmt(f.sm_median)}%")
+        if f.sm_pct is not None:
+            parts.append(sm_rank_pl(f.sm_pct))
+        parts.append("model reanalizy ERA5-Land (siatka ok. 9 km), nie pomiar w polu")
+        add("ev_soil_moisture", "Wilgotność gleby (model)", f.sm_root, SRC_METEO, "% objętości", "; ".join(parts))
 
     slope_cmp = [f"ryzyko spływu: {RUNOFF_PL[f.runoff]}"] if f.runoff else []
     if f.slope_method == "plane_fit" and f.slope_points:
@@ -432,10 +519,17 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
             sm = f.smsr
             verdict = ("poniżej progu SMSR (~20% spadek plonu)" if sm.below_threshold
                        else "powyżej progu SMSR (bez formalnej suszy rolniczej)")
+            soil_src = "z mapy IUNG" if sm.soil_source == "iung_map" else "oszacowana z pojemności wodnej"
             add("ev_smsr_threshold", "Próg KBW SMSR dla uprawy i gleby",
                 sm.threshold_mm, SRC_SMSR, "mm",
-                f"okres {sm.period_label}, gleba kat. {soil_cat_label(sm.soil_cat)}; "
+                f"okres {sm.period_label}, gleba kat. {soil_cat_label(sm.soil_cat)} ({soil_src}); "
                 f"KBW 60 dni = {fmt(sm.kbw_60d_mm, 0)} mm → {verdict}")
+        rw = f.risk
+        if rw is not None and rw.peakLabel:
+            if rw.method == "smsr":
+                add("ev_risk_window", "Kiedy najczęściej brakuje wody (10 lat)", rw.peakLabel, SRC_SMSR,
+                    comparison=f"w {rw.yearsHit} z {rw.yearsTotal} lat bilans wodny tego okresu spadł poniżej "
+                               f"progu suszy IUNG dla tej uprawy na glebie kat. {soil_cat_label(f.soil_cat)}")  # type: ignore[arg-type]
         deficit, need = f.crop_deficit30, f.crop_water_need30
         if deficit is not None and need is not None and deficit > 0:
             add("ev_crop_deficit", "Niedobór wody dla uprawy (30 dni)", round(deficit), SRC_METEO,
@@ -443,6 +537,19 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
                 f"uprawa potrzebowała ok. {fmt(need, 0)} mm (parowanie {fmt(f.et0_30d, 0)} mm × współczynnik "
                 f"uprawy {fmt(f.crop_kc, 2)} wg FAO-56, czyli ok. {fmt(need / 30)} mm dziennie), "
                 f"a spadło {fmt(f.precip30, 0)} mm")
+    rw = f.risk
+    if rw is not None and rw.method == "kbw_monthly" and rw.peakLabel:
+        add("ev_risk_window", "Kiedy najczęściej brakuje wody (10 lat)", rw.peakLabel, SRC_METEO,
+            comparison="miesiące z najbardziej ujemnym bilansem wodnym (mediana z 10 lat)")
+    ro = f.runoff_est
+    if ro is not None:
+        add("ev_runoff_volume", "Woda spływająca z działki po ulewach", ro.volume_year_m3, SRC_ENGINE, "m³ na rok",
+            f"średnio {fmt(ro.runoff_year_mm)} mm z {fmt(ro.precip_year_mm, 0)} mm opadu rocznie; metoda SCS-CN "
+            f"(USDA), CN = {ro.cn} ({ro.cover_pl}, gleba grupy {ro.hsg}); opady dzienne z 10 lat")
+        if ro.pond_m3 is not None:
+            add("ev_pond_volume", "Pojemność oczka na typową ulewę", ro.pond_m3, SRC_ENGINE, "m³",
+                f"spływ z ulewy, która zdarza się średnio raz na 2 lata ({fmt(ro.storm_rain_mm, 0)} mm deszczu "
+                f"→ {fmt(ro.storm_runoff_mm)} mm spływu z całej działki)")
     return ev
 
 
@@ -543,6 +650,9 @@ def build_sources(bundle: AdapterBundle, analysis_date: date) -> list[Source]:
                 src.dataPeriod = (f"{src.dataPeriod} (brak czystego zdjęcia z {skipped} "
                                   f"{'roku' if skipped == 1 else 'lat'})")
         out.append(src)
+    if bundle.iung_soil is not None:  # None = not fetched (tests) → no row
+        out.append(_from_resp(SRC_IUNG_SOIL, "Kategoria gleby (mapa IUNG-PIB)", bundle.iung_soil,
+                              "mapa kategorii podatności gleb na suszę (warstwa 2024), piksel ~10 m"))
     dv = bundle.drought.get("values") or {}
     out.append(_from_resp(SRC_EDO, "Susza w regionie (Europejskie Obserwatorium Suszy)", bundle.drought,
                           f"dekada od {dv['dekad_start']}" if dv.get("dekad_start") else None))
@@ -583,6 +693,8 @@ _MISSING_COPY: dict[str, tuple[str, str]] = {
                "Nie znamy pojemności wodnej gleby – ocena zakłada glebę przeciętną i ma niższą pewność."),
     SRC_SAT: ("Zdjęcie satelitarne",
               "Brak sprawdzenia kondycji roślin z satelity – ocena opiera się na pogodzie i glebie."),
+    SRC_IUNG_SOIL: ("Kategoria gleby z mapy IUNG",
+                    "Kategorię gleby do progów suszy oszacowaliśmy z modelu SoilGrids – jest mniej pewna."),
     SRC_EDO: ("Wskaźnik suszy w regionie",
               "Brak porównania z regionalną mapą suszy – nie zmienia to głównych wniosków."),
 }

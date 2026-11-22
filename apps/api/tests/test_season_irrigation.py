@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from shapely.geometry import Point
 
-from app.crops.catalog import CROPS, get_crop
+from app.crops.catalog import CROPS, NO_CROP_ID, get_crop
 from app.engine.assess import assess_moisture
 from app.engine.causes import detect_causes
 from app.engine.facts import Facts, build_evidence
@@ -28,6 +28,8 @@ def _rank(f: Facts):
 
 def test_catalog_critical_months_inside_season():
     for c in CROPS.values():
+        if c["id"] == NO_CROP_ID:  # „Brak uprawy”: no season, Kc = 0 by design
+            continue
         assert set(c["criticalMonths"]) <= set(c["seasonMonths"]), c["id"]
         assert 0.5 < c["kcMid"] < 1.4
 

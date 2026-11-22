@@ -17,8 +17,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#tresc" className="visually-hidden">
           Przejdź do treści
         </a>
-        <div className="topbar">
-          <div className="container">Prototyp narzędzia doradczego · HackNation 2026</div>
+        <div className="topbar" aria-hidden="true">
+          <div className="container" />
         </div>
         <SiteHeader />
         <main id="tresc">{children}</main>

@@ -12,6 +12,8 @@ from app.engine.assess import assess_moisture
 from app.engine.causes import detect_causes
 from app.engine.facts import NO_SAT_HISTORY_NOTE, build_evidence, build_missing, build_sources, extract_facts
 from app.engine.rank import rank_recommendations
+from app.engine.risk_window import compute_risk_window
+from app.engine.runoff import estimate_runoff
 from app.plot_dto import plot_to_dto
 from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportMeta
 
@@ -34,6 +36,17 @@ SAT_LIMITATION = (
     "a nie wilgotność gleby. Porównanie z poprzednimi latami nie wie, co wtedy rosło na polu (płodozmian), "
     "dlatego satelita tylko koryguje ocenę z pogody i gleby, a nie ją zastępuje. Woda stojąca to klasyfikacja ESA – "
     "bardzo mokra, ciemna gleba może być wzięta za wodę."
+)
+
+SOIL_MOISTURE_LIMITATION = (
+    "Wilgotność gleby pochodzi z modelu reanalizy ERA5-Land (Copernicus, siatka ok. 9 km, przez Open-Meteo), "
+    "a nie z czujnika w polu. Dobrze pokazuje, czy jest sucho na tle 10 lat w okolicy, ale nie zna "
+    "konkretnej gleby i uprawy na działce."
+)
+RUNOFF_LIMITATION = (
+    "Spływ wody i pojemność oczka liczymy metodą SCS-CN (USDA) z dziennych opadów z 10 lat. To szacunek "
+    "orientacyjny: pomija roztopy i zamarzniętą glebę, zakłada, że cała woda z działki spływa w jedno miejsce. "
+    "Przed budową zbiornika potrzebny jest pomiar w terenie i ewentualne zgłoszenie wodnoprawne."
 )
 
 _GRASS_LAND = {"meadow", "pasture"}
@@ -94,8 +107,11 @@ def run_engine(
     crop = get_crop(crop_id)
     f = extract_facts(bundle, crop, analysis_date)
     f.month = analysis_date.month
+    f.risk = compute_risk_window(f)
+    f.runoff_est = estimate_runoff(f)
 
     assessment = assess_moisture(f)  # raises without meteo
+    assessment.susceptibility.riskWindow = f.risk
     causes = detect_causes(assessment=assessment, f=f)
     recommendations = rank_recommendations(assessment=assessment, causes=causes, f=f)
 
@@ -108,6 +124,8 @@ def run_engine(
 
     for block in (assessment.current, assessment.susceptibility):
         block.evidenceRefs = keep(block.evidenceRefs)
+    if assessment.susceptibility.riskWindow is not None:
+        assessment.susceptibility.riskWindow.evidenceRefs = keep(assessment.susceptibility.riskWindow.evidenceRefs)
     for c in causes:
         c.evidenceRefs = keep(c.evidenceRefs)
     for bucket in (recommendations.retention, recommendations.agrotech, recommendations.irrigation or []):
@@ -132,6 +150,21 @@ def run_engine(
     limitations = list(bundle.plot.get("limitations") or []) + ENGINE_LIMITATIONS
     if f.nearby_water is None or (f.nearby_water and (not f.water_type or f.water_dist is None)):
         limitations.append("Sprawdź w terenie, czy przy działce jest rów odprowadzający wodę z pola.")
+    if f.sm_root is not None:
+        limitations.append(SOIL_MOISTURE_LIMITATION)
+    elif f.sm_note:
+        limitations.append(f"Wilgotność gleby z modelu nie została użyta: {f.sm_note}")
+    if f.soil_cat_source == "awc":
+        limitations.append("Mapa kategorii gleb IUNG nie dała kategorii dla tej działki – kategorię do progów suszy "
+                           "oszacowaliśmy z pojemności wodnej gleby (SoilGrids, 1 m profilu; IUNG liczy do 1,5 m).")
+    if f.iung_organic:
+        limitations.append("Według mapy IUNG działka leży na glebie organicznej (torf, mursz) – rozporządzenie nie "
+                           "podaje dla niej progów suszy, więc porównania z progami IUNG nie robimy.")
+    if f.crop_not_on_soil:
+        limitations.insert(0, f"UWAGA: według rozporządzenia MRiRW (progi IUNG) uprawa „{crop['namePl']}” nie jest "
+                              "wskazana na glebie tej kategorii – nie podajemy dla niej progu suszy.")
+    if f.runoff_est is not None:
+        limitations.append(RUNOFF_LIMITATION)
     if f.ndvi is not None:
         limitations.append(SAT_LIMITATION)
         if bundle.sat_history is not None and not f.has_history:
