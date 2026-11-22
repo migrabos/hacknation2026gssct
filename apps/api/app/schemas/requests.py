@@ -10,7 +10,7 @@ from adapters.dates import shift_years, today_pl
 
 
 class PlotDateRequest(BaseModel):
-    """Plot + date part shared by POST /analyze and POST /crop-fit.
+    """Plot + date part of POST /analyze.
 
     Give plotId (preferred) or lat+lng. If both are sent, plotId wins.
     analysisDate must be within the last 10 years.
@@ -44,7 +44,3 @@ class AnalyzeRequest(PlotDateRequest):
     """POST /analyze body — the water report for one crop."""
 
     cropId: str = Field(description="Crop id from GET /crops")
-
-
-class CropFitRequest(PlotDateRequest):
-    """POST /crop-fit body — which crops cope best with the water on this plot (no crop needed)."""

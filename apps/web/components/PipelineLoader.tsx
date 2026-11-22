@@ -17,14 +17,6 @@ const DEFAULT_STEPS = [
 ];
 const STEP_MS = [2600, 1600, 1600, 1800];
 
-/** Steps for the separate crop-fit report (POST /crop-fit). */
-export const CROP_FIT_STEPS = [
-  { title: "Pobieramy dane o działce", sub: "granice, pogoda z 10 lat, gleba, ukształtowanie terenu, ewidencja gruntów" },
-  { title: "Warunki wodne działki", sub: "ile wody trzyma gleba i jak suche są tu lata" },
-  { title: "Porównanie upraw", sub: "korzenie, wrażliwość na suszę, wymagania glebowe, spadek terenu" },
-  { title: "Ranking", sub: "co tu najlepiej pasuje, a czego unikać" },
-];
-
 export default function PipelineLoader({
   plotLabel,
   steps: STEPS = DEFAULT_STEPS,

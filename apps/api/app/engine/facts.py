@@ -233,7 +233,7 @@ def extract_facts(
     crop: CropEntry | None,
     analysis_date: date | None = None,
 ) -> Facts:
-    """`crop=None` for crop-independent analyses (crop fit); crop_sens then stays neutral."""
+    """`crop=None` keeps crop facts neutral (crop_sens 0.5, no season / Kc)."""
     m = bundle.meteo.get("values") or {}
     s = bundle.soil.get("values") or {}
     sat = bundle.sat.get("values") or {}

@@ -15,7 +15,7 @@ Rolnik wpisuje identyfikator działki TERYT, wyszukuje ją po miejscowości i nu
 3. **Retencja i agrotechnika** – działania ze stałego katalogu, każde z uzasadnieniem z danych działki: najniższe miejsce z NMT jako lokalizacja oczka, rów w pobliżu, spadek terenu, piasek i próchnica.
 4. **Nawadnianie (na końcu, opcjonalnie)** – tylko gdy jest sucho, uprawa jest wrażliwa i trwa jej sezon wzrostu. Zawiera termin (faza krytyczna uprawy), szacowany niedobór wody (ET0 × Kc wg FAO-56 minus opad) i orientacyjną dawkę jednorazową zależną od gleby.
 
-Każda liczba wskazuje źródło (`evidence[] → sources[]`). Raport zawsze pokazuje ograniczenia i brakujące dane. Wydruk lub PDF otwiera się z przeglądarki. Drugi raport (`/crop-fit`) porównuje, które uprawy najlepiej pasują do warunków wodnych działki.
+Każda liczba wskazuje źródło (`evidence[] → sources[]`). Raport zawsze pokazuje ograniczenia i brakujące dane. Wydruk lub PDF otwiera się z przeglądarki.
 
 **Shared contract:** [`apps/web/lib/types.ts`](apps/web/lib/types.ts) ⇄ [`apps/api/app/schemas/evidence.py`](apps/api/app/schemas/evidence.py) (same field names). `apps/api/tests/test_contract_web.py` validates `fixtures/evidence_sample.json` against the API schema, so drift fails the tests.
 
