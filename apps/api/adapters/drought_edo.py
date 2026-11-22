@@ -33,17 +33,18 @@ NEIGHBOURHOOD_PX = 10    # ±10 px ≈ ±0.01° … context "around the plot"
 MAX_DEKADS_BACK = 4      # publication lag: step back up to ~40 days
 COLOR_TOLERANCE = 40
 
-CDI_COLORS = {  # from the official cdiad legend
+CDI_COLORS = {  # from the official cdiad legend (Watch / Warning / Alert)
     1: (240, 228, 66),   # Watch
     2: (230, 159, 0),    # Warning
     3: (220, 5, 12),     # Alert
 }
+# Recovery classes from CDI v4 are not scored; unknown colours → missing, not "no drought".
 CDI_LABELS = {
-    0: "brak sygnału suszy wg EDO",
     1: "Obserwacja (Watch) – niedobór opadów",
     2: "Ostrzeżenie (Warning) – niedobór wilgoci w glebie",
     3: "Alarm (Alert) – susza widoczna w kondycji roślin",
 }
+CDI_NODATA = -1  # transparent pixel / no published drought class at the point
 
 
 # --------------------------------------------------------------------------- dekads
@@ -73,9 +74,10 @@ def _parse_date(value: date | str) -> date:
 
 
 def _classify(px: tuple[int, int, int, int]) -> int | None:
+    """Return CDI class 1–3, CDI_NODATA for transparent, or None for unknown colour."""
     r, g, b, a = px
     if a < 128:
-        return 0
+        return CDI_NODATA
     best, best_d = None, float("inf")
     for cls, (cr, cg, cb) in CDI_COLORS.items():
         dist = ((r - cr) ** 2 + (g - cg) ** 2 + (b - cb) ** 2) ** 0.5
@@ -91,12 +93,15 @@ def read_cdi_png(png: bytes) -> dict[str, Any]:
     centre = _classify(im.getpixel((cx, cy)))
     if centre is None:
         raise ValueError(f"Nieznany kolor piksela EDO: {im.getpixel((cx, cy))}")
+    if centre == CDI_NODATA:
+        # Transparent ≠ „brak suszy”: EDO simply has no drought class published here.
+        raise ValueError("EDO: przezroczysty piksel w punkcie działki (brak klasy CDI)")
     around = [
         _classify(im.getpixel((x, y)))
         for x in range(max(0, cx - NEIGHBOURHOOD_PX), min(w, cx + NEIGHBOURHOOD_PX + 1))
         for y in range(max(0, cy - NEIGHBOURHOOD_PX), min(h, cy + NEIGHBOURHOOD_PX + 1))
     ]
-    known = [c for c in around if c is not None]
+    known = [c for c in around if c is not None and c != CDI_NODATA]
     return {
         "cdi_class": centre,
         "cdi_area_max_class": max(known) if known else centre,
@@ -141,7 +146,13 @@ async def fetch_drought_context(centroid: list[float], analysis_date: date | str
                 r = await client.get(EDO_WMS, params={**base, "TIME": ds.isoformat()})
                 ctype = r.headers.get("content-type", "")
                 if r.status_code == 200 and ctype.startswith("image/"):
-                    values = read_cdi_png(r.content)
+                    try:
+                        values = read_cdi_png(r.content)
+                    except ValueError as exc:
+                        # Transparent / unknown colour = missing data, not "no drought".
+                        tried.append(f"{ds} ({exc})")
+                        ds = previous_dekad(ds)
+                        continue
                     values.update({
                         "cdi_label": CDI_LABELS[values["cdi_class"]],
                         "dekad_start": ds.isoformat(),
@@ -149,7 +160,7 @@ async def fetch_drought_context(centroid: list[float], analysis_date: date | str
                         "layer": "EDO CDI v4.1 (cdiad)",
                         "notes": [
                             "Wskaźnik regionalny (siatka EDO), nie pomiar na działce.",
-                            "Klasa 0 oznacza brak sygnału suszy albo brak danych – EDO pokazuje tylko klasy suszy.",
+                            "EDO publikuje tylko klasy suszy (1–3); brak koloru = brak danych, nie „brak suszy”.",
                         ],
                     })
                     if ds != dekad_start(d):
@@ -166,7 +177,7 @@ async def fetch_drought_context(centroid: list[float], analysis_date: date | str
     return await run_adapter(
         "EDO Combined Drought Indicator (Copernicus EMS)",
         EDO_WMS,
-        {"lat": lat, "lng": lng, "dekad": dekad_start(d).isoformat(), "v": 1},
+        {"lat": lat, "lng": lng, "dekad": dekad_start(d).isoformat(), "v": 2},
         fetch,
         timeout_sec=10.0,
         cache_ttl_sec=86_400 if recent else None,

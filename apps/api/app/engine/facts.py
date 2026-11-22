@@ -132,11 +132,14 @@ class Facts:
     # crop / SMSR / FAO
     crop_sens: float = 0.5
     crop_id: str | None = None
-    crop_kc: float | None = None
+    crop_kc: float | None = None          # mid-season Kc (FAO-56)
+    crop_kc_ini: float | None = None      # early-season Kc
     crop_season: tuple[int, ...] = ()
     crop_critical: tuple[int, ...] = ()
     crop_phase_pl: str | None = None
-    fao_ky: float | None = None
+    fao_ky: float | None = None           # strictly FAO-33, else None
+    ky_from_fao: bool = False
+    effective_ky: float | None = None     # FAO or assumed
     fao_note: str | None = None
     analysis_date: date | None = None
     smsr: SmsrMatch | None = None
@@ -180,11 +183,25 @@ class Facts:
         return self.month in self.crop_critical
 
     @property
-    def crop_water_need30(self) -> float | None:
-        """Crop water need for the last 30 days ≈ ET0 × Kc (FAO-56)."""
-        if self.et0_30d is None or self.crop_kc is None:
+    def crop_kc_effective(self) -> float | None:
+        """Kc for the analysis month: mid in critical phase, ini early/late in season."""
+        if self.crop_kc is None:
             return None
-        return self.et0_30d * self.crop_kc
+        if self.in_critical_phase:
+            return self.crop_kc
+        if self.in_season:
+            ini = self.crop_kc_ini if self.crop_kc_ini is not None else self.crop_kc * 0.4
+            # Development / late: midpoint between ini and mid (simple FAO-56 stage proxy).
+            return round((ini + self.crop_kc) / 2, 2)
+        return self.crop_kc_ini if self.crop_kc_ini is not None else self.crop_kc * 0.4
+
+    @property
+    def crop_water_need30(self) -> float | None:
+        """Crop water need for the last 30 days ≈ ET0 × Kc_phase (FAO-56)."""
+        kc = self.crop_kc_effective
+        if self.et0_30d is None or kc is None:
+            return None
+        return self.et0_30d * kc
 
     @property
     def crop_deficit30(self) -> float | None:
@@ -262,7 +279,8 @@ SHOW_WEAK_PCT = 10.0
 # it is an optional refinement, so its absence must not flag the whole report as incomplete.
 NO_SAT_HISTORY_NOTE = (
     "Nie porównaliśmy zdjęcia satelitarnego z poprzednimi latami (za mało czystych zdjęć z tego okresu "
-    "lub są jeszcze pobierane) – NDVI i NDMI pokazujemy bez oceny, czy są niższe niż zwykle."
+    "lub są jeszcze pobierane). Ocena wilgotności i tak nie zależy od tego porównania – służy tylko "
+    "jako dodatkowy komentarz, gdy dane już są w pamięci podręcznej."
 )
 
 
@@ -353,10 +371,13 @@ def extract_facts(
         crop_sens=float(crop["droughtSensitivity"]) if crop else 0.5,
         crop_id=crop["id"] if crop else None,
         crop_kc=float(crop["kcMid"]) if crop else None,
+        crop_kc_ini=float(crop["kcIni"]) if crop else None,
         crop_season=tuple(crop["seasonMonths"]) if crop else (),
         crop_critical=tuple(crop["criticalMonths"]) if crop else (),
         crop_phase_pl=crop["criticalPhasePl"] if crop else None,
         fao_ky=crop.get("faoKy") if crop else None,
+        ky_from_fao=bool(crop.get("kyFromFao")) if crop else False,
+        effective_ky=crop.get("effectiveKy") if crop else None,
         fao_note=fao_note(crop["id"]) if crop else None,
         analysis_date=ad,
         smsr=smsr,
@@ -508,22 +529,27 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
 
     if crop and crop["id"] != NO_CROP_ID:
         ky_cmp = f.fao_note or crop["criticalPhasePl"]
-        if f.fao_ky is not None:
+        if f.ky_from_fao and f.fao_ky is not None:
             add("ev_fao_ky", "Współczynnik odpowiedzi plonu na deficyt wody (FAO Ky)",
                 f.fao_ky, SRC_FAO, comparison=ky_cmp)
+        elif f.effective_ky is not None:
+            add("ev_fao_ky", "Wrażliwość uprawy na niedobór wody (przyjęta)",
+                f.effective_ky, SRC_CROPS, comparison=ky_cmp)
         add("ev_crop_sensitivity", "Wrażliwość uprawy na suszę",
             {"high": "wysoka", "medium": "średnia", "low": "niska"}[sensitivity_level(f.crop_sens)],
-            SRC_FAO if f.fao_ky is not None else SRC_CROPS,
+            SRC_FAO if f.ky_from_fao else SRC_CROPS,
             comparison=f"{ky_cmp}; {crop['criticalPhasePl']}")
         if f.smsr is not None:
             sm = f.smsr
-            verdict = ("poniżej progu SMSR (~20% spadek plonu)" if sm.below_threshold
-                       else "powyżej progu SMSR (bez formalnej suszy rolniczej)")
+            verdict = ("poniżej orientacyjnego progu IUNG (ok. 20% ryzyka spadku plonu w metodyce SMSR)"
+                       if sm.below_threshold
+                       else "powyżej orientacyjnego progu IUNG (bez sygnału suszy rolniczej w tym przybliżeniu)")
             soil_src = "z mapy IUNG" if sm.soil_source == "iung_map" else "oszacowana z pojemności wodnej"
-            add("ev_smsr_threshold", "Próg KBW SMSR dla uprawy i gleby",
+            add("ev_smsr_threshold", "Orientacyjny próg bilansu wodnego (IUNG SMSR)",
                 sm.threshold_mm, SRC_SMSR, "mm",
                 f"okres {sm.period_label}, gleba kat. {soil_cat_label(sm.soil_cat)} ({soil_src}); "
-                f"KBW 60 dni = {fmt(sm.kbw_60d_mm, 0)} mm → {verdict}")
+                f"bilans 60 dni = {fmt(sm.kbw_60d_mm, 0)} mm → {verdict}. "
+                "To przybliżenie (ET0 z Open-Meteo, gleba do 1 m) – nie oficjalne orzeczenie SMSR.")
         rw = f.risk
         if rw is not None and rw.peakLabel:
             if rw.method == "smsr":
@@ -531,11 +557,14 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
                     comparison=f"w {rw.yearsHit} z {rw.yearsTotal} lat bilans wodny tego okresu spadł poniżej "
                                f"progu suszy IUNG dla tej uprawy na glebie kat. {soil_cat_label(f.soil_cat)}")  # type: ignore[arg-type]
         deficit, need = f.crop_deficit30, f.crop_water_need30
-        if deficit is not None and need is not None and deficit > 0:
-            add("ev_crop_deficit", "Niedobór wody dla uprawy (30 dni)", round(deficit), SRC_METEO,
+        kc_eff = f.crop_kc_effective
+        if deficit is not None and need is not None and deficit > 0 and kc_eff is not None:
+            phase = ("faza krytyczna" if f.in_critical_phase
+                     else "wczesna/późna faza sezonu" if f.in_season else "poza szczytem zapotrzebowania")
+            add("ev_crop_deficit", "Niedobór wody dla uprawy (30 dni)", round(deficit), SRC_ENGINE,
                 "l/m² (= mm)",
                 f"uprawa potrzebowała ok. {fmt(need, 0)} mm (parowanie {fmt(f.et0_30d, 0)} mm × współczynnik "
-                f"uprawy {fmt(f.crop_kc, 2)} wg FAO-56, czyli ok. {fmt(need / 30)} mm dziennie), "
+                f"uprawy {fmt(kc_eff, 2)} wg FAO-56, {phase}; ok. {fmt(need / 30)} mm dziennie), "
                 f"a spadło {fmt(f.precip30, 0)} mm")
     rw = f.risk
     if rw is not None and rw.method == "kbw_monthly" and rw.peakLabel:

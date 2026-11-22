@@ -41,7 +41,7 @@ def test_no_irrigation_outside_season():
 
 
 def test_irrigation_in_critical_phase_has_dose_and_timing():
-    f = _potato_facts(month=7, area_ha=2.0)
+    f = _potato_facts(month=7, area_ha=2.0, land_category="arable", land_agri=True)
     recs = _rank(f)
     assert recs.irrigation, "dry July + potato should allow irrigation"
     rec = recs.irrigation[0]
@@ -55,6 +55,20 @@ def test_irrigation_in_critical_phase_has_dose_and_timing():
     # deficit = 120 × 1.15 − 5 = 133 mm, shown as evidence
     ev = {e.id: e for e in build_evidence(f, get_crop("ziemniak"))}
     assert ev["ev_crop_deficit"].value == 133
+
+
+def test_early_season_kc_lower_than_mid():
+    """Maize in May uses kcIni/dev, not full kcMid — avoids 2–3× overstated May doses."""
+    c = get_crop("kukurydza_ziarno")
+    may = Facts(**DRY, crop_sens=c["droughtSensitivity"], crop_id=c["id"], crop_kc=c["kcMid"],
+                crop_kc_ini=c["kcIni"], crop_season=c["seasonMonths"], crop_critical=c["criticalMonths"],
+                month=5)
+    jul = Facts(**DRY, crop_sens=c["droughtSensitivity"], crop_id=c["id"], crop_kc=c["kcMid"],
+                crop_kc_ini=c["kcIni"], crop_season=c["seasonMonths"], crop_critical=c["criticalMonths"],
+                month=7)
+    assert may.crop_kc_effective is not None and jul.crop_kc_effective is not None
+    assert may.crop_kc_effective < jul.crop_kc_effective
+    assert may.crop_water_need30 < jul.crop_water_need30
 
 
 def test_plane_fit_ignores_single_outlier():
@@ -71,11 +85,13 @@ def test_plane_fit_ignores_single_outlier():
 
 
 def test_pond_cites_lowest_spot():
-    f = _potato_facts(month=7, spot_drop=1.4, spot_near_edge=False)
+    f = _potato_facts(month=7, spot_drop=1.4, spot_near_edge=False, area_ha=1.5,
+                      land_category="arable", land_agri=True)
     recs = _rank(f)
     pond = [r for r in recs.retention if r.actionId == "small_pond"]
     assert pond and "ev_low_spot" in pond[0].evidenceRefs
     assert "1,4 m" in pond[0].why
+    assert "uszczelnien" in pond[0].why  # sandy AWC 80 → sealing note
 
 
 def test_interval_clamped_and_missing():

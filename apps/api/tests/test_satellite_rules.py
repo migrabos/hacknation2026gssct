@@ -18,17 +18,37 @@ def _ids(recs):
     return [r.actionId for r in recs]
 
 
-def test_ndmi_anomaly_lowers_score_and_is_cited():
+def test_ndmi_anomaly_does_not_change_score():
+    """History anomaly is narrative-only so cold vs warm cache stay deterministic."""
     base = assess_moisture(Facts(**WEATHER)).current
-    f = Facts(**WEATHER, ndvi=0.7, ndmi=0.12, hist_ndmi=0.30, hist_ndvi=0.72, hist_n=4, ndvi_date="2025-07-10")
+    f = Facts(**WEATHER, ndvi=0.7, ndmi=0.12, hist_ndmi=0.30, hist_ndvi=0.72, hist_n=4,
+              ndvi_date="2025-07-10")
+    cur = assess_moisture(f).current
+    assert cur.score0to100 == base.score0to100
+    delta, why = satellite_moisture_signal(f)
+    assert delta == 0.0  # ndmi 0.12 is not < 0 stress; anomaly ignored for score
+    assert any("zwykle" in w for w in why)
+
+
+def test_absolute_ndmi_stress_still_lowers_score():
+    base = assess_moisture(Facts(**WEATHER)).current
+    f = Facts(**WEATHER, ndvi=0.7, ndmi=-0.15, ndvi_date="2025-07-10")
     cur = assess_moisture(f).current
     assert cur.score0to100 < base.score0to100
     assert "ev_ndmi" in cur.evidenceRefs
-    assert "zwykle" in cur.summary
+
+
+def test_crop_expected_ndvi_lowers_when_canopy_weak():
+    # Maize in July should be dense; NDVI 0.35 is below the expected band.
+    f = Facts(**WEATHER, ndvi=0.35, ndmi=0.1, crop_id="kukurydza_ziarno",
+              ndvi_date="2025-07-10", month=7)
+    delta, why = satellite_moisture_signal(f)
+    assert delta < 0
+    assert any("słabsza" in w or "słabsze" in w or "zieleń" in w for w in why)
 
 
 def test_ndmi_ignored_without_green_cover_or_history():
-    # Bare field: canopy water is meaningless → no satellite effect.
+    # Bare field without crop expectation → no satellite effect.
     assert satellite_moisture_signal(Facts(ndvi=0.15, ndmi=-0.3, hist_ndmi=0.2, hist_n=5)) == (0.0, [])
     # Two years are not a baseline.
     assert Facts(ndmi=0.1, hist_ndmi=0.3, hist_n=2).ndmi_anomaly is None
@@ -40,7 +60,8 @@ def test_satellite_effect_is_bounded():
 
 
 def test_bare_soil_after_harvest_is_a_cause_with_cover_crops():
-    f = Facts(**WEATHER, ndvi=0.12, bare_pct=85, ndvi_date="2025-09-20", crop_id="kukurydza")
+    f = Facts(**WEATHER, ndvi=0.12, bare_pct=85, ndvi_date="2025-09-20", crop_id="kukurydza",
+              land_category="arable", land_agri=True)
     a = assess_moisture(f)
     causes = detect_causes(assessment=a, f=f)
     assert "bare_soil" in {c.id for c in causes}
@@ -48,6 +69,17 @@ def test_bare_soil_after_harvest_is_a_cause_with_cover_crops():
     assert "cover_crops" in _ids(recs.agrotech)
     cover = next(r for r in recs.agrotech if r.actionId == "cover_crops")
     assert "ev_bare_soil" in cover.evidenceRefs
+
+
+def test_meadow_blocks_field_agrotech():
+    dry = dict(precip30=10, precip30_normal=60, kbw30=-100, kbw_pct=5, dry_spell=20, awc=90)
+    f = Facts(**dry, land_category="meadow", land_label="łąka trwała", land_agri=True,
+              crop_id="zboza_ozime", month=6)
+    a = assess_moisture(f)
+    recs = rank_recommendations(assessment=a, causes=detect_causes(assessment=a, f=f), f=f)
+    assert "cover_crops" not in _ids(recs.agrotech)
+    assert "reduce_tillage" not in _ids(recs.agrotech)
+    assert "residues" not in _ids(recs.agrotech)
 
 
 def test_bare_soil_not_a_cause_for_fresh_winter_sowing_or_spring():
@@ -58,11 +90,20 @@ def test_bare_soil_not_a_cause_for_fresh_winter_sowing_or_spring():
 
 def test_standing_water_suggests_pond_even_when_wet():
     f = Facts(precip30=90, precip30_normal=50, kbw30=40, kbw_pct=90, awc=170,
-              ndvi=0.5, water_pct=6, ndvi_date="2025-04-10", crop_id="zboza_ozime")
+              ndvi=0.5, water_pct=6, ndvi_date="2025-04-10", crop_id="zboza_ozime",
+              land_category="arable", land_agri=True)
     a = assess_moisture(f)
     recs = rank_recommendations(assessment=a, causes=detect_causes(assessment=a, f=f), f=f)
     pond = next(r for r in recs.retention if r.actionId == "small_pond")
     assert "ev_standing_water" in pond.evidenceRefs
+
+
+def test_tiny_dry_plot_does_not_default_to_pond():
+    f = Facts(precip30=5, precip30_normal=60, kbw30=-110, kbw_pct=5, dry_spell=25, awc=80,
+              area_ha=0.15, land_category="arable", land_agri=True, crop_id="ziemniak", month=7)
+    a = assess_moisture(f)
+    recs = rank_recommendations(assessment=a, causes=detect_causes(assessment=a, f=f), f=f)
+    assert "small_pond" not in _ids(recs.retention)
 
 
 def test_history_source_and_missing_data():

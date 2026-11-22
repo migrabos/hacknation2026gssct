@@ -2,7 +2,7 @@
 
 Intent: all listed components allow KOWR use if IP transfers after the contest. Confirm upstream terms before commercial redistribution.
 
-## Software (this API)
+## Software
 
 | Component | License (typical) | Notes |
 |-----------|-------------------|-------|
@@ -10,7 +10,20 @@ Intent: all listed components allow KOWR use if IP transfers after the contest. 
 | Pydantic / pydantic-settings | MIT | Schemas + config |
 | Uvicorn | BSD-3-Clause | ASGI server |
 | httpx | BSD-3-Clause | Adapter HTTP client |
+| Shapely | BSD-3-Clause | Geometry |
+| pyproj | MIT | CRS transforms |
+| NumPy | BSD-3-Clause | Soil / raster maths |
+| rasterio | BSD-2-Clause | COG / Sentinel reads |
+| Pillow | HPND-ish (PIL) | EDO WMS colour classify |
+| mapbox-vector-tile | MIT | OpenFreeMap hydro fallback |
 | pytest / pytest-asyncio | MIT | Tests |
+| Next.js | MIT | Web app |
+| React / React-DOM | MIT | UI |
+| Leaflet | BSD-2-Clause | Map |
+| maplibre-gl | BSD-3-Clause | Vector basemap |
+| @maplibre/maplibre-gl-leaflet | BSD-3-Clause | Leaflet ↔ MapLibre bridge |
+| react-leaflet | **Hippocratic License 2.1** (not OSI) | Map React bindings — **replace before KOWR IP transfer** if needed (e.g. plain Leaflet) |
+| TypeScript | Apache-2.0 | Web typing |
 | This repository code | TBD by team | Keep private until submit; grant KOWR rights if required |
 
 ## AI / models

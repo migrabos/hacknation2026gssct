@@ -136,7 +136,8 @@ def detect_causes(*, assessment: MoistureAssessment, f: Facts) -> list[Cause]:
         if high_ky:
             if f.fao_ky is not None:
                 parts.append(
-                    f"Ta uprawa ma wysoki współczynnik FAO Ky ({fmt(f.fao_ky, 2)}) – "
+                    f"Ta uprawa ma wysoką wrażliwość na niedobór wody "
+                    f"(wskaźnik {fmt(f.effective_ky or f.fao_ky, 2)}) – "
                     "plon mocno spada przy niedoborze wody."
                 )
             else:

@@ -168,8 +168,13 @@ def sample_sat(key: Any, d: date) -> dict[str, Any]:
 
 def sample_drought(key: Any, d: date) -> dict[str, Any]:
     seed = _seed("drought", key, d.month)
-    cls = seed % 4
-    labels = ["brak sygnału suszy wg EDO", "Obserwacja (Watch)", "Ostrzeżenie (Warning)", "Alarm (Alert)"]
+    # Fixture only emits published drought classes 1–3 (transparent = missing, not class 0).
+    cls = (seed % 3) + 1
+    labels = {
+        1: "Obserwacja (Watch) – niedobór opadów",
+        2: "Ostrzeżenie (Warning) – niedobór wilgoci w glebie",
+        3: "Alarm (Alert) – susza widoczna w kondycji roślin",
+    }
     return _resp("EDO Combined Drought Indicator (Copernicus EMS)", {
         "cdi_class": cls, "cdi_label": labels[cls], "dekad_start": d.replace(day=1).isoformat(),
     })

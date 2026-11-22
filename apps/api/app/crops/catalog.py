@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from typing import TypedDict
 
-from app.crops.fao import FAO_KY, ky_to_sensitivity
+from app.crops.fao import effective_ky, fao_ky, ky_to_sensitivity
 from app.schemas.evidence import RiskLevel
 
 
@@ -20,7 +20,9 @@ class CropEntry(TypedDict):
     id: str
     namePl: str
     droughtSensitivity: float
-    faoKy: float | None
+    faoKy: float | None          # strictly FAO-33, or None
+    effectiveKy: float | None    # FAO or assumed orientation value
+    kyFromFao: bool
     criticalPhasePl: str
     # Months (1–12) when the crop stands in the field and uses water – outside them watering is pointless.
     seasonMonths: tuple[int, ...]
@@ -29,6 +31,8 @@ class CropEntry(TypedDict):
     # Mid-season crop coefficient Kc (FAO-56, Allen et al. 1998, Table 12; rounded group value):
     # crop water need ≈ ET0 × Kc. Orientation value for the group, not variety-level.
     kcMid: float
+    # Initial / early-season Kc (FAO-56 Table 12 orientation); used outside critical months.
+    kcIni: float
 
 
 def _crop(
@@ -39,17 +43,22 @@ def _crop(
     season: tuple[int, ...],
     critical_months: tuple[int, ...],
     kc_mid: float,
+    kc_ini: float | None = None,
 ) -> CropEntry:
-    ky = FAO_KY[id_]
+    fao = fao_ky(id_)
+    ky = effective_ky(id_)
     return {
         "id": id_,
         "namePl": name_pl,
         "droughtSensitivity": ky_to_sensitivity(ky),
-        "faoKy": ky,
+        "faoKy": fao,
+        "effectiveKy": ky,
+        "kyFromFao": fao is not None,
         "criticalPhasePl": critical,
         "seasonMonths": season,
         "criticalMonths": critical_months,
         "kcMid": kc_mid,
+        "kcIni": kc_ini if kc_ini is not None else round(kc_mid * 0.4, 2),
     }
 
 
@@ -58,72 +67,72 @@ CROPS: dict[str, CropEntry] = {
     "zboza_ozime": _crop(
         "zboza_ozime", "Zboża ozime",
         "najbardziej wrażliwe od strzelania w źdźbło do kłoszenia (V–VI)",
-        season=(3, 4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15,
+        season=(3, 4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15, kc_ini=0.4,
     ),
     "zboza_jare": _crop(
         "zboza_jare", "Zboża jare",
         "płytsze korzenie – wrażliwe na suchą wiosnę, zwłaszcza w V–VI",
-        season=(4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15,
+        season=(4, 5, 6, 7), critical_months=(5, 6), kc_mid=1.15, kc_ini=0.3,
     ),
     "kukurydza_ziarno": _crop(
         "kukurydza_ziarno", "Kukurydza na ziarno",
         "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, zawiązywanie ziarna)",
-        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2,
+        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2, kc_ini=0.3,
     ),
     "kukurydza_kiszonka": _crop(
         "kukurydza_kiszonka", "Kukurydza na kiszonkę",
         "najbardziej wrażliwa w lipcu i sierpniu (kwitnienie, przyrost biomasy)",
-        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2,
+        season=(5, 6, 7, 8, 9), critical_months=(7, 8), kc_mid=1.2, kc_ini=0.3,
     ),
     "rzepak": _crop(
         "rzepak", "Rzepak i rzepik",
         "wrażliwy przy wschodach jesienią (IX–X) i kwitnieniu wiosną (IV–V)",
-        season=(3, 4, 5, 6, 9, 10), critical_months=(4, 5, 9, 10), kc_mid=1.1,
+        season=(3, 4, 5, 6, 9, 10), critical_months=(4, 5, 9, 10), kc_mid=1.1, kc_ini=0.35,
     ),
     "ziemniak": _crop(
         "ziemniak", "Ziemniak",
         "najbardziej wrażliwy od zawiązywania bulw (VI–VIII)",
-        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.15,
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.15, kc_ini=0.5,
     ),
     "burak": _crop(
         "burak", "Burak cukrowy",
         "najbardziej wrażliwy w lipcu i sierpniu (przyrost korzenia)",
-        season=(4, 5, 6, 7, 8, 9, 10), critical_months=(7, 8), kc_mid=1.2,
+        season=(4, 5, 6, 7, 8, 9, 10), critical_months=(7, 8), kc_mid=1.2, kc_ini=0.35,
     ),
     "chmiel": _crop(
         "chmiel", "Chmiel",
         "najbardziej wrażliwy latem przy wzroście szyszek (VI–VIII)",
-        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.05,
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.05, kc_ini=0.35,
     ),
     "tyton": _crop(
         "tyton", "Tytoń",
         "najbardziej wrażliwy od sadzenia do zbioru liści (V–VIII)",
-        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.1,
+        season=(5, 6, 7, 8, 9), critical_months=(6, 7, 8), kc_mid=1.1, kc_ini=0.4,
     ),
     "warzywa": _crop(
         "warzywa", "Warzywa gruntowe",
         "wrażliwe przez cały sezon (IV–IX), zwłaszcza przy sadzeniu i wzroście",
-        season=(4, 5, 6, 7, 8, 9), critical_months=(4, 5, 6, 7, 8, 9), kc_mid=1.05,
+        season=(4, 5, 6, 7, 8, 9), critical_months=(4, 5, 6, 7, 8, 9), kc_mid=1.05, kc_ini=0.5,
     ),
     "krzewy": _crop(
         "krzewy", "Krzewy owocowe",
         "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VIII)",
-        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7, 8), kc_mid=0.9,
+        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7, 8), kc_mid=0.9, kc_ini=0.5,
     ),
     "drzewa": _crop(
         "drzewa", "Drzewa owocowe",
         "najbardziej wrażliwe od kwitnienia do wzrostu owoców (V–VIII)",
-        season=(4, 5, 6, 7, 8, 9), critical_months=(5, 6, 7, 8), kc_mid=0.95,
+        season=(4, 5, 6, 7, 8, 9), critical_months=(5, 6, 7, 8), kc_mid=0.95, kc_ini=0.5,
     ),
     "truskawki": _crop(
         "truskawki", "Truskawki",
         "płytkie korzenie – wrażliwe od kwitnienia do zbioru (V–VII)",
-        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7), kc_mid=0.85,
+        season=(4, 5, 6, 7, 8), critical_months=(5, 6, 7), kc_mid=0.85, kc_ini=0.4,
     ),
     "straczkowe": _crop(
         "straczkowe", "Rośliny strączkowe",
         "najbardziej wrażliwe w kwitnieniu i zawiązywaniu strąków (VI–VII)",
-        season=(4, 5, 6, 7, 8), critical_months=(6, 7), kc_mid=1.15,
+        season=(4, 5, 6, 7, 8), critical_months=(6, 7), kc_mid=1.15, kc_ini=0.4,
     ),
     # Not an SMSR row — farmer has nothing sown (ugór / odłóg / przed siewem).
     "brak": {
@@ -131,10 +140,13 @@ CROPS: dict[str, CropEntry] = {
         "namePl": "Brak uprawy",
         "droughtSensitivity": 0.0,
         "faoKy": None,
+        "effectiveKy": None,
+        "kyFromFao": False,
         "criticalPhasePl": "brak uprawy – nie ma fazy krytycznej",
         "seasonMonths": (),
         "criticalMonths": (),
         "kcMid": 0.0,
+        "kcIni": 0.0,
     },
 }
 

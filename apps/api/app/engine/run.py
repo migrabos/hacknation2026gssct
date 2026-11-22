@@ -20,21 +20,24 @@ from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportM
 ENGINE_LIMITATIONS = [
     "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar "
     "wilgotności w polu ani pełny model hydrologiczny.",
-    "Kategorie upraw są dokładnie z IUNG SMSR (MRiRW 2019), z dodatkową opcją „Brak uprawy”. "
-    "Wrażliwość bierze sezonowe Ky z FAO-33; porównanie z progami SMSR używa KBW 60 dni z Open-Meteo "
-    "(ET0), podczas gdy SMSR liczy Penmana na stałych oknach kalendarzowych – to przybliżenie, nie "
-    "oficjalne orzeczenie suszy.",
-    "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m) i mapowana na kategorie "
-    "glebowe SMSR – lokalnie gleba może się różnić.",
-    "Zalecenia to wskazówki retencyjne i agrotechniczne, nie decyzja administracyjna. Budowa zbiornika czy "
-    "zastawki może wymagać zgłoszenia wodnoprawnego.",
+    "Kategorie upraw są z IUNG SMSR (MRiRW 2019), z opcją „Brak uprawy”. Wrażliwość bierze Ky z FAO-33 "
+    "tam, gdzie jest w tabeli; dla pozostałych upraw podajemy wartość przyjętą (nie „FAO”). Porównanie "
+    "z progami SMSR używa bilansu 60 dni z Open-Meteo (ET0 FAO-56) i gleby do 1 m – to przybliżenie, "
+    "nie oficjalne orzeczenie suszy IUNG.",
+    "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m, punkt w środku działki) "
+    "i mapowana na kategorie glebowe SMSR – lokalnie gleba może się różnić.",
+    "Rowy i cieki bierzemy z OpenStreetMap (nie z MPHP Wód Polskich) – niezmapowany rów wygląda jak "
+    "„brak wody w pobliżu”; sprawdź w terenie.",
+    "Zalecenia to wskazówki retencyjne i agrotechniczne dopasowane do użytku z EGiB, nie decyzja "
+    "administracyjna. Budowa zbiornika czy zastawki może wymagać zgłoszenia wodnoprawnego.",
 ]
 
 
 SAT_LIMITATION = (
-    "Zdjęcie satelitarne (Sentinel-2, piksel 10 m) pokazuje zieleń roślin (NDVI) i wodę w liściach (NDMI), "
-    "a nie wilgotność gleby. Porównanie z poprzednimi latami nie wie, co wtedy rosło na polu (płodozmian), "
-    "dlatego satelita tylko koryguje ocenę z pogody i gleby, a nie ją zastępuje. Woda stojąca to klasyfikacja ESA – "
+    "Zdjęcie satelitarne (Sentinel-2, piksel 10 m) pokazuje zieleń roślin i wodę w liściach, "
+    "a nie wilgotność gleby. Interpretacja uwzględnia typową zieleń dla wybranej uprawy i miesiąca. "
+    "Porównanie z poprzednimi latami (gdy dostępne) nie wchodzi do oceny punktowej – dzięki temu "
+    "ten sam raport nie zmienia wyniku przy ponownym uruchomieniu. Woda stojąca to klasyfikacja ESA – "
     "bardzo mokra, ciemna gleba może być wzięta za wodę."
 )
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import date
 
 from app.crops.catalog import CROPS, get_crop, list_crops, sensitivity_level
-from app.crops.fao import FAO_KY, ky_to_sensitivity
+from app.crops.fao import ASSUMED_KY, FAO_KY, effective_ky, ky_is_from_fao, ky_to_sensitivity
 from app.crops.smsr import (
     _THRESHOLDS,
     evaluate_smsr,
@@ -89,6 +89,17 @@ def test_smsr_names_match_regulation() -> None:
     }
 
 
+def test_assumed_ky_not_labelled_as_fao() -> None:
+    assert FAO_KY["krzewy"] is None
+    assert ASSUMED_KY["krzewy"] == 1.15
+    assert effective_ky("krzewy") == 1.15
+    assert not ky_is_from_fao("krzewy")
+    assert ky_is_from_fao("kukurydza_ziarno")
+    c = get_crop("krzewy")
+    assert c["faoKy"] is None and c["effectiveKy"] == 1.15 and not c["kyFromFao"]
+    assert c["droughtSensitivity"] == ky_to_sensitivity(1.15)
+
+
 def test_analyze_exposes_fao_and_smsr_evidence(sample_bundle) -> None:
     sample_bundle.soil["values"]["awc_mm"] = 100.0
     sample_bundle.meteo["values"]["kbw_60d"] = -200.0
@@ -96,10 +107,19 @@ def test_analyze_exposes_fao_and_smsr_evidence(sample_bundle) -> None:
     ev = {e.id: e for e in report.evidence}
     assert "ev_fao_ky" in ev
     assert ev["ev_fao_ky"].value == 1.25
+    assert "FAO" in ev["ev_fao_ky"].label
     assert "ev_smsr_threshold" in ev
+    assert "przybliżenie" in (ev["ev_smsr_threshold"].comparison or "")
     assert "ev_kbw_60d" in ev
     src = {s.id for s in report.sources}
     assert {"fao_ky", "smsr_kbw"} <= src
+
+    # Assumed Ky (berries) must not claim FAO in the label.
+    berries = run_engine(bundle=sample_bundle, crop_id="truskawki", analysis_date=date(2025, 7, 15))
+    bev = {e.id: e for e in berries.evidence}
+    assert "ev_fao_ky" in bev
+    assert "przyjęt" in bev["ev_fao_ky"].label.lower()
+    assert "FAO" not in bev["ev_fao_ky"].label
 
 
 def test_brak_skips_crop_evidence_and_irrigation(sample_bundle) -> None:

@@ -161,11 +161,17 @@ def _parse_om_soil(body: dict[str, Any]) -> dict[date, SoilDay]:
     return out
 
 
+# Pin the reanalysis so the 10-year baseline compares the same model family across years
+# (default best_match can splice different models). era5_seamless = ERA5 + ERA5-Land.
+ARCHIVE_MODEL = "era5_seamless"
+
+
 async def _fetch_archive(client: httpx.AsyncClient, lat: float, lng: float, start: date, end: date
                          ) -> tuple[dict[date, Day], dict[date, SoilDay]]:
     params: dict[str, Any] = {
         "latitude": lat, "longitude": lng, "start_date": start.isoformat(), "end_date": end.isoformat(),
         "daily": f"{DAILY_VARS},{SOIL_VARS}", "timezone": "Europe/Warsaw",
+        "models": ARCHIVE_MODEL,
     }
     if _API_KEY:
         params["apikey"] = _API_KEY
@@ -505,8 +511,8 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
             soil: dict[date, SoilDay] = {}
             try:
                 series, soil = await _fetch_archive(client, lat, lng, start, end)
-                used.append({"name": "Open-Meteo Historical Weather API (ERA5, ERA5-Land – opady, parowanie, "
-                                     "wilgotność gleby)", "url": ARCHIVE_URL})
+                used.append({"name": f"Open-Meteo Historical Weather API ({ARCHIVE_MODEL} – opady, "
+                                     "parowanie, wilgotność gleby)", "url": ARCHIVE_URL})
             except Exception as exc:
                 series = await _fetch_power(client, lat, lng, start, end)  # raises -> coverage none
                 used.append({"name": "NASA POWER Daily API (MERRA-2/CERES; ET0 wg FAO-56 liczone lokalnie)",
@@ -551,7 +557,7 @@ async def fetch_meteo(centroid: list[float], analysis_date: date | str) -> dict[
     res = await run_adapter(
         "Open-Meteo",
         ARCHIVE_URL,
-        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 5},
+        {"lat": lat, "lng": lng, "analysis_date": d.isoformat(), "v": 6, "models": ARCHIVE_MODEL},
         fetch,
         cache_ttl_sec=3600 if recent else None,
     )

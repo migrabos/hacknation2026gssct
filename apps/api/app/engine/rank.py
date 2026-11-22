@@ -142,6 +142,10 @@ def _why(action_id: str, f: Facts, cause_ids: set[str]) -> tuple[str, list[str]]
                     f"({fmt(ro.storm_rain_mm, 0)} mm deszczu), oczko powinno mieć ok. {fmt(ro.pond_m3, 0)} m³ "
                     f"pojemności{size}. Mniejsze też pomoże – zatrzyma część tej wody.")
             refs = [*refs, "ev_pond_volume"]
+        if f.awc is not None and f.awc < AWC_LOW:
+            why += (" Na lekkiej, piaszczystej glebie wykop bez uszczelnienia (folia, glina) szybko "
+                    "wyschnie – planuj uszczelnienie albo wybierz miejsce z wysokim zwierciadłem wód gruntowych.")
+            refs = [*refs, "ev_soil_awc"]
         return why, refs
     if action_id == "cover_crops":
         if "bare_soil" in cause_ids:
@@ -178,11 +182,60 @@ def _standing_water(f: Facts) -> bool:
     return f.water_pct is not None and f.water_pct >= SHOW_WATER_PCT
 
 
+# Field agrotech that does not fit grassland, orchards, perennials, forest, built-up land.
+_FIELD_ONLY = frozenset({"cover_crops", "reduce_tillage", "residues"})
+_NO_TILL_COVER = frozenset({"cover_crops", "reduce_tillage"})
+# EGiB categories → blocked action ids
+_LAND_BLOCK: dict[str, frozenset[str]] = {
+    "meadow": _FIELD_ONLY,
+    "pasture": _FIELD_ONLY,
+    "orchard": _NO_TILL_COVER,          # residues between rows still OK
+    "forest": _FIELD_ONLY | {"small_pond"},
+    "woodland": _FIELD_ONLY,
+    "built": _FIELD_ONLY | {"small_pond", "buffer_strips"},
+    "farmyard": _NO_TILL_COVER,
+    "water": _FIELD_ONLY | {"small_pond", "buffer_strips"},
+    "transport": _FIELD_ONLY | {"small_pond", "buffer_strips"},
+}
+# Perennial / specialty crops: no ploughing or mustard cover-crop advice
+_PERENNIAL_CROPS = frozenset({"chmiel", "drzewa", "krzewy", "truskawki"})
+_MIN_POND_HA = 0.3  # below this, a pond is rarely practical unless water already stands
+
+
+def _blocked_actions(f: Facts) -> set[str]:
+    blocked: set[str] = set()
+    if f.land_category:
+        blocked |= _LAND_BLOCK.get(f.land_category, frozenset())
+    if f.land_agri is False:
+        blocked |= _FIELD_ONLY | {"small_pond"}
+    if f.crop_id in _PERENNIAL_CROPS:
+        blocked |= _NO_TILL_COVER
+    return blocked
+
+
+def _pond_sensible(f: Facts) -> bool:
+    """Pond only when there is a natural reason — not as a generic drought default."""
+    if _standing_water(f):
+        return True
+    if f.area_ha is not None and f.area_ha < _MIN_POND_HA:
+        return False
+    if f.spot_drop is not None and f.spot_drop >= 0.4:
+        return True
+    if f.runoff in ("medium", "high") or (f.slope is not None and f.slope >= 3.5):
+        return True
+    return False
+
+
+def _filter_actions(ids: list[str], blocked: set[str]) -> list[str]:
+    return [a for a in ids if a not in blocked]
+
+
 def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause], f: Facts) -> Recommendations:
     if assessment is None:
         raise RuntimeError("Nie można rekomendować bez oceny wilgoci.")
 
     cause_ids = {c.id for c in causes}
+    blocked = _blocked_actions(f)
     note: str | None = NO_IRRIGATION_NOTE
     if assessment.current.level == "insufficient_data":
         note = "Za mało danych, aby ocenić potrzebę nawadniania."
@@ -192,24 +245,39 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
 
     selected: dict[str, list[str]] = {"retention": [], "agrotech": []}
     for aid, meta in ACTIONS.items():
-        if meta["kind"] == "irrigation":
+        if meta["kind"] == "irrigation" or aid in blocked:
             continue
         if set(meta["triggers"]) & cause_ids:
             selected[meta["kind"]].append(aid)
 
     if f.nearby_water and f.water_type in ("ditch", "drain") and f.water_dist is not None:
-        selected["retention"].append("ditch_retention")
+        if "ditch_retention" not in blocked:
+            selected["retention"].append("ditch_retention")
 
-    # Standing water seen from space = ready-made spot for a pond, wet or dry year alike.
-    if _standing_water(f) and "small_pond" not in selected["retention"]:
+    # Standing water / clear low spot → pond; never as a blind default on sand/tiny plots.
+    if _pond_sensible(f) and "small_pond" not in blocked and "small_pond" not in selected["retention"]:
         selected["retention"].append("small_pond")
 
-    # Any moisture risk → always give at least one action in each bucket.
+    # Drop pond if it was trigger-selected but site is unsuitable (tiny plot, no relief).
+    if "small_pond" in selected["retention"] and not _pond_sensible(f):
+        selected["retention"] = [a for a in selected["retention"] if a != "small_pond"]
+
+    # Moisture risk → at least one sensible action per bucket (land-use aware).
     if moisture_risk:
         if not selected["retention"]:
-            selected["retention"] = ["small_pond"]
+            if "buffer_strips" not in blocked and (f.slope is not None and f.slope >= 2.0):
+                selected["retention"] = ["buffer_strips"]
+            elif "ditch_retention" not in blocked and f.nearby_water and f.water_type in ("ditch", "drain"):
+                selected["retention"] = ["ditch_retention"]
+            elif _pond_sensible(f) and "small_pond" not in blocked:
+                selected["retention"] = ["small_pond"]
+            elif "buffer_strips" not in blocked:
+                selected["retention"] = ["buffer_strips"]
         if not selected["agrotech"]:
-            selected["agrotech"] = ["cover_crops", "residues"]
+            defaults = _filter_actions(["cover_crops", "residues"], blocked)
+            if not defaults and "residues" not in blocked:
+                defaults = ["residues"]
+            selected["agrotech"] = defaults
 
     def to_rec(aid: str, prio: int, timeframe: str | None = None) -> Recommendation:
         a = get_action(aid)
@@ -225,10 +293,13 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     retention = ordered("retention")
     agrotech = ordered("agrotech")
 
-    # Irrigation last: only when dry now AND sensitive crop AND in the crop's season
-    # AND retention already offered. „Brak uprawy” never gets irrigation.
+    # Irrigation last: dry now + (sensitive crop OR SMSR breach) + in season + retention offered.
     irrigation: list[Recommendation] | None = None
     dry_now = assessment.current.level in ("dry", "very_dry")
+    # SMSR breach unlocks irrigation only when Ky is assumed (no FAO-33 row), so medium-Ky
+    # cereals like winter wheat stay “tolerant” unless their FAO weight is already high.
+    smsr_dry = f.smsr is not None and f.smsr.below_threshold
+    crop_wants_water = f.crop_sens >= HIGH_SENSITIVITY or (smsr_dry and not f.ky_from_fao)
     if f.crop_id == NO_CROP_ID:
         note = ("Na działce nie ma uprawy, więc nawadnianie nie ma sensu. Skup się na zatrzymaniu wody "
                 "i okrywie gleby (punkty 3 i 4). Gdy posadzisz roślinę – uruchom raport ponownie "
@@ -238,7 +309,7 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
         note = (f"Dzień oceny ({month}) wypada poza sezonem wzrostu tej uprawy, więc nawadnianie teraz nie ma "
                 f"sensu. Sprawdź sytuację ponownie przed okresem krytycznym ({f.crop_phase_pl}). "
                 "Teraz najwięcej da zatrzymanie wody z jesieni i zimy – działania z punktów 3 i 4.")
-    elif dry_now and f.crop_sens >= HIGH_SENSITIVITY and retention:
+    elif dry_now and crop_wants_water and retention:
         plan = irrigation_plan(f)
         how_often = f", co {_range(*plan.every)} dni" if plan.every else ""
         timeframe = (f"teraz (trwa najbardziej wrażliwa faza){how_often}, rano lub wieczorem"

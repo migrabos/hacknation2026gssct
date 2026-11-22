@@ -36,8 +36,24 @@ Web (second terminal):
 ```bash
 cd apps/web
 npm install
+```
+
+```bash
+# Linux / macOS / Git Bash
 NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```
+
+```powershell
+# Windows PowerShell
+$env:NEXT_PUBLIC_API_URL="http://localhost:8000"; npm run dev
+```
+
+```bat
+REM Windows cmd
+set NEXT_PUBLIC_API_URL=http://localhost:8000 && npm run dev
+```
+
+Wymagania: **Python 3.11+**, **Node.js 20+**.
 
 - Plot pick: `GET /plot/by-point?lat=..&lng=..`, `GET /plot/by-id?id=..` (add `&context=true` for slope + water)
 - Health: `GET http://127.0.0.1:8000/health`
@@ -47,10 +63,10 @@ NEXT_PUBLIC_API_URL=http://localhost:8000 npm run dev
 ```bash
 curl -X POST http://127.0.0.1:8000/analyze \
   -H "Content-Type: application/json" \
-  -d '{"plotId":"040308_5.0004.17220","cropId":"kukurydza","analysisDate":"2026-07-15"}'
+  -d '{"plotId":"040308_5.0004.17220","cropId":"kukurydza_ziarno","analysisDate":"2026-07-15"}'
 ```
 
-Windows (cmd):
+Windows (cmd) — ten sam `cropId` (`kukurydza` też działa jako alias):
 
 ```bat
 curl -X POST http://127.0.0.1:8000/analyze ^
@@ -106,7 +122,8 @@ Sample report from a real live run (plot 040308_5.0004.17220, kukurydza_ziarno, 
 | Data | Mode | Range / date |
 |------|------|--------------|
 | Plot geometry (ULDK), land use (KIEG/EGiB), NMT heights, OSM water | live per request | current state of the public service |
-| Meteo (Open-Meteo ERA5 archive; NASA POWER fallback) | live | 10 years + 1 year back from the analysis date; the forecast model fills only the last ~10 days before *today* |
+| Meteo (Open-Meteo archive `era5_seamless`; NASA POWER fallback) | live | 10 years + 1 year back from the analysis date; the forecast model fills only the last ~10 days before *today* |
+| Hydro (OSM Overpass + OpenFreeMap tiles) | live | nearest ditch/stream ≤ 500 m; not MPHP / ISOK |
 | SoilGrids 2.0 | live | static global model (0–100 cm) |
 | Sentinel-2 L2A (Earth Search STAC) | live | clear scene within 21 days before the analysis date; same window in the 5 previous years for the baseline |
 | EDO CDI | live | latest 10-day map at the analysis date |
@@ -125,7 +142,7 @@ Responses are disk-cached (`ADAPTER_CACHE_DIR`). The cache only speeds up repeat
 
 - No generative LLM in the runtime product path. No ML model is trained or run.
 - Structured Report is authoritative; Polish narrative sections are template-filled from Evidence.
-- AI tools used while writing code: Claude Code (Anthropic) – code audit and engine changes. `TODO: zespół – dopisz pozostałe narzędzia (np. Cursor, Copilot, ChatGPT).`
+- AI tools used while writing code: **Cursor** (Composer / Agent), Claude Code (Anthropic) – scaffolding, engine, adapters, audit fixes. No generative LLM in the product path.
 
 ---
 
@@ -133,7 +150,7 @@ Responses are disk-cached (`ADAPTER_CACHE_DIR`). The cache only speeds up repeat
 
 | Layer | Libraries |
 |-------|-----------|
-| Web (`apps/web`) | Next.js 16, React 19, Leaflet 1.9 + react-leaflet 5, TypeScript |
+| Web (`apps/web`) | Next.js 16, React 19, Leaflet 1.9 + react-leaflet 5, maplibre-gl + @maplibre/maplibre-gl-leaflet, TypeScript |
 | API (`apps/api`) | FastAPI, Uvicorn, Pydantic + pydantic-settings, httpx, Shapely, pyproj, rasterio (COG reads), NumPy, Pillow (EDO WMS colours), mapbox-vector-tile (OpenFreeMap hydro fallback), tzdata |
 | Tests | pytest, pytest-asyncio |
 
@@ -144,7 +161,7 @@ Licenses of libraries and data sources: [`docs/licenses.md`](docs/licenses.md).
 ## Scalability and costs
 
 - **Stateless API:** no database and no accounts, so it scales horizontally by adding instances. The disk cache can be moved to a shared volume or object storage.
-- **Bottleneck = external APIs, not compute.** One analysis does about 10 HTTP calls and takes under 1 s of CPU. The free Open-Meteo tier is non-commercial and rate-limited. An 11-year daily request counts as many "calls", so production use (KOWR) needs a paid key (`OPEN_METEO_API_KEY`) or a self-hosted Open-Meteo instance (open source, ERA5 from Copernicus).
+- **Bottleneck = external APIs, not compute.** One analysis does about 10 HTTP calls and takes under 1 s of CPU. The free Open-Meteo tier is non-commercial and rate-limited. An 11-year daily request with several variables is billed as many “calls” (order of ~150–200 per cold analysis) — roughly tens of new plot+date pairs per day per IP before the free cap. Demo: warm the cache (`python -m warm_cache`) for rehearsal plots. Production (KOWR): paid key (`OPEN_METEO_API_KEY`) or self-hosted Open-Meteo (ERA5 from Copernicus).
 - **Costs:** all other sources are free (GUGiK, Copernicus, ISRIC, NASA, OSM). Hosting: one small container (~1 vCPU / 1 GB RAM) plus a static frontend (Vercel/Netlify free tier).
 - **Nationwide coverage:** every source covers all of Poland. No per-plot precomputation, so a new plot works the same as a rehearsal plot.
 
@@ -163,8 +180,9 @@ Licenses of libraries and data sources: [`docs/licenses.md`](docs/licenses.md).
 
 - Thresholds are simple water-balance proxies, not a calibrated hydrological model.
 - Satellite (NDVI/NDMI) only corrects the weather-based score within −10/+6 points. It shows leaves, not soil moisture, and the multi-year baseline is used only with ≥ 3 clear years. EDO CDI is a regional indicator.
-- Water features come from OpenStreetMap (Overpass mirrors, fallback OpenFreeMap vector tiles – needs `mapbox-vector-tile`). When both fail, hydro is reported as missing. Unmapped ditches are not visible.
-- Crop season months, Kc and irrigation doses are group-level orientation values (FAO-56 / FAO-33 / IUNG groups), not variety-level agronomy. The irrigation dose is a guide, not an irrigation schedule.
+- Water features come from OpenStreetMap (Overpass mirrors, fallback OpenFreeMap vector tiles – needs `mapbox-vector-tile`), **not** from MPHP / Hydroportal ISOK. When both fail, hydro is reported as missing. Unmapped ditches are not visible.
+- Crop season months, phase Kc (ini/mid) and irrigation doses are group-level orientation values (FAO-56 / FAO-33 / IUNG groups), not variety-level agronomy. Ky without a FAO-33 row is labelled „przyjęte”, not „FAO”. The irrigation dose is a guide, not an irrigation schedule.
+- Basemaps in the UI: OpenStreetMap tiles + Geoportal ORTO (GUGiK).
 - Slope = least-squares plane through ~25–40 GUGiK NMT points inside the plot (mean slope). Local gullies are not modelled.
 - Irrigation is never first advice when retention applies.
 

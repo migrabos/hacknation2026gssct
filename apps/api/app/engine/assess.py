@@ -110,24 +110,45 @@ def has_meteo(f: Facts) -> bool:
 
 
 def satellite_moisture_signal(f: Facts) -> tuple[float, list[str]]:
-    """(score delta, farmer-language reasons) from canopy water seen by Sentinel-2."""
+    """(score delta, farmer-language reasons) from canopy water seen by Sentinel-2.
+
+    NDMI anomaly vs previous years is shown in text when available, but does **not**
+    enter the score — otherwise a cold first run (history still fetching) and a warm
+    second run would change the drought level for the same plot/date.
+    Crop×month expected NDVI (ndvi_expect) adjusts absolute NDMI reading.
+    """
+    from app.crops.ndvi_expect import expected_ndvi
+
     if f.ndmi is None or f.ndvi is None or f.ndvi < SAT_VEG_NDVI:
+        # Still comment when canopy is weaker than expected for this crop/month.
+        band = expected_ndvi(f.crop_id, f.scene_month or f.month)
+        if f.ndvi is not None and band is not None and f.ndvi < band[0] - 0.05:
+            return -4.0, [f"zdjęcie z {f.ndvi_date or 'satelity'} pokazuje słabszą zieleń niż zwykle "
+                          f"dla tej uprawy o tej porze (wskaźnik zieleni {fmt(f.ndvi, 2)}, "
+                          f"oczekiwano ok. {fmt(band[0], 2)}–{fmt(band[1], 2)})"]
         return 0.0, []
+
     delta = 0.0
     why: list[str] = []
-    if f.ndvi >= SAT_DENSE_NDVI and f.ndmi < NDMI_STRESS:
+    band = expected_ndvi(f.crop_id, f.scene_month or f.month)
+    # Dense enough for this crop/month (or generic dense canopy) before trusting leaf water.
+    dense = (f.ndvi >= band[0]) if band is not None else (f.ndvi >= SAT_DENSE_NDVI)
+    if dense and f.ndmi < NDMI_STRESS:
         delta -= 6
-        why.append(f"satelita pokazuje, że rośliny mają mało wody w liściach (NDMI {fmt(f.ndmi, 2)})")
-    elif f.ndmi >= NDMI_WELL:
+        why.append("satelita pokazuje, że rośliny mają mało wody w liściach")
+    elif f.ndmi >= NDMI_WELL and dense:
         delta += 4
+    if band is not None and f.ndvi < band[0]:
+        delta -= 3
+        why.append(f"zieleń uprawy jest słabsza niż typowa o tej porze "
+                   f"(wskaźnik {fmt(f.ndvi, 2)}, zwykle {fmt(band[0], 2)}–{fmt(band[1], 2)})")
+    # History anomaly: narrative only (determinism across cold/warm cache).
     anom = f.ndmi_anomaly
-    if anom is not None:
-        if anom <= -NDMI_ANOM:
-            delta -= 6
-            why.append(f"rośliny mają mniej wody niż zwykle o tej porze roku na tej działce "
-                       f"(NDMI {fmt(f.ndmi, 2)}, zwykle {fmt(f.hist_ndmi, 2)})")
-        elif anom >= NDMI_ANOM:
-            delta += 4
+    if anom is not None and anom <= -NDMI_ANOM:
+        why.append(f"rośliny mają też mniej wody w liściach niż zwykle na tej działce "
+                   f"(zwykle ok. {fmt(f.hist_ndmi, 2)})")
+    elif anom is not None and anom >= NDMI_ANOM:
+        why.append("woda w liściach jest wyższa niż zwykle o tej porze na tej działce")
     return max(-SAT_MAX_MINUS, min(SAT_MAX_PLUS, delta)), why
 
 
@@ -219,10 +240,9 @@ def _assess_current(f: Facts) -> CurrentBlock:
     else:
         conf -= 0.05
 
-    if f.cdi is not None:
-        if f.cdi >= 1:
-            refs.append("ev_cdi")
-        score -= {0: 0, 1: 4, 2: 8, 3: 12}.get(f.cdi, 0)
+    if f.cdi is not None and f.cdi >= 1:
+        refs.append("ev_cdi")
+        score -= {1: 4, 2: 8, 3: 12}.get(f.cdi, 0)
     else:
         conf -= 0.04
 
@@ -233,12 +253,12 @@ def _assess_current(f: Facts) -> CurrentBlock:
             depth = max(0.0, -f.smsr.margin_mm)
             score -= 10 + min(12.0, depth * 0.08)
             why.append(
-                f"bilans wodny 60 dni jest poniżej progu SMSR dla tej uprawy "
-                f"({fmt(f.smsr.threshold_mm, 0)} mm)"
+                f"bilans wodny 60 dni jest poniżej orientacyjnego progu IUNG dla tej uprawy "
+                f"({fmt(f.smsr.threshold_mm, 0)} mm) – to przybliżenie, nie oficjalne orzeczenie"
             )
         elif f.smsr.margin_mm < 20:
             score -= 4
-            why.append("bilans wodny 60 dni jest blisko progu suszy rolniczej SMSR")
+            why.append("bilans wodny 60 dni jest blisko orientacyjnego progu suszy rolniczej IUNG")
 
     if f.ndvi is not None:
         refs.append("ev_ndvi")  # NDVI itself is context only: depends on crop & stage
