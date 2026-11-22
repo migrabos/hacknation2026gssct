@@ -17,6 +17,7 @@ import {
 import Map from "./Map";
 import Notice from "./Notice";
 import RainChart from "./RainChart";
+import CountUp from "./CountUp";
 import RiskChart from "./RiskChart";
 import { PrintIcon } from "./Icons";
 import { sourcePage, weatherProviders } from "@/lib/source-page";
@@ -158,13 +159,15 @@ export default function ReportView({ report }: { report: Report }) {
         </div>
         <div>
           <dt>Powierzchnia</dt>
-          <dd>{formatNumber(plot.areaHa, 2)} ha</dd>
+          <dd>
+            <CountUp value={plot.areaHa} digits={2} /> ha
+          </dd>
         </div>
         {plot.terrain?.slopePct != null && (
           <div>
             <dt>Spadek terenu według modelu</dt>
             <dd>
-              {formatNumber(plot.terrain.slopePct, 2)}%
+              <CountUp value={plot.terrain.slopePct} digits={2} />%
               {sources.get("dem")?.dataPeriod && <> · {sources.get("dem")?.dataPeriod}</>}
             </dd>
           </div>
@@ -406,7 +409,11 @@ function QuickSummary({ report }: { report: Report }) {
             <div className="assess-kicker">Najczęściej brakuje wody</div>
             <strong>{ma.susceptibility.riskWindow.peakLabel}</strong>
             {ma.susceptibility.riskWindow.yearsHit != null && ma.susceptibility.riskWindow.yearsTotal != null && (
-              <span className="muted"> · w {ma.susceptibility.riskWindow.yearsHit} z {ma.susceptibility.riskWindow.yearsTotal} lat</span>
+              <span className="muted">
+                {" "}
+                · w <CountUp value={ma.susceptibility.riskWindow.yearsHit} delayMs={350} /> z{" "}
+                {ma.susceptibility.riskWindow.yearsTotal} lat
+              </span>
             )}
           </div>
         )}

@@ -58,7 +58,11 @@ export default function RainChart({ months, analysisDate, source }: { months: Pr
               <div key={m.month} className="rain-col" tabIndex={0} data-edge={edge}>
                 <div className="rain-track">
                   {m.precipMm != null && (
-                    <span className="rain-bar" data-partial={m.partial} style={{ height: `${(m.precipMm / max) * 100}%` }} />
+                    <span
+                      className="rain-bar"
+                      data-partial={m.partial}
+                      style={{ height: `${(m.precipMm / max) * 100}%`, ["--i" as string]: i }}
+                    />
                   )}
                   {m.normalMm != null && <span className="rain-avg" style={{ bottom: `${(m.normalMm / max) * 100}%` }} />}
                 </div>

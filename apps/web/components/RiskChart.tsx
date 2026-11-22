@@ -46,7 +46,11 @@ export default function RiskChart({ risk }: { risk?: RiskWindow | null }) {
             data-edge={i < 2 ? "start" : i > risk.bars.length - 3 ? "end" : "mid"}
           >
             <div className={s.track}>
-              <span className={s.bar} data-risky={b.risky} style={{ height: `${(height(b.value) / max) * 100}%` }} />
+              <span
+                className={s.bar}
+                data-risky={b.risky}
+                style={{ height: `${(height(b.value) / max) * 100}%`, ["--i" as string]: i }}
+              />
             </div>
             <span className={s.crit} data-on={b.critical} />
             <span className={s.label}>{axisLabel(b.label, risk.method)}</span>
