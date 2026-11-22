@@ -1,74 +1,51 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon } from "./Icons";
 
 /**
- * Shows the contest-order pipeline while /analyze runs.
- * The API answers in one response, so progress is paced by time;
- * the last step only completes when the report actually arrives.
+ * Loading screen while /analyze runs: static description, one progress bar and elapsed time.
+ * The API answers in a single response, so progress is paced by time: fast at first, then slowing
+ * down and never reaching 100% on its own (it eases towards MAX_PCT) — the page moves on to the
+ * report as soon as it arrives.
  */
-const DEFAULT_STEPS = [
-  { title: "Pobieramy dane o działce", sub: "granice, pogoda z 10 lat, gleba, ukształtowanie terenu" },
-  { title: "Ocena wilgotności", sub: "jak sucho jest teraz i jak często bywa sucho" },
-  { title: "Przyczyny", sub: "brak deszczu, gleba, spływ wody, wymagania uprawy" },
-  { title: "Retencja i agrotechnika", sub: "jak zatrzymać wodę na polu" },
-  { title: "Nawadnianie", sub: "tylko jeśli naprawdę potrzebne" },
-];
-const STEP_MS = [2600, 1600, 1600, 1800];
+const MAX_PCT = 92;
+const TAU_MS = 7000; // ~50% after 5 s, ~80% after 15 s, ~90% after 30 s
+const TICK_MS = 100;
 
-export default function PipelineLoader({
-  plotLabel,
-  steps: STEPS = DEFAULT_STEPS,
-}: {
-  plotLabel?: string;
-  steps?: { title: string; sub: string }[];
-}) {
-  const [active, setActive] = useState(0);
-  const [elapsed, setElapsed] = useState(0);
+export default function PipelineLoader({ plotLabel }: { plotLabel?: string }) {
+  const [elapsedMs, setElapsedMs] = useState(0);
 
   useEffect(() => {
-    if (active >= STEPS.length - 1) return;
-    const t = setTimeout(() => setActive((a) => a + 1), STEP_MS[active] ?? 1800);
-    return () => clearTimeout(t);
-  }, [active, STEPS.length]);
-
-  useEffect(() => {
-    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    const t0 = performance.now();
+    const t = setInterval(() => setElapsedMs(performance.now() - t0), TICK_MS);
     return () => clearInterval(t);
   }, []);
 
-  const pct = Math.round(((active + 0.5) / STEPS.length) * 100);
+  const pct = MAX_PCT * (1 - Math.exp(-elapsedMs / TAU_MS));
+  const seconds = Math.floor(elapsedMs / 1000);
 
   return (
-    <section className="panel pipeline" aria-live="polite" aria-busy="true">
+    <section className="panel pipeline" aria-busy="true">
       <h2>Przygotowujemy raport</h2>
       <p className="muted" style={{ marginBottom: 0 }}>
         {plotLabel ? <>Działka {plotLabel}. </> : null}
         Zwykle trwa to kilkanaście sekund.
       </p>
-      <div className="progress" aria-hidden="true">
+
+      <div
+        className="progress"
+        role="progressbar"
+        aria-label="Postęp przygotowania raportu"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(pct)}
+      >
         <div style={{ width: `${pct}%` }} />
       </div>
-      <ol>
-        {STEPS.map((s, i) => {
-          const state = i < active ? "done" : i === active ? "active" : "todo";
-          return (
-            <li key={s.title} data-state={state}>
-              <span className="pipe-icon">
-                {state === "done" ? <CheckIcon /> : state === "active" ? <span className="spinner" /> : null}
-              </span>
-              <span>
-                {s.title}
-                <span className="pipe-sub">{s.sub}</span>
-              </span>
-            </li>
-          );
-        })}
-      </ol>
-      <p className="muted small" style={{ margin: "12px 0 0" }}>
-        Czas: {elapsed} s
-        {elapsed > 30 && " — niektóre serwisy z danymi odpowiadają dziś wolniej, prosimy o cierpliwość."}
+
+      <p className="muted small pipe-meta">
+        {seconds} s
+        {seconds > 30 && " — niektóre serwisy z danymi odpowiadają dziś wolniej, prosimy o cierpliwość"}
       </p>
     </section>
   );

@@ -17,6 +17,7 @@ import {
 import Map from "./Map";
 import Notice from "./Notice";
 import RainChart from "./RainChart";
+import CountUp from "./CountUp";
 import RiskChart from "./RiskChart";
 import { PrintIcon } from "./Icons";
 import { sourcePage, weatherProviders } from "@/lib/source-page";
@@ -158,13 +159,15 @@ export default function ReportView({ report }: { report: Report }) {
         </div>
         <div>
           <dt>Powierzchnia</dt>
-          <dd>{formatNumber(plot.areaHa, 2)} ha</dd>
+          <dd>
+            <CountUp value={plot.areaHa} digits={2} /> ha
+          </dd>
         </div>
         {plot.terrain?.slopePct != null && (
           <div>
             <dt>Spadek terenu według modelu</dt>
             <dd>
-              {formatNumber(plot.terrain.slopePct, 2)}%
+              <CountUp value={plot.terrain.slopePct} digits={2} />%
               {sources.get("dem")?.dataPeriod && <> · {sources.get("dem")?.dataPeriod}</>}
             </dd>
           </div>
@@ -296,6 +299,23 @@ export default function ReportView({ report }: { report: Report }) {
 
       {/* ---------- Sources, gaps, limitations ---------- */}
       <section className="r-section sources-section" id="zrodla" aria-label="Źródła danych i ograniczenia">
+        {report.sources.length > 0 && (
+          <div className="source-coverage">
+            <strong>Źródła z kompletem danych</strong>{" "}
+            <span>{report.sources.length - failedSources.length} z {report.sources.length}</span>
+            <div className="source-coverage-bar" aria-hidden="true">
+              {report.sources.map((source) => (
+                <span key={source.id} data-status={source.status} />
+              ))}
+            </div>
+            {failedSources.length > 0 && (
+              <small>
+                Częściowe dane: {failedSources.filter((s) => s.status === "partial").length}
+                {" · "}Brak danych: {failedSources.filter((s) => s.status === "failed").length}
+              </small>
+            )}
+          </div>
+        )}
         {report.missingData.length > 0 && (
           <div id="braki" style={{ marginBottom: 20, scrollMarginTop: 16 }}>
             <h3>Czego brakuje w tym raporcie</h3>
@@ -406,7 +426,11 @@ function QuickSummary({ report }: { report: Report }) {
             <div className="assess-kicker">Najczęściej brakuje wody</div>
             <strong>{ma.susceptibility.riskWindow.peakLabel}</strong>
             {ma.susceptibility.riskWindow.yearsHit != null && ma.susceptibility.riskWindow.yearsTotal != null && (
-              <span className="muted"> · w {ma.susceptibility.riskWindow.yearsHit} z {ma.susceptibility.riskWindow.yearsTotal} lat</span>
+              <span className="muted">
+                {" "}
+                · w <CountUp value={ma.susceptibility.riskWindow.yearsHit} delayMs={350} /> z{" "}
+                {ma.susceptibility.riskWindow.yearsTotal} lat
+              </span>
             )}
           </div>
         )}

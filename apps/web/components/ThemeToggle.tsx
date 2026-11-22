@@ -9,6 +9,8 @@ import {
   type Theme,
 } from "@/lib/theme";
 
+let fadeTimer: number | undefined;
+
 export default function ThemeToggle() {
   const [theme, setTheme] = useState<Theme>(DEFAULT_THEME);
 
@@ -22,6 +24,13 @@ export default function ThemeToggle() {
   function toggle() {
     const next: Theme = theme === "dark" ? "light" : "dark";
     setTheme(next);
+    // Smooth colour fade only for the click itself (never on page load); skipped with reduced motion.
+    const root = document.documentElement;
+    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      root.classList.add("theme-anim");
+      window.clearTimeout(fadeTimer);
+      fadeTimer = window.setTimeout(() => root.classList.remove("theme-anim"), 320);
+    }
     applyTheme(next);
     try {
       localStorage.setItem(THEME_STORAGE_KEY, next);

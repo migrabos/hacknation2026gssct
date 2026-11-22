@@ -13,6 +13,19 @@ export default function ReportPage() {
     setReport(loadReport());
   }, []);
 
+  // Tab title with the plot ("Raport wodny — działka 318, gm. Kutno · Retencja"); browsers also use it
+  // as the default file name when the report is saved as PDF. Restored when leaving the page.
+  useEffect(() => {
+    if (!report) return;
+    const previous = document.title;
+    const nr = report.plot.plotId.split(".").slice(2).join(".") || report.plot.plotId;
+    const where = report.plot.commune ? `, gm. ${report.plot.commune}` : "";
+    document.title = `Raport wodny — działka ${nr}${where} · Retencja`;
+    return () => {
+      document.title = previous;
+    };
+  }, [report]);
+
   if (report === undefined) {
     return (
       <div className="container" style={{ paddingBlock: 48 }}>
