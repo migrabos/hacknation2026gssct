@@ -19,7 +19,7 @@ import RainChart from "./RainChart";
 import { PrintIcon } from "./Icons";
 import { sourcePage, weatherProviders } from "@/lib/source-page";
 
-function SourceLink({ source }: { source: Source }) {
+export function SourceLink({ source }: { source: Source }) {
   if (source.id === "open_meteo") {
     const providers = weatherProviders(source);
     if (!providers.length) return <>Brak informacji o dostawcy</>;

@@ -10,7 +10,7 @@ import type { CropFitItem, CropFitReport, Evidence, Source } from "@/lib/types";
 import { SOURCE_MODE_LABEL, SOURCE_STATUS_LABEL, formatDate, formatDateTime, formatNumber } from "@/lib/labels";
 import Map from "./Map";
 import Notice from "./Notice";
-import { ConfidenceBadge, EvidenceDetails } from "./ReportView";
+import { ConfidenceBadge, EvidenceDetails, SourceLink } from "./ReportView";
 import { PrintIcon } from "./Icons";
 
 type EvMap = globalThis.Map<string, Evidence>;
@@ -202,7 +202,9 @@ export default function CropFitReportView({ report }: { report: CropFitReport })
         </>
       ) : (
         <section className="r-section">
-          <p>Dla tej działki nie porównujemy upraw — szczegóły w ostrzeżeniu powyżej.</p>
+          <p>{landUse?.isAgricultural === false
+            ? "Ewidencja wskazuje teren nierolniczy. Dla tej działki nie porównujemy upraw."
+            : "Za mało danych do doboru upraw. Potrzebne są dane o glebie lub letnim bilansie wodnym."}</p>
         </section>
       )}
 
@@ -245,13 +247,7 @@ export default function CropFitReportView({ report }: { report: CropFitReport })
                         <strong>{s.name}</strong>
                       </td>
                       <td>
-                        {s.url ? (
-                          <a href={s.url} target="_blank" rel="noreferrer">
-                            {s.provider ?? s.url}
-                          </a>
-                        ) : (
-                          s.provider
-                        )}
+                        <SourceLink source={s} />
                         {s.license && <div className="small muted">Licencja: {s.license}</div>}
                       </td>
                       <td>
