@@ -17,8 +17,11 @@ from app.engine.run import run_engine
 
 
 def test_catalog_matches_smsr_rows_exactly() -> None:
-    assert set(CROPS) == set(_THRESHOLDS)
-    assert len(list_crops()) == 14
+    assert set(CROPS) - {"brak"} == set(_THRESHOLDS)
+    assert "brak" in CROPS
+    assert CROPS["brak"]["namePl"] == "Brak uprawy"
+    assert len(list_crops()) == 15
+    assert list_crops()[0]["id"] == "brak"
 
 
 def test_fao_ky_maize_is_high() -> None:
@@ -78,7 +81,7 @@ def test_smsr_evaluate_above_threshold() -> None:
 
 
 def test_smsr_names_match_regulation() -> None:
-    names = {c["namePl"] for c in CROPS.values()}
+    names = {c["namePl"] for c in CROPS.values() if c["id"] != "brak"}
     assert names == {
         "Zboża ozime", "Zboża jare", "Kukurydza na ziarno", "Kukurydza na kiszonkę",
         "Rzepak i rzepik", "Ziemniak", "Burak cukrowy", "Chmiel", "Tytoń",
@@ -97,3 +100,18 @@ def test_analyze_exposes_fao_and_smsr_evidence(sample_bundle) -> None:
     assert "ev_kbw_60d" in ev
     src = {s.id for s in report.sources}
     assert {"fao_ky", "smsr_kbw"} <= src
+
+
+def test_brak_skips_crop_evidence_and_irrigation(sample_bundle) -> None:
+    report = run_engine(bundle=sample_bundle, crop_id="brak", analysis_date=date(2025, 7, 15))
+    assert report.crop.id == "brak"
+    assert report.crop.name == "Brak uprawy"
+    assert report.crop.droughtSensitivity == "low"
+    ev_ids = {e.id for e in report.evidence}
+    assert "ev_crop_sensitivity" not in ev_ids
+    assert "ev_fao_ky" not in ev_ids
+    assert "ev_smsr_threshold" not in ev_ids
+    assert "crop_sensitivity" not in {c.id for c in report.causes}
+    assert report.recommendations.irrigation is None
+    assert report.recommendations.irrigationNote
+    assert "nie ma uprawy" in report.recommendations.irrigationNote

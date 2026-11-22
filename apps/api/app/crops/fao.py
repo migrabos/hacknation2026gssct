@@ -27,6 +27,7 @@ FAO_KY: dict[str, float | None] = {
     "drzewa": 1.1,                  # no apple Ky; pepper/onion band analog
     "truskawki": 1.15,              # no strawberry Ky; high (shallow roots)
     "straczkowe": 1.15,             # peas / beans
+    "brak": None,                   # no crop — not an FAO-33 row
 }
 
 FAO_KY_NOTE: dict[str, str] = {
@@ -44,6 +45,7 @@ FAO_KY_NOTE: dict[str, str] = {
     "drzewa": "brak Ky dla jabłoni w FAO-33 – analog 1,1",
     "truskawki": "brak Ky dla truskawki w FAO-33 – przyjęto 1,15 (płytki system korzeniowy)",
     "straczkowe": "FAO-33 Ky = 1,15 (groch / fasola)",
+    "brak": "brak uprawy – nie stosuje się FAO Ky",
 }
 
 FAO_SOURCE_URL = "https://www.fao.org/4/x0490e/x0490e0e.htm"

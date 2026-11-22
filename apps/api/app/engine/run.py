@@ -7,7 +7,7 @@ from datetime import date, datetime, timezone
 
 from app.adapters.bundle import AdapterBundle
 from app.config import get_settings
-from app.crops.catalog import ORCHARD_CROPS, get_crop, sensitivity_level
+from app.crops.catalog import NO_CROP_ID, ORCHARD_CROPS, get_crop, sensitivity_level
 from app.engine.assess import assess_moisture
 from app.engine.causes import detect_causes
 from app.engine.facts import NO_SAT_HISTORY_NOTE, build_evidence, build_missing, build_sources, extract_facts
@@ -18,9 +18,10 @@ from app.schemas.evidence import Crop, MissingData, PrecipMonth, Report, ReportM
 ENGINE_LIMITATIONS = [
     "Ocena wilgotności to prosty bilans wodny (opady, parowanie, gleba) z jawnymi progami – nie pomiar "
     "wilgotności w polu ani pełny model hydrologiczny.",
-    "Kategorie upraw są dokładnie z IUNG SMSR (MRiRW 2019). Wrażliwość bierze sezonowe Ky z FAO-33; "
-    "porównanie z progami SMSR używa KBW 60 dni z Open-Meteo (ET0), podczas gdy SMSR liczy Penmana na "
-    "stałych oknach kalendarzowych – to przybliżenie, nie oficjalne orzeczenie suszy.",
+    "Kategorie upraw są dokładnie z IUNG SMSR (MRiRW 2019), z dodatkową opcją „Brak uprawy”. "
+    "Wrażliwość bierze sezonowe Ky z FAO-33; porównanie z progami SMSR używa KBW 60 dni z Open-Meteo "
+    "(ET0), podczas gdy SMSR liczy Penmana na stałych oknach kalendarzowych – to przybliżenie, nie "
+    "oficjalne orzeczenie suszy.",
     "Pojemność wodna gleby jest szacowana z modelu SoilGrids (siatka 250 m) i mapowana na kategorie "
     "glebowe SMSR – lokalnie gleba może się różnić.",
     "Zalecenia to wskazówki retencyjne i agrotechniczne, nie decyzja administracyjna. Budowa zbiornika czy "
@@ -41,6 +42,8 @@ _GRASS_LAND = {"meadow", "pasture"}
 def _crop_land_use_mismatch(crop_id: str, crop_name: str, land_use: dict) -> str | None:
     """Warn when the chosen SMSR crop does not fit the plot's land use (agricultural land only;
     non-agricultural plots already get a stronger warning from the plot resolver)."""
+    if crop_id == NO_CROP_ID:
+        return None
     cat, label = land_use.get("category"), land_use.get("labelPl")
     if not cat or not land_use.get("isAgricultural") or cat == "mixed":
         return None

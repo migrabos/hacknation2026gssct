@@ -12,10 +12,12 @@ def test_health(client) -> None:
 def test_crops(client) -> None:
     crops = client.get("/crops").json()
     assert {
-        "zboza_ozime", "zboza_jare", "kukurydza_ziarno", "kukurydza_kiszonka", "rzepak",
+        "brak", "zboza_ozime", "zboza_jare", "kukurydza_ziarno", "kukurydza_kiszonka", "rzepak",
         "ziemniak", "burak", "chmiel", "tyton", "warzywa", "krzewy", "drzewa", "truskawki", "straczkowe",
     } <= {c["id"] for c in crops}
-    assert len(crops) == 14
+    assert len(crops) == 15
+    assert crops[0]["id"] == "brak"
+    assert crops[0]["name"] == "Brak uprawy"
     for c in crops:
         assert set(c) == {"id", "name", "droughtSensitivity"}
         assert c["droughtSensitivity"] in ("low", "medium", "high")

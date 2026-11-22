@@ -14,7 +14,7 @@ from typing import Any
 from adapters.dates import shift_years
 from adapters.licenses import license_for
 from app.adapters.bundle import AdapterBundle
-from app.crops.catalog import CropEntry, sensitivity_level
+from app.crops.catalog import NO_CROP_ID, CropEntry, sensitivity_level
 from app.crops.fao import FAO_SOURCE_NAME, FAO_SOURCE_URL, fao_note
 from app.crops.smsr import (
     SMSR_SOURCE_NAME,
@@ -419,7 +419,7 @@ def build_evidence(f: Facts, crop: CropEntry | None) -> list[Evidence]:
         add("ev_cdi", "Wskaźnik suszy w regionie (EDO)", f.cdi_label or str(f.cdi), SRC_EDO,
             comparison=f"klasa {f.cdi} w skali 0–3")
 
-    if crop:
+    if crop and crop["id"] != NO_CROP_ID:
         ky_cmp = f.fao_note or crop["criticalPhasePl"]
         if f.fao_ky is not None:
             add("ev_fao_ky", "Współczynnik odpowiedzi plonu na deficyt wody (FAO Ky)",

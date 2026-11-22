@@ -24,6 +24,6 @@ def test_crop_catalog_ids_stable() -> None:
     for c in crops:
         Crop.model_validate(c)
     assert {c["id"] for c in crops} == {
-        "zboza_ozime", "zboza_jare", "kukurydza_ziarno", "kukurydza_kiszonka", "rzepak",
+        "brak", "zboza_ozime", "zboza_jare", "kukurydza_ziarno", "kukurydza_kiszonka", "rzepak",
         "ziemniak", "burak", "chmiel", "tyton", "warzywa", "krzewy", "drzewa", "truskawki", "straczkowe",
     }

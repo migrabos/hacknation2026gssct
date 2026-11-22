@@ -1,7 +1,8 @@
 """SMSR crop categories + drought sensitivity from FAO-33 Ky.
 
 Catalog IDs and Polish names match IUNG SMSR rows exactly
-(https://susza.iung.pulawy.pl/progi/). Weights from FAO-33 Ky via
+(https://susza.iung.pulawy.pl/progi/), plus the non-SMSR option `brak`
+(„Brak uprawy” — bare / fallow / nothing sown). Weights from FAO-33 Ky via
 `fao.ky_to_sensitivity`. Live drought flag: `smsr.evaluate_smsr`.
 
 Also carries seasonMonths / criticalMonths / kcMid (FAO-56) for irrigation timing.
@@ -124,6 +125,17 @@ CROPS: dict[str, CropEntry] = {
         "najbardziej wrażliwe w kwitnieniu i zawiązywaniu strąków (VI–VII)",
         season=(4, 5, 6, 7, 8), critical_months=(6, 7), kc_mid=1.15,
     ),
+    # Not an SMSR row — farmer has nothing sown (ugór / odłóg / przed siewem).
+    "brak": {
+        "id": "brak",
+        "namePl": "Brak uprawy",
+        "droughtSensitivity": 0.0,
+        "faoKy": None,
+        "criticalPhasePl": "brak uprawy – nie ma fazy krytycznej",
+        "seasonMonths": (),
+        "criticalMonths": (),
+        "kcMid": 0.0,
+    },
 }
 
 # Legacy ids → SMSR ids (saved links / rehearsal plots / old fixtures).
@@ -136,6 +148,8 @@ CROP_ALIASES: dict[str, str] = {
 }
 
 VALID_CROP_IDS = frozenset(CROPS.keys())
+SMSR_CROP_IDS = frozenset(id_ for id_ in VALID_CROP_IDS if id_ != "brak")
+NO_CROP_ID = "brak"
 
 # Crops typically on orchard / berry land (EGiB sad, plantacja).
 ORCHARD_CROPS = frozenset({"drzewa", "krzewy", "truskawki"})
@@ -171,8 +185,18 @@ def get_crop(crop_id: str) -> CropEntry:
 
 
 def list_crops() -> list[dict]:
-    """GET /crops — same shape as `Crop` in apps/web/lib/types.ts."""
-    return [
-        {"id": c["id"], "name": c["namePl"], "droughtSensitivity": sensitivity_level(c["droughtSensitivity"])}
-        for c in CROPS.values()
-    ]
+    """GET /crops — same shape as `Crop` in apps/web/lib/types.ts.
+
+    „Brak uprawy” is listed first so farmers without a sown crop find it quickly;
+    the rest stay in SMSR regulation order.
+    """
+    def row(c: CropEntry) -> dict:
+        return {
+            "id": c["id"],
+            "name": c["namePl"],
+            "droughtSensitivity": sensitivity_level(c["droughtSensitivity"]),
+        }
+
+    brak = CROPS.get(NO_CROP_ID)
+    rest = [c for c in CROPS.values() if c["id"] != NO_CROP_ID]
+    return ([row(brak)] if brak else []) + [row(c) for c in rest]

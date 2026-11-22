@@ -6,7 +6,7 @@ from typing import NamedTuple
 
 from app.actions.catalog import ACTIONS, get_action
 from app.engine.assess import AWC_LOW, HIGH_SENSITIVITY
-from app.crops.catalog import MONTH_PL
+from app.crops.catalog import MONTH_PL, NO_CROP_ID
 from app.engine.facts import SHOW_WATER_PCT, WATER_TYPE_PL, Facts, fmt
 from app.schemas.evidence import Cause, MoistureAssessment, Recommendation, Recommendations
 
@@ -210,10 +210,14 @@ def rank_recommendations(*, assessment: MoistureAssessment, causes: list[Cause],
     agrotech = ordered("agrotech")
 
     # Irrigation last: only when dry now AND sensitive crop AND in the crop's season
-    # AND retention already offered.
+    # AND retention already offered. „Brak uprawy” never gets irrigation.
     irrigation: list[Recommendation] | None = None
     dry_now = assessment.current.level in ("dry", "very_dry")
-    if dry_now and f.in_season is False:
+    if f.crop_id == NO_CROP_ID:
+        note = ("Na działce nie ma uprawy, więc nawadnianie nie ma sensu. Skup się na zatrzymaniu wody "
+                "i okrywie gleby (punkty 3 i 4). Gdy posadzisz roślinę – uruchom raport ponownie "
+                "z konkretną uprawą.")
+    elif dry_now and f.in_season is False:
         month = MONTH_PL[f.month - 1] if f.month else "ten miesiąc"
         note = (f"Dzień oceny ({month}) wypada poza sezonem wzrostu tej uprawy, więc nawadnianie teraz nie ma "
                 f"sensu. Sprawdź sytuację ponownie przed okresem krytycznym ({f.crop_phase_pl}). "
