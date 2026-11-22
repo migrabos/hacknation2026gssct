@@ -406,9 +406,9 @@ export default function ReportView({ report }: { report: Report }) {
 function QuickSummary({ report }: { report: Report }) {
   const { moistureAssessment: ma, recommendations: rec } = report;
   const top = [
-    ...[...rec.retention].sort((a, b) => a.priority - b.priority).slice(0, 2).map((r) => ({ r, href: "#retencja" })),
-    ...[...rec.agrotech].sort((a, b) => a.priority - b.priority).slice(0, 1).map((r) => ({ r, href: "#agrotechnika" })),
-    ...(rec.irrigation ?? []).slice(0, 1).map((r) => ({ r, href: "#nawadnianie" })),
+    ...[...rec.retention].sort((a, b) => a.priority - b.priority).slice(0, 2),
+    ...[...rec.agrotech].sort((a, b) => a.priority - b.priority).slice(0, 1),
+    ...(rec.irrigation ?? []).slice(0, 1),
   ];
   return (
     <section className="quick-summary" aria-label="Najważniejsze w skrócie">
@@ -439,9 +439,18 @@ function QuickSummary({ report }: { report: Report }) {
         <>
           <div className="assess-kicker" style={{ marginTop: 14 }}>Co zrobić najpierw</div>
           <ol className="quick-summary-actions">
-            {top.map(({ r, href }) => (
+            {top.map((r) => (
               <li key={r.actionId}>
-                <a href={href}>{r.title}</a>
+                <a
+                  href={`#zalecenie-${r.actionId}`}
+                  onClick={(event) => {
+                    const card = document.getElementById(event.currentTarget.hash.slice(1));
+                    const details = card?.querySelector<HTMLDetailsElement>("details.evidence");
+                    if (details) details.open = true;
+                  }}
+                >
+                  {r.title}
+                </a>
                 <span className="muted">
                   {" "}
                   {r.costLevel ? `· ${COST_LABEL[r.costLevel]}` : ""}
@@ -452,7 +461,10 @@ function QuickSummary({ report }: { report: Report }) {
           </ol>
         </>
       ) : (
-        <p style={{ margin: "10px 0 0" }}>Nie widzimy potrzeby dodatkowych działań na tej działce.</p>
+        <p style={{ margin: "10px 0 0" }}>
+          Raport nie zawiera zaleceń dla tej działki.
+          {report.missingData.length > 0 && <> <a href="#braki">Sprawdź, jakich danych zabrakło.</a></>}
+        </p>
       )}
     </section>
   );
@@ -526,7 +538,7 @@ function RecList({
   return (
     <ol className="rec-list">
       {sorted.map((r, i) => (
-        <li key={r.actionId} className="rec">
+        <li key={r.actionId} id={`zalecenie-${r.actionId}`} className="rec" tabIndex={-1}>
           <span className="rec-prio" aria-label={`Kolejność: ${i + 1}`}>
             {i + 1}
           </span>
