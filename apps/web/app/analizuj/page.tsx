@@ -306,8 +306,8 @@ export default function AnalyzePage() {
         </Notice>
       )}
 
-      <div className="analyze-grid">
-        <section aria-labelledby="map-h">
+      <div className="analyze-grid workspace">
+        <section aria-labelledby="map-h" className="workspace-map">
           <h2 id="map-h" className="visually-hidden">
             Mapa
           </h2>
@@ -315,15 +315,12 @@ export default function AnalyzePage() {
             plot={plot}
             onPick={pickOnMap}
             busy={plotBusy === "map"}
-            height="min(70vh, 600px)"
+            height="100%"
             focusBbox={region?.bbox ?? null}
           />
-          <p className="muted small" style={{ marginTop: 8 }}>
-            Granice działek pojawiają się po przybliżeniu mapy. Źródło: GUGiK (Geoportal).
-          </p>
         </section>
 
-        <form className="panel" onSubmit={submit} noValidate>
+        <form className="panel workspace-panel" onSubmit={submit} noValidate>
           <p className="panel-step">
             <span className="num">1</span> Działka
           </p>
@@ -469,7 +466,7 @@ export default function AnalyzePage() {
 
               <div className="or-sep">albo</div>
               <p className="muted small" style={{ marginTop: 0 }}>
-                Kliknij działkę na mapie
+                Kliknij działkę na mapie — granice działek pojawią się po przybliżeniu.
               </p>
 
               <details className="help" id="plotId-help">

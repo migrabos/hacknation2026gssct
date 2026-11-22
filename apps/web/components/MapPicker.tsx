@@ -8,13 +8,15 @@
  *  - Geoportal ORTO WMTS StandardResolution (EPSG:3857) — fast overview
  *  - Geoportal ORTO WMS HighResolution — sharp photo from zoom 15
  *  - GUGiK Krajowa Integracja Ewidencji Gruntów (KIEG) WMS — parcel lines + numbers, zoom ≥ 15
- *  - Esri World Topo Map — clean street basemap (no key)
- *  - Esri Reference layers (places + transportation) on top of the aerial photo,
- *    so villages / roads stay readable (no key)
+ *  - Own vector map (lib/mapStyle.ts) over OpenFreeMap tiles, rendered by MapLibre
+ *    inside Leaflet — site colours, water emphasised, Polish names; its labels-only
+ *    variant sits on top of the aerial photo. Only ONE WebGL map is alive at a time.
+ *  - Fallback when WebGL2 is missing or software-only (old devices, GPU blocklisted,
+ *    hardware acceleration off): plain OpenStreetMap raster tiles, photo without labels.
  *
  * Load via components/Map.tsx (dynamic, ssr:false) — Leaflet needs `window`.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   GeoJSON,
   MapContainer,
@@ -28,8 +30,15 @@ import {
 } from "react-leaflet";
 import L from "leaflet";
 import type { LatLngBoundsExpression, LatLngExpression } from "leaflet";
+import "maplibre-gl/dist/maplibre-gl.css";
+import { maplibreGL } from "@maplibre/maplibre-gl-leaflet";
+import { setWorkerUrl } from "maplibre-gl";
+import { buildMapStyle, type MapTheme, type MapVariant } from "@/lib/mapStyle";
 import type { Plot, RetentionSpot } from "@/lib/types";
 import { LocateIcon } from "./Icons";
+
+// Served from /public (copied by scripts/copy-maplibre-worker.mjs) — the bundler can't locate it.
+setWorkerUrl("/maplibre-gl-worker.mjs");
 
 const POLAND_CENTER: LatLngExpression = [52.07, 19.48];
 const POLAND_ZOOM = 6;
@@ -44,14 +53,35 @@ const ORTO_WMTS =
   "&FORMAT=image/jpeg&TILEMATRIXSET=EPSG:3857&TILEMATRIX=EPSG:3857:{z}&TILEROW={y}&TILECOL={x}";
 const ORTO_WMS_HR = "https://mapy.geoportal.gov.pl/wss/service/PZGIK/ORTO/WMS/HighResolution";
 const KIEG_WMS = "https://integracja.gugik.gov.pl/cgi-bin/KrajowaIntegracjaEwidencjiGruntow";
-/** Esri tiles use {z}/{y}/{x} order. Keyless; attribution required. */
-const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services";
-const BASE_MAP = `${ESRI}/World_Topo_Map/MapServer/tile/{z}/{y}/{x}`;
-const LABELS_PLACES = `${ESRI}/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}`;
-const LABELS_ROADS = `${ESRI}/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}`;
+
+const OSM_TILES = "https://tile.openstreetmap.org/{z}/{x}/{y}.png";
 
 const ATTR_GUGIK = '&copy; <a href="https://www.geoportal.gov.pl/">GUGiK</a>';
-const ATTR_ESRI = 'Mapa &copy; <a href="https://www.esri.com/">Esri</a>, HERE, Garmin, &copy; OpenStreetMap';
+const ATTR_OSM = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>';
+
+/** WebGL settings shared by the probe and MapLibre, so "probe OK" means "MapLibre will start". */
+const GL_ATTRIBUTES = {
+  antialias: true,
+  // keep the frame so the map shows up in print / PDF of the report
+  preserveDrawingBuffer: true,
+  // refuse software rendering (SwiftShader & co.) — it works but stutters badly
+  failIfMajorPerformanceCaveat: true,
+};
+
+let vectorSupport: boolean | null = null;
+/** Can this browser run the vector map smoothly? (WebGL2 with a real GPU.) Cached per page load. */
+function supportsVectorMap(): boolean {
+  if (vectorSupport !== null) return vectorSupport;
+  try {
+    const canvas = document.createElement("canvas");
+    const gl = canvas.getContext("webgl2", GL_ATTRIBUTES) as WebGL2RenderingContext | null;
+    vectorSupport = Boolean(gl);
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+  } catch {
+    vectorSupport = false;
+  }
+  return vectorSupport;
+}
 
 type Basemap = "orto" | "map";
 
@@ -71,11 +101,16 @@ export default function MapPicker({
   onPick,
   busy = false,
   height = 520,
-  defaultBasemap = "orto",
+  defaultBasemap = "map",
   focusBbox = null,
 }: MapPickerProps) {
   const [basemap, setBasemap] = useState<Basemap>(defaultBasemap);
   const [zoom, setZoom] = useState(POLAND_ZOOM);
+  const [vector, setVector] = useState(supportsVectorMap);
+  const onVectorFail = useCallback(() => {
+    vectorSupport = false;
+    setVector(false);
+  }, []);
   const [locateMsg, setLocateMsg] = useState<string | null>(null);
   const interactive = Boolean(onPick);
 
@@ -104,10 +139,17 @@ export default function MapPicker({
         zoomControl={false}
       >
         <ZoomControl position="topright" zoomInTitle="Przybliż" zoomOutTitle="Oddal" />
-        {basemap === "orto" ? (
+        <MapPanes />
+        {basemap === "map" &&
+          (vector ? (
+            <VectorLayer key="vec-base" variant="base" pane="tilePane" onFail={onVectorFail} />
+          ) : (
+            <TileLayer key="osm" url={OSM_TILES} attribution={ATTR_OSM} maxZoom={19} />
+          ))}
+        {basemap === "orto" && (
           <>
-            {/* street map underneath (overview zooms only) fills areas outside Poland's photo coverage */}
-            <TileLayer key="map-under" url={BASE_MAP} attribution={ATTR_ESRI} maxZoom={11} />
+            {/* raster fallback only: street map outside Poland's photo coverage (overview zooms) */}
+            {!vector && <TileLayer key="osm-under" url={OSM_TILES} attribution={ATTR_OSM} maxZoom={11} />}
             <TileLayer key="orto-wmts" url={ORTO_WMTS} attribution={ATTR_GUGIK} maxNativeZoom={19} maxZoom={19} />
             <WMSTileLayer
               key="orto-hr"
@@ -118,12 +160,9 @@ export default function MapPicker({
               minZoom={PARCEL_MIN_ZOOM}
               maxZoom={19}
             />
-            {/* place + road names over the photo, so the farmer can find their village */}
-            <TileLayer key="labels-roads" url={LABELS_ROADS} attribution={ATTR_ESRI} maxNativeZoom={18} maxZoom={19} zIndex={2} opacity={0.85} />
-            <TileLayer key="labels-places" url={LABELS_PLACES} maxNativeZoom={18} maxZoom={19} zIndex={2} />
+            {/* our place / road / river names over the photo — the only WebGL map in this mode */}
+            {vector && <VectorLayer key="vec-labels" variant="labels" pane="labels" onFail={onVectorFail} />}
           </>
-        ) : (
-          <TileLayer key="map" url={BASE_MAP} attribution={ATTR_ESRI} maxNativeZoom={18} maxZoom={19} />
         )}
 
         <WMSTileLayer
@@ -131,10 +170,11 @@ export default function MapPicker({
           url={KIEG_WMS}
           params={{ layers: "dzialki,numery_dzialek", format: "image/png", transparent: true }}
           tileSize={512}
-          zIndex={3}
+          pane="parcels"
+          className={basemap === "orto" ? undefined : "parcels-on-map"}
           minZoom={PARCEL_MIN_ZOOM}
           maxZoom={19}
-          opacity={basemap === "orto" ? 0.95 : 0.8}
+          opacity={basemap === "orto" ? 0.95 : 0.9}
           attribution="działki: GUGiK KIEG"
         />
 
@@ -212,6 +252,85 @@ function RetentionLegend({ spot }: { spot: RetentionSpot }) {
       </span>
     </div>
   );
+}
+
+// ---------------------------------------------------------------------------
+// Own vector map (MapLibre inside Leaflet).
+
+/** Extra panes: names over the photo, then parcel lines (above names, below the plot outline). */
+function MapPanes() {
+  const map = useMap();
+  useMemo(() => {
+    for (const [name, z] of [
+      ["labels", 380],
+      ["parcels", 390],
+    ] as const) {
+      if (!map.getPane(name)) {
+        const pane = map.createPane(name);
+        pane.style.zIndex = String(z);
+        pane.style.pointerEvents = "none";
+      }
+    }
+  }, [map]);
+  return null;
+}
+
+/** Follows the site's light/dark toggle (class "dark" on <html>). */
+function useSiteTheme(): MapTheme {
+  const [theme, setTheme] = useState<MapTheme>(() =>
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark") ? "dark" : "light",
+  );
+  useEffect(() => {
+    const el = document.documentElement;
+    const obs = new MutationObserver(() => setTheme(el.classList.contains("dark") ? "dark" : "light"));
+    obs.observe(el, { attributes: true, attributeFilter: ["class"] });
+    return () => obs.disconnect();
+  }, []);
+  return theme;
+}
+
+function VectorLayer({ variant, pane, onFail }: { variant: MapVariant; pane: string; onFail: () => void }) {
+  const map = useMap();
+  const theme = useSiteTheme();
+  const [layer, setLayer] = useState<L.MaplibreGL | null>(null);
+
+  useEffect(() => {
+    let gl: L.MaplibreGL | null = maplibreGL({
+      style: buildMapStyle(theme, variant),
+      pane,
+      canvasContextAttributes: GL_ATTRIBUTES,
+    } as L.LeafletMaplibreGLOptions);
+    try {
+      gl.addTo(map);
+    } catch (err) {
+      // WebGL refused after all (probe passed, context creation didn't) → raster fallback
+      console.warn("[map] vector map unavailable, using raster tiles", err);
+      try {
+        gl.remove();
+      } catch {
+        /* half-initialised layer */
+      }
+      gl = null;
+      onFail();
+      return;
+    }
+    const glMap = gl.getMaplibreMap();
+    // GPU reset / too many contexts on weak devices: don't leave a blank map behind
+    glMap.on("webglcontextlost", () => onFail());
+    setLayer(gl);
+    return () => {
+      gl?.remove();
+      setLayer(null);
+    };
+    // theme changes are applied with setStyle below, without re-creating the GL map
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map, variant, pane, onFail]);
+
+  useEffect(() => {
+    layer?.getMaplibreMap()?.setStyle(buildMapStyle(theme, variant));
+  }, [layer, theme, variant]);
+
+  return null;
 }
 
 // ---------------------------------------------------------------------------

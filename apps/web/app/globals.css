@@ -23,7 +23,7 @@
   --c-info-line: #7d9cc0;
 
   --c-disabled: #b9c2bc;
-  --c-map-bg: #e9ece9;
+  --c-map-bg: #f3f6f1;
   --c-overlay: rgba(255, 255, 255, 0.55);
   --c-overlay-solid: rgba(255, 255, 255, 0.85);
   --c-focus: #f2c200;
@@ -65,7 +65,7 @@ html.dark {
   --c-info-line: #6a8aab;
 
   --c-disabled: #4a524c;
-  --c-map-bg: #1a1f1b;
+  --c-map-bg: #161b17;
   --c-overlay: rgba(18, 21, 18, 0.6);
   --c-overlay-solid: rgba(28, 34, 30, 0.9);
   --c-focus: #e0b400;
@@ -647,6 +647,100 @@ details.help > div {
 
 /* ---------- Map ---------- */
 
+/* Map + form as one tool: shared card, map flush to the edges, sticky while the form scrolls */
+.workspace {
+  gap: 0;
+  padding-bottom: 0;
+  margin-bottom: 32px;
+  align-items: stretch;
+  background: var(--c-surface);
+  border: 1px solid var(--c-border);
+  border-radius: 12px;
+  overflow: clip;
+  box-shadow: 0 1px 2px rgba(20, 40, 25, 0.05), 0 10px 30px rgba(20, 40, 25, 0.07);
+}
+.workspace-map {
+  position: relative;
+  min-height: 480px;
+  background: var(--c-map-bg);
+}
+/* map fills the column and stays in view while the (longer) form scrolls */
+.workspace-map .map-block {
+  position: sticky;
+  top: 0;
+  height: min(100vh, 100%);
+  min-height: 480px;
+  display: flex;
+  flex-direction: column;
+}
+.workspace-map .map-block .map-legend {
+  margin: 0;
+  border-radius: 0;
+}
+.workspace-map .map-wrap {
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100% !important;
+  border: 0;
+  border-radius: 0;
+}
+.workspace-panel {
+  border: 0;
+  border-left: 1px solid var(--c-border);
+  border-radius: 0;
+  min-height: 100%;
+}
+
+/* Leaflet chrome in the site's look */
+.map-wrap .leaflet-bar {
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+.map-wrap .leaflet-bar a,
+.map-wrap .leaflet-bar a:hover {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border-bottom-color: var(--c-border);
+  width: 34px;
+  height: 34px;
+  line-height: 34px;
+  font-size: 18px;
+}
+.map-wrap .leaflet-bar a:hover {
+  background: var(--c-accent-soft);
+}
+.map-wrap .leaflet-control-attribution {
+  background: color-mix(in srgb, var(--c-surface) 78%, transparent);
+  color: var(--c-text-muted);
+  font-size: 10.5px;
+  padding: 1px 8px;
+  border-top-left-radius: var(--radius);
+}
+.map-wrap .leaflet-control-attribution a {
+  color: var(--c-text-muted);
+}
+.map-wrap .leaflet-control-scale-line {
+  background: color-mix(in srgb, var(--c-surface) 78%, transparent);
+  border-color: var(--c-text-muted);
+  color: var(--c-text);
+  font-size: 11px;
+}
+.dark .map-hint {
+  background: var(--c-surface);
+  color: var(--c-text);
+  border: 1px solid var(--c-border-strong);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+/* GUGiK parcel lines come blue — on our map blue means water, so recolour them */
+.parcels-on-map {
+  filter: grayscale(1) brightness(0.55) sepia(0.5) hue-rotate(70deg);
+}
+.dark .parcels-on-map {
+  filter: grayscale(1) invert(1) brightness(0.8);
+}
+
 .map-wrap {
   position: relative;
   border: 1px solid var(--c-border);
@@ -755,7 +849,7 @@ details.help > div {
   position: absolute;
   z-index: 500;
   left: 50%;
-  bottom: 28px;
+  top: 60px;
   transform: translateX(-50%);
   background: rgba(27, 31, 28, 0.86);
   color: #fff;
@@ -1512,6 +1606,30 @@ table.data tr:last-child td {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 860px) {
+  .workspace-panel {
+    border-left: 0;
+    border-top: 1px solid var(--c-border);
+  }
+  /* leave room for the zoom buttons; toolbar wraps instead of sliding under them */
+  .map-tools {
+    right: 60px;
+  }
+  .workspace-map {
+    height: 62vh;
+    min-height: 360px;
+  }
+  .workspace-map .map-block {
+    position: relative;
+    height: 100%;
+    min-height: 0;
+  }
+  .map-hint {
+    top: 104px;
+    white-space: normal;
+    text-align: center;
+    width: max-content;
+    border-radius: 14px;
+  }
   .hero-grid,
   .analyze-grid,
   .report-overview,
