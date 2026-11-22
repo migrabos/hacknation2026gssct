@@ -3,6 +3,7 @@ import "leaflet/dist/leaflet.css";
 import "./globals.css";
 import "@/styles/print.css";
 import SiteHeader from "@/components/SiteHeader";
+import A11yBar from "@/components/A11yBar";
 
 export const metadata: Metadata = {
   title: "Retencja — woda na Twoim polu",
@@ -19,8 +20,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <a href="#tresc" className="visually-hidden">
           Przejdź do treści
         </a>
-        <div className="topbar" aria-hidden="true">
-          <div className="container" />
+        <div className="topbar">
+          <div className="container">
+            <A11yBar />
+          </div>
         </div>
         <SiteHeader />
         <main id="tresc">{children}</main>

@@ -16,8 +16,11 @@ export function readStoredTheme(): Theme | null {
 }
 
 export function applyTheme(theme: Theme) {
-  document.documentElement.classList.toggle("dark", theme === "dark");
-  document.documentElement.style.colorScheme = theme;
+  const root = document.documentElement;
+  // High-contrast mode (lib/a11y.ts) is a black look: keep the dark class while it is on.
+  const effective: Theme = root.classList.contains("contrast") ? "dark" : theme;
+  root.classList.toggle("dark", effective === "dark");
+  root.style.colorScheme = effective;
 }
 
 export function resolveInitialTheme(): Theme {
